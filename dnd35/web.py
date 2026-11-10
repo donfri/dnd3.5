@@ -29,6 +29,7 @@ from .ui import UI, Color, QuitGame, c
 MAX_EVENTS = 4000
 POLL_SECONDS = 25
 ANSI_RE = re.compile(r"\033\[[0-9;]*m")
+SPEECH_RE = re.compile(r"^([A-Z][\w' .-]{0,30}): \u201c(.*)\u201d$")
 
 
 class WebUI(UI):
@@ -44,6 +45,25 @@ class WebUI(UI):
     def out(self, text: str = "", style: Sequence[str] = ()) -> None:
         line = c(text, *style) if style else str(text)
         self.table.emit({"t": "line", "text": line})
+
+    # narration (read aloud by browsers that turn the narrator on)
+    def para(self, text: str, style: Sequence[str] = (), indent: str = "") -> None:
+        plain = " ".join(str(text).split())
+        if plain and ("bcyan" in style or "bmagenta" in style or "byellow" in style):
+            m = SPEECH_RE.match(plain)
+            if m:
+                self.table.emit({"t": "narrate", "kind": "npc", "who": m.group(1),
+                                 "text": m.group(2)})
+            else:
+                self.table.emit({"t": "narrate", "kind": "gm", "text": plain})
+        super().para(text, style, indent)
+
+    def header(self, text: str) -> None:
+        title = text.strip()
+        if title and not title.startswith(("TABLE", "NEW GAME", "HERO ")):
+            words = " ".join(w.capitalize() for w in title.lower().split())
+            self.table.emit({"t": "narrate", "kind": "title", "text": words + "."})
+        super().header(text)
 
     # input <- browser
     def _raw_input(self, prompt: str) -> str:
@@ -261,6 +281,9 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 ui-monospace,
 header{padding:8px 14px;border-bottom:1px solid var(--line);display:flex;gap:14px;align-items:center;flex-wrap:wrap}
 header b{color:var(--gold)}
 #here{color:var(--dim)}
+#narr{margin-left:auto;display:flex;gap:6px;align-items:center;color:var(--dim);font-size:13px}
+#narr select,#narr button{background:#0f0d0c;color:var(--ink);border:1px solid #4a4038;border-radius:6px;padding:3px 6px;font:inherit;font-size:13px}
+#narr input{width:70px;flex:none;padding:0}
 main{flex:1;display:flex;min-height:0}
 #log{flex:1;overflow-y:auto;padding:10px 14px;white-space:pre-wrap;word-break:break-word}
 #side{width:300px;border-left:1px solid var(--line);display:flex;flex-direction:column;background:var(--panel)}
@@ -293,7 +316,13 @@ button.go{background:var(--gold);color:#1b1408;border:0;border-radius:6px;paddin
 <label id="pwl">Password</label><input id="jpw" type="password">
 <button class="go" style="width:100%;padding:9px" onclick="join()">Join</button>
 </div></div>
-<header><b>D&amp;D 3.5 &mdash; table <span id="tname"></span></b><span id="here"></span></header>
+<header><b>D&amp;D 3.5 &mdash; table <span id="tname"></span></b><span id="here"></span>
+<span id="narr">&#128266; Narrator
+<select id="nmode" title="What the narrator reads"><option value="off">off</option><option value="story">story</option><option value="all">story + combat</option></select>
+<select id="nvoice" title="Narrator voice"></select>
+<select id="npcvoice" title="Voice for characters' dialogue"></select>
+<input id="nrate" type="range" min="0.7" max="1.4" step="0.05" title="Speed">
+<button onclick="speechSynthesis.cancel()" title="Skip what's being read">skip</button></span></header>
 <main><div id="log"></div>
 <div id="side"><div style="padding:8px;color:var(--gold)">Table chat</div><div id="chatlog"></div>
 <form id="chatform" onsubmit="sendChat();return false"><input id="chatin" placeholder="say something..."><button class="go">&#9166;</button></form></div></main>
@@ -318,6 +347,44 @@ function ansi(s){let out='',open=0;const parts=s.split(/\x1b\[([0-9;]*)m/);
   if(!codes.length||codes[0]=='0')continue;
   const cls=codes.map(c=>c=='1'?'b':c=='2'?'d':'c'+c).join(' ');out+='<span class="'+cls+'">';open++}
  while(open>0){out+='</span>';open--}return out}
+// ---------------------------------------------------------------- narrator
+const N={mode:localStorage.getItem('nmode')||'off',voice:localStorage.getItem('nvoice')||'',
+ npc:localStorage.getItem('npcvoice')||'',rate:parseFloat(localStorage.getItem('nrate')||'1')};
+let voices=[], primed=false;
+function loadVoices(){if(!('speechSynthesis' in window)){document.getElementById('narr').style.display='none';return}
+ voices=speechSynthesis.getVoices().filter(v=>/^en/i.test(v.lang));if(!voices.length)voices=speechSynthesis.getVoices();
+ for(const [id,cur,label] of [['nvoice',N.voice,'narrator'],['npcvoice',N.npc,'dialogue']]){const sel=document.getElementById(id);sel.innerHTML='';
+  voices.forEach(v=>{const o=document.createElement('option');o.value=v.name;o.textContent=label+': '+v.name.replace(/Microsoft |Google |Online \(Natural\)/g,'').slice(0,28);sel.appendChild(o)});
+  if(cur&&voices.some(v=>v.name==cur))sel.value=cur;
+  else if(voices.length){const pref=voices.findIndex(v=>/natural|neural|daniel|google uk english male|alex/i.test(v.name));sel.selectedIndex=id=='npcvoice'?Math.min(1,voices.length-1):Math.max(0,pref)}}}
+if('speechSynthesis' in window){speechSynthesis.onvoiceschanged=loadVoices}
+function pickVoice(name){return voices.find(v=>v.name==name)}
+function speak(text,voiceName,pitch){if(N.mode=='off'||!text||!('speechSynthesis' in window))return;
+ // short chunks avoid browsers cutting long utterances off
+ const chunks=text.match(/[^.!?]+[.!?\u201d"']*|.+$/g)||[text];
+ for(const ch of chunks){const t=ch.trim();if(!t)continue;const u=new SpeechSynthesisUtterance(t);
+  const v=pickVoice(voiceName);if(v)u.voice=v;u.rate=N.rate;u.pitch=pitch||1;speechSynthesis.speak(u)}}
+function narrateEvent(ev){if(!primed||N.mode=='off')return;
+ if(ev.t=='narrate'){if(ev.kind=='npc')speak(ev.text,document.getElementById('npcvoice').value,1.05);
+  else speak(ev.text,document.getElementById('nvoice').value,ev.kind=='title'?0.9:1)}
+ else if(ev.t=='line'&&N.mode=='all'){let t=ev.text;
+  if(/\x1b\[([0-9]+;)*(2|96|95|93|33)(;[0-9]+)*m/.test(t))return; // dice math, story (read already), headers
+  const colored=/\x1b\[([0-9]+;)*(91|92|31|32)(;[0-9]+)*m/.test(t);
+  t=t.replace(/\x1b\[[0-9;]*m/g,'').trim();
+  if(!t||/^(\d+\.|>|--|\||=|\+|\[)/.test(t))return;
+  if(/\bHP -?\d+\/|\| melee:|: (unhurt|scratched|wounded|badly wounded|near death|dead)\b/.test(t))return;
+  if(!colored&&!/\b(attacks|casts|takes \d+|slain|falls|rushes|flees|charges|CHARGES|drinks|pours|moves|closes in|turned|crumbles|wakes|asleep|PARALYZED|prone|stabilizes|dying)\b/.test(t))return;
+  t=t.replace(/: d20=.*?-> */,'. ').replace(/\(.*?\)/g,'');speak(t,document.getElementById('nvoice').value,1)}
+ else if(ev.t=='chat'&&N.mode!='off'){}}
+function initNarrator(){loadVoices();const m=document.getElementById('nmode'),r=document.getElementById('nrate');
+ m.value=N.mode;r.value=N.rate;
+ m.onchange=()=>{N.mode=m.value;localStorage.setItem('nmode',N.mode);speechSynthesis.cancel();
+   if(N.mode!='off')speak('The narrator is ready.',document.getElementById('nvoice').value,1)};
+ r.oninput=()=>{N.rate=parseFloat(r.value);localStorage.setItem('nrate',r.value)};
+ document.getElementById('nvoice').onchange=e=>localStorage.setItem('nvoice',e.target.value);
+ document.getElementById('npcvoice').onchange=e=>localStorage.setItem('npcvoice',e.target.value)}
+initNarrator();
+
 function addLine(html,cls){const d=document.createElement('div');if(cls)d.className=cls;d.innerHTML=html||'&nbsp;';log.appendChild(d)}
 function showPrompt(ev){prompt_.textContent=ev.text;opts.innerHTML='';
  (ev.options||[]).forEach((o,i)=>{const b=document.createElement('button');let val;
@@ -330,11 +397,12 @@ async function poll(){if(polling)return;polling=true;
   const j=await r.json();if(j.reset){log.innerHTML=''}
   const atBottom=log.scrollHeight-log.scrollTop-log.clientHeight<80;
   for(const ev of j.events){if(ev.seq<next&&!j.reset)continue;
+   narrateEvent(ev);
    if(ev.t=='line'){addLine(ansi(ev.text))}
    else if(ev.t=='prompt'){addLine('<span class="c93">'+esc(ev.text)+'</span>')}
    else if(ev.t=='chat'){addLine('<span class="chat">['+esc(ev.who)+'] '+esc(ev.text)+'</span>');
      const c=document.createElement('div');c.innerHTML='<span class="who">'+esc(ev.who)+':</span> '+esc(ev.text);const cl=document.getElementById('chatlog');cl.appendChild(c);cl.scrollTop=cl.scrollHeight}}
-  next=j.next;
+  next=j.next;primed=true;
   if(j.waiting){const evs=j.events.filter(e=>e.t=='prompt');if(evs.length)showPrompt(evs[evs.length-1])}else{clearPrompt()}
   document.getElementById('here').textContent='At the table: '+j.here.join(', ');
   document.getElementById('status').textContent=j.waiting?'Waiting for an answer...':'The GM is thinking...';

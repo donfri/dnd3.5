@@ -36,6 +36,11 @@ Then both of you open `https://<your-app-name>.fly.dev`. Enter your name, keep t
 table name the same (for example `main`), and enter the password. To run a second
 campaign at the same time, give it a different table name.
 
+- **Narrator:** the 🔊 menu at the top reads the story aloud using your browser's
+  built-in voices. Choose *story* (narration and character dialogue, with a
+  separate voice for characters) or *story + combat* (also reads attacks, hits,
+  and knockouts). Each player sets it for themselves, and *skip* stops the
+  current line. Edge and Chrome have the most natural-sounding voices.
 - When nobody's connected, the machine sleeps, which costs next to nothing. It
   wakes up when you open the page. The game in memory is lost while it sleeps,
   so pick **Load a saved game → autosave**. The game autosaves every time you
