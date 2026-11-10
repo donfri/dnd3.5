@@ -523,6 +523,11 @@ def gain_level(ch: Character, cls: str, ui=None, auto: bool = False,
 
 
 def level_up_interactive(ch: Character, ui, heroic: bool = False) -> None:
+    with ui.acting(ch.player):
+        _level_up_interactive(ch, ui, heroic)
+
+
+def _level_up_interactive(ch: Character, ui, heroic: bool = False) -> None:
     while ch.can_level_up():
         if not ui.confirm(f"{ch.name} can advance to level {ch.level + 1}. Level up now?", True):
             return

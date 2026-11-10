@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import random
+from contextlib import contextmanager
 import sys
 import textwrap
 from typing import List, Optional, Sequence
@@ -166,6 +167,12 @@ class UI:
 
     def pause(self) -> None:
         self.ask(c("(press Enter)", "dim"), "")
+
+    @contextmanager
+    def acting(self, player: str):
+        """Marks prompts inside the block as belonging to one player (used online so
+        only that player can answer for their hero). No effect in the terminal."""
+        yield
 
 
 def _strip_ansi(s: str) -> str:

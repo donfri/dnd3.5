@@ -133,6 +133,11 @@ def give_money(ui, party) -> None:
 
 def inventory_menu(ui, party: Sequence[Character], in_combat: bool = False) -> None:
     who = _pick_char(ui, party, "Whose inventory?")
+    with ui.acting(who.player):
+        _inventory_loop(ui, party, who)
+
+
+def _inventory_loop(ui, party, who) -> None:
     while True:
         ui.sub(f"{who.name}'s inventory ({who.total_weight()} lb., {who.load()} load, "
                f"{rules.money_str(who.cp)})")

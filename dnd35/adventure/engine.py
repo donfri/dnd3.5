@@ -877,7 +877,8 @@ class GM:
             p.reset_spells()
         for p in gs.living():
             if p.caster_classes():
-                prepare_spells(p, ui)
+                with ui.acting(p.player):
+                    prepare_spells(p, ui)
         for p in gs.living():
             if p.can_level_up():
                 level_up_interactive(p, ui, gs.settings.get("heroic", False))
@@ -1011,11 +1012,11 @@ class GM:
             return
         player = ui.ask("Who will play the new hero?", dead[0].player if dead else "")
         i = ui.choose("New hero", ["Create a new character", "Choose a ready-made hero"])
-        if i == 0:
-            ch = create_character(ui, player, start_level=lvl)
-        else:
-            taken = []
-            ch = choose_pregen(ui, player, taken)
+        with ui.acting(player):
+            if i == 0:
+                ch = create_character(ui, player, start_level=lvl)
+            else:
+                ch = choose_pregen(ui, player, [])
             cls = ch.class_levels[0]
             while ch.level < lvl:
                 gain_level(ch, cls, ui, auto=True)

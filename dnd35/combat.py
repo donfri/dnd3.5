@@ -519,6 +519,10 @@ class Combat:
 
     # ------------------------------------------------------------ PC turn
     def pc_turn(self, x: CState, surprise: bool) -> None:
+        with self.ui.acting(getattr(x.c, "player", "")):
+            self._pc_turn(x, surprise)
+
+    def _pc_turn(self, x: CState, surprise: bool) -> None:
         ui = self.ui
         p = x.c
         disabled = p.hp == 0

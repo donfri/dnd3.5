@@ -20,6 +20,7 @@ import re
 import threading
 import time
 import traceback
+from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Dict, List, Optional, Sequence
 from urllib.parse import parse_qs, urlparse
@@ -42,6 +43,24 @@ class WebUI(UI):
         self._pending_kind = "text"
         self._pending_groups: Optional[List[str]] = None
         self.game_state = None  # set by the GM so the page can show party/journal tabs
+        self._owners: List[str] = []
+        self.last_who = ""
+
+    # ownership: only the hero's player may answer prompts inside acting()
+    @contextmanager
+    def acting(self, player: str):
+        self._owners.append(player or "")
+        try:
+            yield
+        finally:
+            self._owners.pop()
+
+    def seat_players(self) -> List[str]:
+        """People at the table, in the order they joined (for quick start)."""
+        return self.table.present()
+
+    def current_owner(self) -> str:
+        return next((o for o in reversed(self._owners) if o), "")
 
     # output -> events
     def out(self, text: str = "", style: Sequence[str] = ()) -> None:
@@ -79,9 +98,11 @@ class WebUI(UI):
         opts = self._pending_options
         kind = self._pending_kind
         groups = self._pending_groups if kind == "choose" else None
+        owner = self.current_owner()
         self.table.emit({"t": "prompt", "text": ANSI_RE.sub("", prompt), "options": opts,
-                         "kind": kind, "groups": groups})
-        text, who = self.table.wait_input()
+                         "kind": kind, "groups": groups, "owner": owner})
+        text, who = self.table.wait_input(owner)
+        self.last_who = who
         shown = text if text else "(enter)"
         if opts and kind == "choose" and text.strip().isdigit():
             n = int(text.strip())
@@ -123,6 +144,10 @@ class WebUI(UI):
     def ask(self, prompt, default=None):
         if self._pending_kind == "text":
             self._pending_options = None
+        if str(prompt).startswith(("Player name", "Who will play the new hero")):
+            # online, the person who answers is the player (Enter = use my name)
+            ans = super().ask(prompt, "")
+            return ans or self.last_who or (default or "")
         return super().ask(prompt, default)
 
     def _with_options(self, opts, kind, fn, *args):
@@ -145,6 +170,7 @@ class Table:
         self.cond = threading.Condition()
         self.inputs: List[tuple] = []
         self.waiting = False
+        self.owner = ""
         self.presence: Dict[str, float] = {}
         self.ui = WebUI(self)
         self.thread = threading.Thread(target=self._run, daemon=True)
@@ -161,21 +187,53 @@ class Table:
                 self.first_seq = self.events[0]["seq"]
             self.cond.notify_all()
 
-    def wait_input(self):
+    def wait_input(self, owner: str = ""):
         with self.cond:
             self.waiting = True
+            self.owner = owner
             while not self.inputs:
                 self.cond.wait()
             self.waiting = False
+            self.owner = ""
             return self.inputs.pop(0)
 
-    def submit(self, text: str, who: str) -> bool:
+    def present(self) -> List[str]:
+        now = time.time()
+        return [n for n, t in self.presence.items() if now - t < POLL_SECONDS + 15]
+
+    def may_answer(self, who: str) -> bool:
+        """The hero's player answers for that hero. If they're not connected
+        (or the hero isn't claimed by anyone here), anyone may answer."""
+        owner = self.owner
+        if not owner:
+            return True
+        here = {n.lower() for n in self.present()}
+        if owner.lower() not in here:
+            return True
+        return who.lower() == owner.lower()
+
+    def submit(self, text: str, who: str):
         with self.cond:
             if not self.waiting:
-                return False
+                return False, "The GM is not waiting for input right now."
+            if not self.may_answer(who):
+                return False, f"It's {self.owner}'s decision. Wait for them (or chat)."
             self.inputs.append((text[:200], who[:30]))
             self.cond.notify_all()
-            return True
+            return True, ""
+
+    def claim(self, index: int, who: str):
+        gs = self.ui.game_state
+        if gs is None or not (0 <= index < len(gs.party)) or not who:
+            return False, "Nothing to claim."
+        hero = gs.party[index]
+        cur = hero.player or ""
+        here = {n.lower() for n in self.present()}
+        if cur and cur.lower() in here and cur.lower() != who.lower():
+            return False, f"{hero.name} is played by {cur}, who is at the table."
+        hero.player = who
+        self.emit({"t": "line", "text": c(f"{who} now plays {hero.name}.", "bgreen")})
+        return True, ""
 
     def chat(self, text: str, who: str) -> None:
         self.emit({"t": "chat", "who": who[:30], "text": text[:500]})
@@ -217,9 +275,10 @@ class Table:
                 self.cond.wait(timeout=max(0.1, deadline - time.time()))
             start = max(since, self.first_seq)
             evs = [e for e in self.events if e["seq"] >= start]
-            now = time.time()
-            here = sorted(n for n, t in self.presence.items() if now - t < POLL_SECONDS + 10)
+            here = sorted(self.present())
             return {"events": evs, "next": self.seq, "here": here, "waiting": self.waiting,
+                    "owner": self.owner if self.waiting else "",
+                    "may_answer": self.may_answer(who) if self.waiting else False,
                     "reset": since < self.first_seq}
 
     def _run(self) -> None:
@@ -325,8 +384,14 @@ class Handler(BaseHTTPRequestHandler):
         t = get_table(body.get("table", "main"))
         who = str(body.get("name", ""))[:30]
         if u.path == "/api/input":
-            ok = t.submit(str(body.get("text", "")), who)
-            self._json({"ok": ok})
+            ok, why = t.submit(str(body.get("text", "")), who)
+            self._json({"ok": ok, "why": why})
+        elif u.path == "/api/claim":
+            try:
+                ok, why = t.claim(int(body.get("hero", -1)), who)
+            except (TypeError, ValueError):
+                ok, why = False, "bad request"
+            self._json({"ok": ok, "why": why})
         elif u.path == "/api/chat":
             t.chat(str(body.get("text", "")), who)
             self._json({"ok": True})

@@ -45,6 +45,13 @@ Then both of you open `https://<your-app-name>.fly.dev`. Enter your name, keep t
 table name the same (for example `main`), and enter the password. To run a second
 campaign at the same time, give it a different table name.
 
+- **Whose turn:** each hero belongs to a player, shown on the Party tab. Quick start
+  hands out heroes in the order players joined. Only a hero's player can answer
+  for that hero: combat turns, level-ups, spell prep, inventory, and character
+  creation. Everyone else sees "Waiting for …" and greyed-out buttons. Exploration
+  choices are party decisions anyone can make. If a hero's player isn't connected,
+  anyone can answer for them, or use **Play this hero** on the Party tab to take
+  it over. Names aren't passwords; this is to keep turns tidy among friends.
 - **Narrator:** the 🔊 menu at the top reads the story aloud using your browser's
   built-in voices. Choose *story* (narration and character dialogue, with a
   separate voice for characters) or *story + combat* (also reads attacks, hits,

@@ -484,6 +484,11 @@ def cast_out_of_combat(ui, party) -> None:
         return
     who = casters[0] if len(casters) == 1 else casters[ui.choose(
         "Who casts?", [p.name for p in casters])]
+    with ui.acting(who.player):
+        _cast_for(ui, who, party)
+
+
+def _cast_for(ui, who, party) -> None:
     if who.has_tag("raging"):
         ui.bad("Can't cast while raging.")
         return

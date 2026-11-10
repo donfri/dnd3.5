@@ -46,3 +46,22 @@ class TestWeb(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestOwnership(unittest.TestCase):
+    def test_only_owner_answers_when_present(self):
+        t = web.Table.__new__(web.Table)  # no game thread needed
+        t.presence = {"Alice": time.time(), "Bob": time.time()}
+        t.owner = "Bob"
+        t.waiting = True
+        t.inputs = []
+        t.cond = threading.Condition()
+        ok, why = t.submit("1", "Alice")
+        self.assertFalse(ok)
+        self.assertIn("Bob", why)
+        ok, _ = t.submit("1", "bob")
+        self.assertTrue(ok)
+        t.inputs.clear()
+        t.presence = {"Alice": time.time()}  # Bob left: anyone may answer
+        ok, _ = t.submit("1", "Alice")
+        self.assertTrue(ok)

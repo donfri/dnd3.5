@@ -79,21 +79,13 @@ def new_game(ui: UI, quick: bool = False) -> GameState:
         n <= 2)
     party = []
     taken = []
+    seats = list(getattr(ui, "seat_players", lambda: [])())
     for i in range(n):
         ui.header(f"HERO {i + 1} OF {n}")
         player = "" if quick else ui.ask("Player name", f"Player {i + 1}")
-        if quick:
-            key = ["thorgar", "lyra", "pip", "aldric"][i]
-            ch = build_pregen(key, player or f"Player {i + 1}")
-            taken.append(key)
-        else:
-            choice = ui.choose(f"{player}, how do you want to make your hero?", [
-                "Create a new character (full D&D 3.5 creation)",
-                "Pick a ready-made hero"], default=0)
-            if choice == 0:
-                ch = create_character(ui, player)
-            else:
-                ch = choose_pregen(ui, player, taken)
+        with ui.acting(player):
+            ch = _make_hero(ui, quick, i, player or (seats[i] if i < len(seats) else ""),
+                            taken)
         if heroic:
             make_heroic(ch)
         party.append(ch)
@@ -101,6 +93,22 @@ def new_game(ui: UI, quick: bool = False) -> GameState:
     ui.header(adv.TITLE.upper())
     ui.gm(adv.INTRO)
     return gs
+
+
+def _make_hero(ui, quick, i, player, taken):
+    if quick:
+        key = ["thorgar", "lyra", "pip", "aldric"][i]
+        ch = build_pregen(key, player or f"Player {i + 1}")
+        taken.append(key)
+    else:
+        choice = ui.choose(f"{player}, how do you want to make your hero?", [
+            "Create a new character (full D&D 3.5 creation)",
+            "Pick a ready-made hero"], default=0)
+        if choice == 0:
+            ch = create_character(ui, player)
+        else:
+            ch = choose_pregen(ui, player, taken)
+    return ch
 
 
 def play(ui: UI, gs: GameState) -> None:
