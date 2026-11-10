@@ -87,6 +87,7 @@ main{flex:1;min-height:0;position:relative}
 <label>What to read</label><select id="nmode"><option value="off">Off</option><option value="story">Story &amp; dialogue</option><option value="all">Story + combat</option></select>
 <label>Narrator voice</label><select id="nvoice"></select>
 <label>Character dialogue voice</label><select id="npcvoice"></select>
+<label>Volume</label><input id="nvol" type="range" min="0.05" max="1" step="0.05">
 <label>Speed</label><input id="nrate" type="range" min="0.7" max="1.4" step="0.05">
 <div style="display:flex;gap:6px;margin-top:10px"><button class="opt" onclick="speechSynthesis.cancel()">Skip current line</button><button class="opt" onclick="toggleSettings()">Close</button></div>
 <label style="margin-top:12px">Story tab</label>
@@ -176,6 +177,7 @@ async function poll(){if(polling)return;polling=true;
   const j=await r.json();
   if(j.reset){['story','dice','full','chatlog'].forEach(id=>$(id).innerHTML='')}
   for(const ev of j.events){if(ev.seq<next&&!j.reset)continue;handle(ev)}
+  flushSpeech();
   const got=j.events.length;next=j.next;primed=true;
   if(j.waiting){const ps=j.events.filter(e=>e.t=='prompt');if(ps.length)showPrompt(ps[ps.length-1]);
    if(tab!='story'&&tab!='chat'&&got)$('b-story').style.display='inline'}else clearPrompt();
@@ -238,7 +240,9 @@ document.addEventListener('keydown',e=>{if(e.key=='Escape'){closeModal();$('sett
 
 // ---------------------------------------------------------------- narrator
 const N={mode:localStorage.getItem('nmode')||'off',voice:localStorage.getItem('nvoice')||'',
- npc:localStorage.getItem('npcvoice')||'',rate:parseFloat(localStorage.getItem('nrate')||'1')};
+ npc:localStorage.getItem('npcvoice')||'',rate:parseFloat(localStorage.getItem('nrate')||'1'),
+ vol:parseFloat(localStorage.getItem('nvol')||'0.5')};
+let speechQueue=[];
 let voices=[];
 function loadVoices(){if(!('speechSynthesis' in window)){$('gear').textContent='⚙';return}
  voices=speechSynthesis.getVoices().filter(v=>/^en/i.test(v.lang));if(!voices.length)voices=speechSynthesis.getVoices();
@@ -247,12 +251,24 @@ function loadVoices(){if(!('speechSynthesis' in window)){$('gear').textContent='
   if(cur&&voices.some(v=>v.name==cur))sel.value=cur;
   else if(voices.length){const pref=voices.findIndex(v=>/natural|neural|daniel|google uk english male|alex/i.test(v.name));sel.selectedIndex=id=='npcvoice'?Math.min(1,voices.length-1):Math.max(0,pref)}}}
 if('speechSynthesis' in window){speechSynthesis.onvoiceschanged=loadVoices}
-function speak(text,voiceName,pitch){if(N.mode=='off'||!text||!('speechSynthesis' in window))return;
- const chunks=text.match(/[^.!?]+[.!?”"']*|.+$/g)||[text];
- for(const ch of chunks){const t=ch.trim();if(!t)continue;const u=new SpeechSynthesisUtterance(t);
-  const v=voices.find(v=>v.name==voiceName);if(v)u.voice=v;u.rate=N.rate;u.pitch=pitch||1;speechSynthesis.speak(u)}}
+// Queue text during a batch of events, then speak it as a few long utterances.
+// (Each utterance start/stop can click or pop in the audio, so avoid many tiny ones.)
+function speak(text,voiceName){if(N.mode=='off'||!text||!('speechSynthesis' in window))return;
+ const last=speechQueue[speechQueue.length-1];
+ if(last&&last.voice==voiceName)last.text+=' '+text;else speechQueue.push({text,voice:voiceName})}
+function flushSpeech(){const q=speechQueue;speechQueue=[];
+ for(const item of q){
+  // keep utterances under ~300 characters (some browsers cut off very long ones),
+  // breaking only at sentence ends
+  const sentences=item.text.match(/[^.!?]+[.!?”"']*\s*|.+$/g)||[item.text];
+  let buf='';const parts=[];
+  for(const sn of sentences){if((buf+sn).length>300&&buf){parts.push(buf);buf=''}buf+=sn}
+  if(buf.trim())parts.push(buf);
+  for(const part of parts){const u=new SpeechSynthesisUtterance(part.trim());
+   const v=voices.find(v=>v.name==item.voice);if(v)u.voice=v;
+   u.rate=N.rate;u.volume=N.vol;u.pitch=1;speechSynthesis.speak(u)}}}
 function narrateEvent(ev){if(!primed||N.mode=='off')return;
- if(ev.t=='narrate'){if(ev.kind=='npc')speak(ev.text,$('npcvoice').value,1.05);else speak(ev.text,$('nvoice').value,ev.kind=='title'?0.9:1)}
+ if(ev.t=='narrate'){if(ev.kind=='npc')speak(ev.text,$('npcvoice').value);else speak(ev.text,$('nvoice').value)}
  else if(ev.t=='line'&&N.mode=='all'){let t=ev.text;
   if(/\x1b\[([0-9]+;)*(2|96|95|93|33)(;[0-9]+)*m/.test(t))return;
   const colored=/\x1b\[([0-9]+;)*(91|92|31|32)(;[0-9]+)*m/.test(t);
@@ -260,10 +276,12 @@ function narrateEvent(ev){if(!primed||N.mode=='off')return;
   if(!t||/^(\d+\.|>|--|\||=|\+|\[)/.test(t))return;
   if(/\bHP -?\d+\/|\| melee:|: (unhurt|scratched|wounded|badly wounded|near death|dead)\b/.test(t))return;
   if(!colored&&!/\b(attacks|casts|takes \d+|slain|falls|rushes|flees|charges|CHARGES|drinks|pours|moves|closes in|turned|crumbles|wakes|asleep|PARALYZED|prone|stabilizes|dying)\b/.test(t))return;
-  t=t.replace(/: d20=.*?-> */,'. ').replace(/\(.*?\)/g,'');speak(t,$('nvoice').value,1)}}
+  t=t.replace(/: d20=.*?-> */,'. ').replace(/\(.*?\)/g,'');speak(t,$('nvoice').value)}}
 (function initNarrator(){loadVoices();const m=$('nmode'),r=$('nrate');m.value=N.mode;r.value=N.rate;
- m.onchange=()=>{N.mode=m.value;localStorage.setItem('nmode',N.mode);speechSynthesis.cancel();if(N.mode!='off')speak('The narrator is ready.',$('nvoice').value,1)};
+ m.onchange=()=>{N.mode=m.value;localStorage.setItem('nmode',N.mode);speechSynthesis.cancel();if(N.mode!='off'){speak('The narrator is ready.',$('nvoice').value);flushSpeech()}};
  r.oninput=()=>{N.rate=parseFloat(r.value);localStorage.setItem('nrate',r.value)};
+ const vo=$('nvol');vo.value=N.vol;vo.onchange=()=>{N.vol=parseFloat(vo.value);localStorage.setItem('nvol',vo.value);
+   speechSynthesis.cancel();if(N.mode!='off'){speak('This is the narrator volume.',$('nvoice').value);flushSpeech()}};
  $('nvoice').onchange=e=>localStorage.setItem('nvoice',e.target.value);
  $('npcvoice').onchange=e=>localStorage.setItem('npcvoice',e.target.value);
  $('showrolls').checked=localStorage.getItem('showrolls')=='1';$('showrolls').onchange=e=>localStorage.setItem('showrolls',e.target.checked?'1':'0')})();
