@@ -99,6 +99,14 @@ table.sh tr.dim td{color:var(--dim)}
 .spl{display:inline-block;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:1px 9px;margin:2px 4px 2px 0;font-size:13px}
 .spl.used{text-decoration:line-through;opacity:.45}
 .toggle{background:none;border:1px solid var(--line);color:var(--dim);border-radius:6px;padding:2px 8px;font-size:12px;cursor:pointer}
+#roller{position:sticky;top:-12px;background:var(--bg);padding:10px 0 10px;border-bottom:1px solid var(--line);margin:-12px 0 10px;z-index:2;white-space:normal}
+#roller .rl{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px}
+#roller input{background:#0f0d0c;color:var(--ink);border:1px solid #4a4038;border-radius:6px;padding:6px;font:inherit}
+#rexpr{width:180px}#rlabel{flex:1;min-width:140px}
+#roller .q{background:var(--panel2);color:var(--ink);border:1px solid #4a4038;border-radius:7px;padding:5px 11px}
+#roller .q:hover{border-color:var(--gold)}
+.froll{background:#2a2216;border:1px solid #5a4a28;border-radius:8px;padding:6px 10px;margin:6px 0;white-space:normal}
+.froll .tot{color:var(--gold);font-size:20px;font-weight:bold;margin-left:6px}
 .b{font-weight:bold}.d{opacity:.6}
 .c31,.c91{color:var(--red)}.c32,.c92{color:var(--green)}.c33,.c93{color:#f4d35e}
 .c34,.c94{color:#6fa8ff}.c35,.c95{color:#e08ce0}.c36,.c96{color:#7fd8e6}
@@ -145,7 +153,12 @@ table.sh tr.dim td{color:var(--dim)}
 <div class="pane on" id="story"></div>
 <div class="pane" id="party"><div class="empty">Start or load a game to see your party.</div></div>
 <div class="pane" id="journal"><div class="empty">No journal yet.</div></div>
-<div class="pane" id="dice"></div>
+<div class="pane" id="dice"><div id="roller">
+<div class="rl"><b style="color:var(--gold)">Free roll</b> <span class="why">everyone at the table sees it</span></div>
+<div class="rl" id="quick"></div>
+<form class="rl" onsubmit="freeRoll($('rexpr').value);return false">
+<input id="rexpr" placeholder="2d6+1, d20, 4d6kh3..." autocomplete="off"><input id="rlabel" placeholder="what for? (optional)" autocomplete="off"><button class="go">Roll</button></form>
+<div id="rmsg" class="why"></div></div><div id="dicelog"></div></div>
 <div class="pane" id="chat"><div id="chatlog"></div>
 <form id="chatbar" onsubmit="sendChat();return false"><input id="chatin" placeholder="talk to the table..."><button class="go">Send</button></form></div>
 <div class="pane" id="full"></div>
@@ -201,7 +214,7 @@ function join(){if(N.mode!='off')audioKeepAlive(true);me=$('jname').value.trim()
 function handle(ev){
  narrateEvent(ev);
  if(ev.t=='line'){const t=ev.text;add('full',ansi(t));
-  if(isRoll(t)){add('dice',ansi(t));if($('showrolls').checked)add('story',ansi(t));return}
+  if(isRoll(t)){add('dicelog',ansi(t));if($('showrolls').checked)add('story',ansi(t));return}
   if(isMenu(t))return;
   if(/^\[[^\]|]+\| Day \d+/.test(strip(t)))return;   // status line: shown in header & Party tab
   add('story',ansi(t),ev.kind=='echo'?'echo':null)}
@@ -209,6 +222,10 @@ function handle(ev){
  else if(ev.t=='block'){blocks[ev.seq]=ev;
   add('story','&#128220; <span class="sheetlink" onclick="openBlock('+ev.seq+')">'+esc(ev.title)+' &mdash; open character sheet</span>');
   add('full',ansi(ev.text))}
+ else if(ev.t=='roll'){const html='<div class="froll">\ud83c\udfb2 <b>'+esc(ev.who)+'</b> rolled '+esc(ev.expr)+(ev.label?' <i>for '+esc(ev.label)+'</i>':'')+
+   '<span class="tot">'+ev.total+'</span><div class="why">'+esc(ev.detail)+'</div></div>';
+  add('dicelog',html);add('chatlog',html);add('full',html);
+  if(tab!='chat'&&tab!='dice'&&primed&&ev.who!=me){unreadChat++;$('b-chat').textContent=unreadChat;$('b-chat').style.display='inline'}}
  else if(ev.t=='chat'){add('chatlog','<span class="who">'+esc(ev.who)+':</span> '+esc(ev.text));
   add('full','<span class="c95">['+esc(ev.who)+'] '+esc(ev.text)+'</span>');
   if(tab!='chat'&&primed&&ev.who!=me){unreadChat++;$('b-chat').textContent=unreadChat;$('b-chat').style.display='inline'}}}
@@ -216,7 +233,7 @@ async function poll(){if(polling)return;polling=true;
  while(true){try{const r=await fetch('/api/poll?table='+encodeURIComponent(table)+'&since='+next+'&name='+encodeURIComponent(me),{headers:{'X-Password':pw}});
   if(r.status==403){alert('Wrong password');localStorage.removeItem('dndpw');location.reload();return}
   const j=await r.json();
-  if(j.reset){['story','dice','full','chatlog'].forEach(id=>$(id).innerHTML='')}
+  if(j.reset){['story','dicelog','full','chatlog'].forEach(id=>$(id).innerHTML='')}
   for(const ev of j.events){if(ev.seq<next&&!j.reset)continue;handle(ev)}
   flushSpeech();
   const got=j.events.length;next=j.next;primed=true;
@@ -258,6 +275,12 @@ async function send(text){inp.value='';clearPrompt();
  const j=await r.json();if(!j.ok)$('status').textContent=j.why||'Not accepted.'}
 async function sendChat(){const t=$('chatin');if(!t.value.trim())return;
  await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json','X-Password':pw},body:JSON.stringify({table,name:me,text:t.value})});t.value=''}
+
+// ---------------------------------------------------------------- free rolls
+['d4','d6','d8','d10','d12','d20','d100','2d6','4d6kh3'].forEach(d=>{const b=document.createElement('button');b.type='button';b.className='q';b.textContent=d;b.onclick=()=>freeRoll(d);$('quick').appendChild(b)});
+async function freeRoll(expr){if(!expr.trim())return;
+ const r=await fetch('/api/roll',{method:'POST',headers:{'Content-Type':'application/json','X-Password':pw},body:JSON.stringify({table,name:me,expr,label:$('rlabel').value})});
+ const j=await r.json();$('rmsg').textContent=j.ok?'':j.why;if(j.ok)$('rexpr').value=''}
 
 // ---------------------------------------------------------------- party & journal
 function scheduleState(){clearTimeout(stateTimer);stateTimer=setTimeout(refreshState,700)}

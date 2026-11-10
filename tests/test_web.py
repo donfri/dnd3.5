@@ -73,3 +73,14 @@ class TestTTS(unittest.TestCase):
         st = tts.status()
         self.assertIn("available", st)
         self.assertEqual(set(st["voices"]), {"gm", "npc"})
+
+
+class TestFreeRoll(unittest.TestCase):
+    def test_expressions(self):
+        for _ in range(200):
+            self.assertTrue(1 <= web.free_roll("d20")["total"] <= 20)
+            self.assertTrue(3 <= web.free_roll("2d6+1")["total"] <= 13)
+            self.assertTrue(3 <= web.free_roll("4d6kh3")["total"] <= 18)
+        for bad in ("banana", "", "1000d6", "d1", "2d6+"):
+            with self.assertRaises(ValueError):
+                web.free_roll(bad)

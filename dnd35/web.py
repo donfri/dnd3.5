@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import random
 import re
 import threading
 import time
@@ -31,6 +32,47 @@ MAX_EVENTS = 4000
 POLL_SECONDS = 25
 ANSI_RE = re.compile(r"\033\[[0-9;]*m")
 SPEECH_RE = re.compile(r"^([A-Z][\w' .-]{0,30}): \u201c(.*)\u201d$")
+
+
+_FREE_RNG = random.SystemRandom()
+ROLL_TERM = re.compile(r"([+-]?)(\d*)d(\d+)(?:(kh|kl)(\d+))?|([+-]?)(\d+)")
+
+
+def free_roll(expr: str) -> dict:
+    """Roll dice for players' side games, e.g. '2d6+1', 'd20', '4d6kh3' (keep highest 3).
+    Rolled on the server so nobody can fake a result."""
+    e = expr.replace(" ", "").lower()
+    if not e or len(e) > 40:
+        raise ValueError("Type dice like 2d6+1, d20 or 4d6kh3.")
+    if e[0] not in "+-":
+        e = "+" + e
+    pos, total, parts, dice_count = 0, 0, [], 0
+    for m in ROLL_TERM.finditer(e):
+        if m.start() != pos:
+            raise ValueError(f"I don't understand '{expr}'. Try 2d6+1, d20 or 4d6kh3.")
+        pos = m.end()
+        if m.group(3):
+            sign = -1 if m.group(1) == "-" else 1
+            n, sides = int(m.group(2) or 1), int(m.group(3))
+            dice_count += n
+            if n < 1 or sides < 2 or dice_count > 100 or sides > 1000:
+                raise ValueError("Up to 100 dice, with 2 to 1000 sides each.")
+            rolls = [_FREE_RNG.randint(1, sides) for _ in range(n)]
+            kept = rolls
+            note = ""
+            if m.group(4):
+                k = max(1, min(n, int(m.group(5))))
+                kept = sorted(rolls, reverse=(m.group(4) == "kh"))[:k]
+                note = f" keep {'highest' if m.group(4) == 'kh' else 'lowest'} {k}"
+            total += sign * sum(kept)
+            parts.append(f"{'-' if sign < 0 else ''}{n}d{sides}{note}: {rolls}")
+        else:
+            sign = -1 if m.group(6) == "-" else 1
+            total += sign * int(m.group(7))
+            parts.append(f"{sign * int(m.group(7)):+d}")
+    if pos != len(e) or not dice_count:
+        raise ValueError(f"I don't understand '{expr}'. Try 2d6+1, d20 or 4d6kh3.")
+    return {"expr": expr.strip(), "detail": "  ".join(parts), "total": total}
 
 
 class WebUI(UI):
@@ -432,6 +474,15 @@ class Handler(BaseHTTPRequestHandler):
         elif u.path == "/api/chat":
             t.chat(str(body.get("text", "")), who)
             self._json({"ok": True})
+        elif u.path == "/api/roll":
+            try:
+                res = free_roll(str(body.get("expr", "")))
+            except ValueError as e:
+                self._json({"ok": False, "why": str(e)})
+                return
+            t.emit({"t": "roll", "who": who or "someone", "label": str(body.get("label", ""))[:60],
+                    **res})
+            self._json({"ok": True, **res})
         else:
             self.send_error(404)
 
