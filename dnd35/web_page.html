@@ -67,6 +67,38 @@ main{flex:1;min-height:0;position:relative}
 #modal .top{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);color:var(--gold)}
 #modal pre{margin:0;padding:12px 14px;overflow:auto;font:13px/1.4 ui-monospace,Menlo,Consolas,monospace}
 #modal .top button{background:none;border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:2px 10px}
+/* character sheet */
+#modal .box{width:min(1040px,97vw)}
+#msheet{overflow:auto;min-height:0;padding:14px 16px 18px;font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
+.sh-head h2{margin:0;color:var(--gold);font-size:24px;letter-spacing:.02em}
+.sh-head .sub{color:var(--ink);font-size:15px;margin-top:2px}
+.sh-head .meta{color:var(--dim);font-size:13px;margin-top:4px}
+.sh-sec{margin-top:16px}
+.sh-sec h4{margin:0 0 8px;color:var(--gold);font-size:12px;text-transform:uppercase;letter-spacing:.12em;border-bottom:1px solid var(--line);padding-bottom:4px}
+.sh-row{display:grid;grid-template-columns:minmax(260px,1fr) minmax(300px,1.3fr);gap:18px}
+@media (max-width:760px){.sh-row{grid-template-columns:1fr}}
+.abil{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.abil>div{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px;text-align:center}
+.abil .k{color:var(--dim);font-size:11px;letter-spacing:.1em}
+.abil .m{font-size:22px;font-weight:bold;color:var(--ink)}
+.abil .s{color:var(--dim);font-size:12px}
+.tiles{display:flex;flex-wrap:wrap;gap:8px}
+.tile{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:6px 10px;min-width:74px;text-align:center}
+.tile .k{color:var(--dim);font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+.tile .v{font-size:20px;font-weight:bold}
+.tile.big .v{font-size:26px;color:var(--gold)}
+.hpbar{height:12px;background:#3a1d1d;border-radius:6px;overflow:hidden;margin:4px 0 8px}
+.hpbar i{display:block;height:100%}
+.why{color:var(--dim);font-size:12px}
+table.sh{width:100%;border-collapse:collapse;font-size:13.5px}
+table.sh th{text-align:left;color:var(--dim);font-weight:normal;font-size:12px;border-bottom:1px solid var(--line);padding:4px 6px}
+table.sh td{padding:4px 6px;border-bottom:1px solid #2a2420;vertical-align:top}
+table.sh td.n{text-align:right;font-variant-numeric:tabular-nums;font-weight:bold;white-space:nowrap}
+table.sh tr.dim td{color:var(--dim)}
+.star{color:var(--gold)}
+.spl{display:inline-block;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:1px 9px;margin:2px 4px 2px 0;font-size:13px}
+.spl.used{text-decoration:line-through;opacity:.45}
+.toggle{background:none;border:1px solid var(--line);color:var(--dim);border-radius:6px;padding:2px 8px;font-size:12px;cursor:pointer}
 .b{font-weight:bold}.d{opacity:.6}
 .c31,.c91{color:var(--red)}.c32,.c92{color:var(--green)}.c33,.c93{color:#f4d35e}
 .c34,.c94{color:#6fa8ff}.c35,.c95{color:#e08ce0}.c36,.c96{color:#7fd8e6}
@@ -123,7 +155,8 @@ main{flex:1;min-height:0;position:relative}
 <div id="status"></div></div>
 
 <div id="modal" onclick="if(event.target.id=='modal')closeModal()"><div class="box">
-<div class="top"><span id="mtitle"></span><button onclick="closeModal()">Close</button></div><pre id="mbody"></pre></div></div>
+<div class="top"><span id="mtitle"></span><span><button id="mplain" style="display:none" onclick="togglePlain()">Plain text</button> <button onclick="closeModal()">Close</button></span></div>
+<div id="msheet"></div><pre id="mbody"></pre></div></div>
 
 <script>
 const NEEDPW=__NEEDPW__;
@@ -250,8 +283,59 @@ function renderJournal(s){const el=$('journal');if(!s.active){el.innerHTML='<div
  el.innerHTML=`<div class="jsec"><h3>${esc(s.adventure)}</h3><div>📍 ${esc(s.location)} • ${esc(s.time)}${s.heroic?' • heroic mode':''}</div></div>
  <div class="jsec"><h3>Quest log &amp; notes</h3>${s.journal.length?'<ul>'+s.journal.slice().reverse().map(j=>'<li>'+esc(j)+'</li>').join('')+'</ul>':'<div class="empty">Nothing yet. Talk to people!</div>'}</div>
  <div class="jsec"><h3>Places visited</h3><div>${s.visited.map(v=>'<span class="chip">'+esc(v)+'</span>').join('')}</div></div>`}
-function openSheet(i){const p=lastState.party[i];$('mtitle').textContent=p.name+' — character sheet';$('mbody').innerHTML=esc(p.sheet);$('modal').style.display='flex'}
-function openBlock(seq){const b=blocks[seq];$('mtitle').textContent=b.title;$('mbody').innerHTML=ansi(b.text);$('modal').style.display='flex'}
+let sheetIdx=null,showAllSkills=false;
+function openSheet(i){sheetIdx=i;const p=lastState.party[i];$('mtitle').textContent=p.name+' — character sheet';
+ $('mbody').innerHTML=esc(p.sheet);$('mbody').style.display='none';$('mplain').style.display='inline-block';$('mplain').textContent='Plain text';
+ $('msheet').style.display='block';$('msheet').innerHTML=renderSheet(p.sheet_data);$('modal').style.display='flex';$('msheet').scrollTop=0}
+function togglePlain(){const plain=$('mbody').style.display=='none';$('mbody').style.display=plain?'block':'none';$('msheet').style.display=plain?'none':'block';$('mplain').textContent=plain?'Formatted':'Plain text'}
+async function openBlock(seq){const b=blocks[seq];await refreshState();
+ const i=lastState&&lastState.party?lastState.party.findIndex(p=>b.title.toLowerCase().startsWith(p.name.toLowerCase())):-1;
+ if(i>=0){openSheet(i);return}
+ $('mtitle').textContent=b.title;$('msheet').style.display='none';$('mplain').style.display='none';$('mbody').style.display='block';$('mbody').innerHTML=ansi(b.text);$('modal').style.display='flex'}
+const sgn=n=>(n>=0?'+':'')+n;
+function why(parts){return parts&&parts.length?esc(parts.join(', ')):''}
+function renderSheet(d){if(!d)return '<div class="empty">No sheet.</div>';
+ const pct=Math.max(0,Math.min(100,100*d.hp/d.max_hp)),col=pct>50?'var(--green)':pct>25?'#f4d35e':'var(--red)';
+ let h=`<div class="sh-head"><h2>${esc(d.name)}</h2>
+  <div class="sub">${esc(d.race)} ${esc(d.classes)} · ${esc(d.alignment)}${d.deity?' · worships '+esc(d.deity):''}${d.player?' · played by '+esc(d.player):''}</div>
+  <div class="meta">${esc(d.size)}, speed ${d.speed} ft.${d.gender?' · '+esc(d.gender):''}${d.age?', age '+d.age:''}${d.height?', '+esc(d.height):''}${d.weight?', '+esc(d.weight):''} · ${esc(d.vision)} vision · speaks ${esc(d.languages.join(', '))}</div>
+  <div class="meta">XP ${d.xp}${d.xp_next?' / '+d.xp_next+' for level '+(d.level+1):' (max level)'}${d.can_level?' &nbsp;<b style="color:var(--green)">⬆ ready to level up</b>':''}</div></div>`;
+ h+=`<div class="sh-row sh-sec"><div><h4>Ability scores</h4><div class="abil">`+d.abilities.map(a=>
+   `<div title="${esc(a.notes.join(', ')||'base score')}"><div class="k">${a.key}</div><div class="m">${sgn(a.mod)}</div><div class="s">score ${a.score}${a.notes.length?' *':''}</div></div>`).join('')+
+   `</div><div class="why" style="margin-top:6px">Big number: the modifier added to rolls. * hover to see racial / level changes.</div></div>`;
+ h+=`<div><h4>Combat</h4><div style="display:flex;justify-content:space-between"><span><b style="font-size:18px">${d.hp}</b> / ${d.max_hp} hit points${d.temp_hp?' (+'+d.temp_hp+' temp)':''}</span><span class="why">${esc(d.status)} · hit dice ${esc(d.hit_dice)}</span></div>
+   <div class="hpbar"><i style="width:${pct}%;background:${col}"></i></div>
+   <div class="tiles"><div class="tile big" title="${why(d.ac.parts)}"><div class="k">Armor class</div><div class="v">${d.ac.total}</div></div>
+   <div class="tile" title="vs touch attacks: ignores armor, shield and natural armor"><div class="k">Touch</div><div class="v">${d.ac.touch}</div></div>
+   <div class="tile" title="when caught off guard: no Dex bonus"><div class="k">Flat-footed</div><div class="v">${d.ac.flat}</div></div>
+   <div class="tile"><div class="k">Initiative</div><div class="v">${sgn(d.init)}</div></div>
+   <div class="tile"><div class="k">Base attack</div><div class="v">${sgn(d.bab)}</div></div>
+   <div class="tile"><div class="k">Grapple</div><div class="v">${sgn(d.grapple)}</div></div></div>
+   <div class="why" style="margin:6px 0 10px">AC = 10${d.ac.parts.length?', '+why(d.ac.parts):''}</div>
+   <div class="tiles">`+d.saves.map(sv=>`<div class="tile" style="flex:1"><div class="k">${sv.name}</div><div class="v">${sgn(sv.total)}</div><div class="why">${why(sv.parts)||'no bonus'}</div></div>`).join('')+`</div>
+   <div class="why" style="margin-top:6px">Armor check penalty ${d.acp} · max Dex bonus ${d.max_dex==null?'none':sgn(d.max_dex)} · arcane spell failure ${d.asf}%</div></div></div>`;
+ h+=`<div class="sh-sec"><h4>Attacks</h4><table class="sh"><tr><th>Weapon</th><th style="text-align:right">To hit</th><th style="text-align:right">Damage</th><th>Critical</th><th>Type</th><th>Range</th><th></th></tr>`+
+   d.attacks.map(a=>`<tr class="${a.state=='stowed'?'dim':''}"><td><b>${esc(a.name)}</b> <span class="why">${esc(a.state)}</span>${a.proficient?'':' <span style="color:var(--red)">(not proficient)</span>'}<div class="why">${why(a.parts)}</div></td>
+   <td class="n">${esc(a.bonus)}</td><td class="n">${esc(a.damage)}</td><td>${esc(a.crit)}</td><td>${esc(a.type)}</td><td>${esc(a.range)}</td><td class="why">${esc(a.ammo)}</td></tr>`).join('')+`</table></div>`;
+ const sk=d.skills.filter(s=>showAllSkills||(s.usable&&(s.ranks>0||s.class_skill)));
+ h+=`<div class="sh-row sh-sec"><div><h4>Skills <button class="toggle" onclick="showAllSkills=!showAllSkills;$('msheet').innerHTML=renderSheet(lastState.party[sheetIdx].sheet_data)">${showAllSkills?'show only my skills':'show all '+d.skills.length}</button></h4>
+   <table class="sh"><tr><th>Skill</th><th style="text-align:right">Bonus</th><th style="text-align:right">Ranks</th><th>Ability</th></tr>`+
+   sk.map(s=>`<tr class="${s.usable?'':'dim'}" title="${why(s.parts)}"><td>${s.class_skill?'<span class="star">★</span> ':''}${esc(s.name)}${s.usable?'':' <span class="why">(needs training)</span>'}</td>
+   <td class="n">${s.usable?sgn(s.total):'—'}</td><td class="n" style="font-weight:normal">${s.ranks||''}</td><td class="why">${s.ability}</td></tr>`).join('')+
+   `</table><div class="why" style="margin-top:4px">★ class skill · hover a skill to see its math. Untrained skills use just your ability modifier.</div></div>`;
+ h+=`<div><h4>Feats</h4>`+(d.feats.length?d.feats.map(f=>`<div style="margin-bottom:6px"><b>${esc(f.name)}</b><div class="why">${esc(f.desc)}</div></div>`).join(''):'<div class="why">None</div>')+
+   `<h4 style="margin-top:14px">Special abilities</h4>`+d.specials.map(x=>`<div style="margin-bottom:3px">• ${esc(x)}</div>`).join('')+
+   (d.daily.length?`<div style="margin-top:6px"><b>Uses left today:</b> ${esc(d.daily.join(' · '))}</div>`:'')+`</div></div>`;
+ for(const sp of d.spells){h+=`<div class="sh-sec"><h4>${esc(sp.class)} spells · caster level ${sp.cl} · ${esc(sp.ability)}</h4>`;
+  for(const L of sp.levels){h+=`<div style="margin-bottom:6px"><b>${L.level==0?'Cantrips (level 0)':'Level '+L.level}</b> <span class="why">${L.left} of ${L.per_day} left today · save DC ${L.dc}</span><br>`+
+   (sp.prepared?L.slots.map(x=>`<span class="spl ${x.used?'used':''}">${esc(x.name)}${x.domain?' (domain)':''}</span>`).join(''):L.known.map(x=>`<span class="spl">${esc(x)}</span>`).join(''))+`</div>`}
+  if(sp.domains.length)h+=`<div class="why">Domains: ${esc(sp.domains.join(', '))}${sp.spontaneous_cure?' · can swap any prepared spell for a cure spell':''}</div>`;
+  if(sp.spellbook.length)h+=`<div class="why">Spellbook: ${esc(sp.spellbook.join(', '))}</div>`;
+  h+=`</div>`}
+ if(d.effects.length||d.afflictions.length)h+=`<div class="sh-sec"><h4>Active effects</h4>`+d.effects.concat(d.afflictions).map(e=>`<span class="spl">${esc(e)}</span>`).join('')+`</div>`;
+ h+=`<div class="sh-sec"><h4>Equipment · ${esc(d.money)} · ${d.carried} lb. carried (${esc(d.load)} load, max ${d.heavy} lb.)</h4><table class="sh"><tr><th>Item</th><th style="text-align:right">Qty</th><th>Worn / held</th><th style="text-align:right">lb.</th></tr>`+
+   d.equipment.map(e=>`<tr><td>${esc(e.name)}${e.desc?'<div class="why">'+esc(e.desc)+'</div>':''}</td><td class="n" style="font-weight:normal">${e.qty>1?e.qty:''}</td><td>${e.slot?'<span style="color:var(--green)">'+esc(e.slot)+'</span>':''}</td><td class="n" style="font-weight:normal">${e.weight}</td></tr>`).join('')+`</table></div>`;
+ return h}
 function closeModal(){$('modal').style.display='none'}
 document.addEventListener('keydown',e=>{if(e.key=='Escape'){closeModal();$('settings').style.display='none'}});
 

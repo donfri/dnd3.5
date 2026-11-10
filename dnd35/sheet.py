@@ -121,28 +121,23 @@ def render(ch: Character, full: bool = True) -> str:
 
     # skills
     if full:
-        L.append(_box("SKILLS   (* = class skill, ACP = armor check penalty applies)"))
-        rows = []
+        L.append(_box("SKILLS   (* = class skill)"))
+        L.append(f"|   {'Skill':<34}{'Total':>6}  {'Ranks':>5}  Ability  Other")
         for sk in SKILL_ORDER:
             info = SKILLS[sk]
             ranks = ch.skill_ranks.get(sk, 0)
             if info.get("trained") and ranks == 0:
                 continue
-            comps = ch.skill_components(sk)
-            total = _sum(comps)
+            total = _sum(ch.skill_components(sk))
             star = "*" if ch.is_class_skill(sk) else " "
-            misc = total - int(ranks) - ch.mod(info["ability"])
-            rk = f"{ranks:g}"
-            rows.append(f"{star}{sk[:24]:<24}{total:+3d} = {rk:>3}r {ch.mod(info['ability']):+d}"
-                        f"{info['ability'][:3]} {misc:+d}")
-        half = (len(rows) + 1) // 2
-        for i in range(half):
-            left = rows[i]
-            right = rows[i + half] if i + half < len(rows) else ""
-            L.append(f"| {left:<37}{right}")
-        untrained = [sk for sk in SKILL_ORDER if SKILLS[sk].get("trained")
-                     and ch.skill_ranks.get(sk, 0) == 0]
-        L.append(f"| Untrained (can't use): {len(untrained)} trained-only skills hidden")
+            amod = ch.mod(info["ability"])
+            misc = total - int(ranks) - amod
+            nm = short_skill(sk)
+            line = f"| {star} {nm:<34}{total:>+6}  {ranks:>5g}  {info['ability'].upper()} {amod:+d}"
+            L.append(line + (f"   {misc:+d}" if misc else ""))
+        hidden = sum(1 for sk in SKILL_ORDER if SKILLS[sk].get("trained")
+                     and ch.skill_ranks.get(sk, 0) == 0)
+        L.append(f"| ({hidden} trained-only skills hidden: they need at least 1 rank)")
 
     # feats & abilities
     L.append(_box("FEATS"))
@@ -228,6 +223,11 @@ def spell_block(ch: Character, cls: str) -> List[str]:
     return L
 
 
+def short_skill(name: str) -> str:
+    return (name.replace("architecture and engineering", "architecture & eng.")
+                .replace("nobility and royalty", "nobility & royalty"))
+
+
 def short_status(ch) -> str:
     parts = [f"{ch.name}", f"HP {ch.hp}/{ch.max_hp()}" + (f"+{ch.temp_hp}" if ch.temp_hp else ""),
              f"AC {ch.ac()}"]
@@ -245,3 +245,152 @@ def spell_description(name: str) -> str:
     lv = ", ".join(f"{k.replace('_domain', ' domain').title()} {v}" for k, v in s["levels"].items())
     save = f"; save {s['save'][0].title()} {s['save'][1]}" if s.get("save") else ""
     return f"{name} ({s['school']}; {lv}{save}): {s['desc']}"
+
+
+# ---------------------------------------------------------------- structured sheet (web)
+def sheet_data(ch: Character) -> dict:
+    """Everything on the character sheet as plain data, for the web page."""
+    r = ch.race_data
+    abilities = []
+    for ab in rules.ABILITIES:
+        base = ch.base_abilities[ab]
+        racial = r["ability_adj"].get(ab, 0)
+        inc = ch.ability_increases.count(ab)
+        cur = ch.ability(ab)
+        notes = []
+        if racial:
+            notes.append(f"racial {racial:+d}")
+        if inc:
+            notes.append(f"level-ups {inc:+d}")
+        temp = (cur or 0) - (base + racial + inc) + ch.ability_damage.get(ab, 0)
+        if temp:
+            notes.append(f"magic/temporary {temp:+d}")
+        if ch.ability_damage.get(ab):
+            notes.append(f"damaged -{ch.ability_damage[ab]}")
+        abilities.append({"key": ab.upper(), "name": rules.ABILITY_NAMES[ab], "score": cur,
+                          "mod": rules.ability_mod(cur), "base": base, "notes": notes})
+
+    def parts(comps):
+        return [f"{v:+d} {src}" for _, v, src in comps if v]
+
+    ac = ch.ac_components()
+    saves = []
+    for kind, label in (("fort", "Fortitude"), ("ref", "Reflex"), ("will", "Will")):
+        comps = ch.save_components(kind)
+        saves.append({"name": label, "total": _sum(comps), "parts": parts(comps)})
+
+    attacks = []
+    bab = ch.bab()
+    iters = rules.iterative_attacks(bab)
+    for w in ch.weapon_infos():
+        comps = ch.attack_components(w, power=0)
+        total = _sum(comps)
+        dice_expr, dcomps = ch.damage_profile(w)
+        db = _sum(dcomps)
+        ammo = ""
+        if w.get("ammo"):
+            ammo = f"{ch.ammo_count(w['ammo'])} {w['ammo']}"
+        elif w.get("thrown") and w.get("entry"):
+            ammo = f"{w['entry'].get('qty', 1)} left"
+        attacks.append({
+            "name": w["name"], "state": {"main": "in hand", "off": "off hand",
+                                         None: "stowed"}[w.get("wielded")],
+            "bonus": "/".join(f"{total - bab + b:+d}" for b in iters),
+            "damage": dice_expr + (f"{db:+d}" if db else ""),
+            "crit": (f"{w['crit_range']}-20" if w["crit_range"] < 20 else "20")
+                    + f" x{w['crit_mult']}",
+            "type": {"B": "bludgeoning", "P": "piercing", "S": "slashing",
+                     "PS": "piercing/slashing", "BP": "bludgeoning/piercing"}.get(
+                         w["dtype"], w["dtype"]),
+            "range": f"{w['range']} ft." if w.get("ranged") and w.get("range") else "melee",
+            "ammo": ammo, "parts": parts(comps), "proficient": ch.is_proficient(w),
+        })
+
+    skills = []
+    for sk in SKILL_ORDER:
+        info = SKILLS[sk]
+        ranks = ch.skill_ranks.get(sk, 0)
+        usable = not info.get("trained") or ranks > 0
+        comps = ch.skill_components(sk)
+        skills.append({"name": sk, "total": _sum(comps), "ranks": ranks,
+                       "ability": info["ability"].upper(), "class_skill": ch.is_class_skill(sk),
+                       "usable": usable, "parts": parts(comps)})
+
+    feats = []
+    for f in ch.feat_list():
+        base = f.split(" (")[0]
+        feats.append({"name": f, "desc": FEATS.get(base, FEATS.get(f, {})).get("desc", "")})
+
+    daily = []
+    if ch.rage_per_day():
+        daily.append(f"Rage {ch.uses_left('rage')}/{ch.rage_per_day()}")
+    if ch.turn_per_day():
+        daily.append(f"Turn undead {ch.uses_left('turn')}/{ch.turn_per_day()}")
+    if "Strength" in ch.domains:
+        daily.append(f"Feat of strength {ch.uses_left('feat_of_strength')}/1")
+
+    spells = []
+    for cls in ch.caster_classes():
+        per = ch.spells_per_day(cls)
+        ab = ch.cast_ability(cls)
+        levels = []
+        prepared = bool(CLASSES[cls].get("prepared"))
+        dom = ch.domain_slots() if cls == "cleric" else {}
+        for sl in sorted(per):
+            if prepared:
+                slots = [{"name": s["spell"], "used": s["used"], "domain": s.get("domain", False)}
+                         for s in ch.prepared.get(cls, {}).get(sl, [])]
+                left = sum(1 for s in slots if not s["used"])
+                levels.append({"level": sl, "per_day": per[sl] + dom.get(sl, 0), "left": left,
+                               "dc": 10 + sl + ch.mod(ab), "slots": slots})
+            else:
+                used = ch.spont_used.get(sl, 0)
+                levels.append({"level": sl, "per_day": per[sl], "left": per[sl] - used,
+                               "dc": 10 + sl + ch.mod(ab),
+                               "known": list(ch.spells_known.get(sl, []))})
+        spells.append({
+            "class": CLASSES[cls]["name"], "cl": ch.caster_level(cls),
+            "ability": rules.ABILITY_NAMES[ab], "prepared": prepared, "levels": levels,
+            "spellbook": sorted(ch.spellbook) if cls == "wizard" else [],
+            "domains": list(ch.domains) if cls == "cleric" else [],
+            "spontaneous_cure": cls == "cleric" and not ch.evil,
+        })
+
+    equipment = []
+    for e in ch.inventory:
+        d = item_data(e)
+        slot = {"main": "in hand", "off": "off hand", "armor": "worn", "shield": "on arm",
+                "ring": "worn", "ring2": "worn", "cloak": "worn", "amulet": "worn"}.get(
+                    e.get("slot", ""), "")
+        weight = d.get("weight", 0)
+        if d.get("ammo_count"):
+            weight = round(weight / d["ammo_count"] * e.get("qty", 1), 1)
+            desc = ""
+        else:
+            desc = d.get("desc", "")
+        equipment.append({"name": item_name(e), "qty": e.get("qty", 1), "slot": slot,
+                          "weight": weight, "desc": desc})
+
+    md = ch.max_dex_bonus()
+    return {
+        "name": ch.name, "player": ch.player, "race": r["name"], "classes": ch.class_summary(),
+        "level": ch.level, "alignment": ch.alignment, "deity": ch.deity,
+        "size": ch.size.title(), "speed": ch.speed(), "gender": ch.gender, "age": ch.age,
+        "height": ch.height, "weight": ch.weight, "xp": ch.xp,
+        "xp_next": ch.xp_next() if ch.level < rules.MAX_LEVEL else None,
+        "can_level": ch.can_level_up(), "languages": ch.languages, "vision": r["vision"],
+        "abilities": abilities, "hp": ch.hp, "max_hp": ch.max_hp(), "temp_hp": ch.temp_hp,
+        "status": ch.status_word(),
+        "hit_dice": ", ".join(f"{n}d{CLASSES[c]['hd']}" for c, n in ch.classes().items()),
+        "ac": {"total": _sum(ac), "touch": ch.ac("touch"), "flat": ch.ac("flat"),
+               "parts": parts(ac[1:])},
+        "init": ch.initiative(), "bab": bab, "grapple": ch.grapple(), "saves": saves,
+        "acp": ch.armor_check_penalty(), "max_dex": md, "asf": ch.arcane_spell_failure(),
+        "attacks": attacks, "skills": skills, "feats": feats,
+        "specials": ch.special_abilities(), "daily": daily, "spells": spells,
+        "effects": [e.describe() for e in ch.effects if not e.hidden],
+        "afflictions": [f"{a['name']} (Fort DC {a['dc']} each day)" for a in ch.afflictions],
+        "equipment": equipment, "money": rules.money_str(ch.cp), "carried": ch.total_weight(),
+        "load": ch.load(), "heavy": rules.heavy_load(ch.ability("str") or 0, ch.base_size),
+        "notes": ch.notes[-8:],
+    }

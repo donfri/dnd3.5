@@ -260,7 +260,7 @@ class Table:
         if gs is None:
             return {"active": False}
         from .rules import money_str
-        from .sheet import render
+        from .sheet import render, sheet_data
         party = []
         for p in list(gs.party):
             nxt = p.xp_next() if p.level < 5 else None
@@ -271,7 +271,7 @@ class Table:
                 "touch": p.ac("touch"), "flat": p.ac("flat"), "status": p.status_word(),
                 "effects": [e.describe() for e in p.effects if not e.hidden],
                 "xp": p.xp, "xp_next": nxt, "can_level": p.can_level_up(),
-                "money": money_str(p.cp), "sheet": render(p),
+                "money": money_str(p.cp), "sheet": render(p), "sheet_data": sheet_data(p),
                 "spells": sum(1 for _ in p.available_casts()),
             })
         rooms = gs.adv.ROOMS

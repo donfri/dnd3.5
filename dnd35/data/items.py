@@ -134,9 +134,9 @@ GEAR = {
     "spellbook": _g("Spellbook", 15 * GP, 3),
     "crowbar": _g("Crowbar", 2 * GP, 5, "+2 circumstance bonus on Strength checks to force "
                   "doors or chests."),
-    "arrows": _g("Arrows (20)", 1 * GP, 3, stack=True, ammo_count=20),
-    "bolts": _g("Crossbow bolts (10)", 1 * GP, 1, stack=True, ammo_count=10),
-    "sling bullets": _g("Sling bullets (10)", 1 * SP, 5, stack=True, ammo_count=10),
+    "arrows": _g("Arrows", 1 * GP, 3, "Sold in bundles of 20.", stack=True, ammo_count=20),
+    "bolts": _g("Crossbow bolts", 1 * GP, 1, "Sold in bundles of 10.", stack=True, ammo_count=10),
+    "sling bullets": _g("Sling bullets", 1 * SP, 5, "Sold in bundles of 10.", stack=True, ammo_count=10),
     "lantern": _g("Hooded lantern", 7 * GP, 2),
     "oil": _g("Flask of oil", 1 * SP, 1, stack=True),
     "grappling hook": _g("Grappling hook", 1 * GP, 4),
