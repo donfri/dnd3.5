@@ -1,6 +1,7 @@
 # D&D 3.5 Text Adventure: *The Ember King's Barrow*
 
-A terminal game for one to four players sharing one keyboard ("hot seat"). The
+A D&D 3.5 game for one to four players, played in a shared browser page (online)
+or at one keyboard in the terminal. The
 computer is the Game Master: it narrates, runs the monsters, rolls behind the
 screen, and applies the D&D 3.5 rules (SRD), showing the math for every roll.
 
@@ -9,6 +10,46 @@ python3 play.py
 ```
 
 It needs only Python 3.8 or newer. There are no third-party packages to install.
+
+## Play online (friends in different places)
+
+The game includes a small web server. One person hosts it, and everyone opens the
+same link in a browser. You all see the same GM output live. You can click menu
+choices or type answers, and there's a chat sidebar. Nobody needs to install
+anything.
+
+### Host it on Fly.io (recommended)
+
+You need a Fly.io account and the `fly` command-line tool
+(<https://fly.io/docs/flyctl/install/>). Run these from this folder:
+
+```bash
+fly auth login
+fly launch --no-deploy --copy-config      # say yes to copying fly.toml; pick a unique app name
+fly volumes create dnd_saves --size 1     # keeps saves/autosaves between sessions
+fly secrets set TABLE_PASSWORD=pick-something   # optional, but keeps strangers out
+fly deploy
+fly scale count 1                          # IMPORTANT: the live game runs on exactly one machine
+```
+
+Then both of you open `https://<your-app-name>.fly.dev`. Enter your name, keep the
+table name the same (for example `main`), and enter the password. To run a second
+campaign at the same time, give it a different table name.
+
+- When nobody's connected, the machine sleeps, which costs next to nothing. It
+  wakes up when you open the page. The game in memory is lost while it sleeps,
+  so pick **Load a saved game → autosave**. The game autosaves every time you
+  enter a new area. Use **Save game** before you stop for the night.
+- To update after a code change, run `git pull`, then `fly deploy`.
+
+### Or host it from your own computer
+
+```bash
+python3 -m dnd35.web --port 8080
+```
+
+Then share `http://<your-ip>:8080` with your friend. This needs port forwarding,
+or a tunnel such as Tailscale, `cloudflared tunnel`, or `ngrok http 8080`.
 
 ## Quick start for two players
 
@@ -19,7 +60,8 @@ It needs only Python 3.8 or newer. There are no third-party packages to install.
    maximum hit points every level plus bonus HP equal to half your Constitution.
    You can also play the classic way, with **two heroes each** (a four-person party).
 4. Out of combat, the party decides together. In combat, the game announces whose
-   turn it is (with the player's name), so pass the keyboard.
+   turn it is (with the player's name). Online, that player answers. In the
+   terminal, pass the keyboard.
 
 Every menu is numbered. Type the number, or the first few letters of an option.
 Type `/quit` at any prompt to leave.
@@ -116,6 +158,8 @@ dnd35/
   adventure/ember_barrow.py   the adventure itself (pure data + a few scripts)
   data/                    races, classes, skills, feats, items, spells, monsters
   game.py ui.py            menus, hot-seat flow, terminal I/O
+  web.py                   online shared table (web page + long-poll API, stdlib only)
+Dockerfile fly.toml        Fly.io deployment
 tests/                     unit tests, plus randomized "fuzz" play-throughs
 ```
 

@@ -21,8 +21,8 @@ from ..sheet import render, short_status
 from ..shop import inventory_menu, shop_menu
 from ..ui import QuitGame, c
 
-SAVE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
-    os.path.abspath(__file__)))), "saves")
+SAVE_DIR = os.environ.get("DND35_SAVE_DIR") or os.path.join(os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "saves")
 
 
 class GameOver(Exception):
