@@ -127,7 +127,8 @@ class UI:
                 return False
 
     def choose(self, prompt: str, options: Sequence[str], allow_cancel: bool = False,
-               default: Optional[int] = None) -> Optional[int]:
+               default: Optional[int] = None, groups: Optional[Sequence[str]] = None
+               ) -> Optional[int]:
         """Show a numbered menu and return the chosen index (or None on cancel)."""
         if not options:
             return None
@@ -227,7 +228,7 @@ class AutoUI(UI):
         self._tick()
         return self.r.random() < 0.6
 
-    def choose(self, prompt, options, allow_cancel=False, default=None):
+    def choose(self, prompt, options, allow_cancel=False, default=None, groups=None):
         self._tick()
         if not options:
             return None

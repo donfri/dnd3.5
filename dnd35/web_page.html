@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>D&amp;D 3.5 Table</title>
+<style>
+:root{--bg:#14110f;--panel:#1e1a17;--panel2:#26211d;--ink:#e8e0d4;--dim:#8d8378;--gold:#e0b44c;--line:#3a332d;--red:#ff6b6b;--green:#7ee081}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 ui-monospace,Menlo,Consolas,monospace;display:flex;flex-direction:column}
+button{font:inherit;cursor:pointer}
+header{padding:8px 14px;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+header b{color:var(--gold)}
+#here{color:var(--dim);font-size:13px}
+#gear{margin-left:auto;background:none;border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:3px 9px}
+#settings{display:none;position:absolute;right:12px;top:44px;background:var(--panel);border:1px solid var(--gold);border-radius:10px;padding:14px;z-index:20;width:300px}
+#settings label{display:block;color:var(--dim);font-size:12px;margin-top:8px}
+#settings select,#settings input{width:100%;background:#0f0d0c;color:var(--ink);border:1px solid #4a4038;border-radius:6px;padding:5px;font:inherit;font-size:13px}
+nav{display:flex;gap:2px;padding:0 10px;border-bottom:1px solid var(--line);overflow-x:auto;background:var(--panel)}
+nav button{background:none;border:0;border-bottom:3px solid transparent;color:var(--dim);padding:9px 14px;white-space:nowrap}
+nav button.on{color:var(--gold);border-bottom-color:var(--gold)}
+nav .badge{background:var(--red);color:#fff;border-radius:9px;padding:0 6px;font-size:11px;margin-left:5px}
+main{flex:1;min-height:0;position:relative}
+.pane{position:absolute;inset:0;overflow-y:auto;padding:12px 16px;display:none}
+.pane.on{display:block}
+#story,#full,#dice{white-space:pre-wrap;word-break:break-word}
+#story .echo{color:var(--gold);margin-top:6px}
+.sheetlink{color:var(--gold);text-decoration:underline;cursor:pointer}
+/* choices */
+#bottom{border-top:1px solid var(--line);padding:8px 14px 10px;background:var(--panel);max-height:46vh;overflow-y:auto}
+#prompt{color:var(--gold);margin-bottom:6px;font-weight:bold}
+.grp{margin-bottom:6px}
+.grp .gl{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px}
+.grp .row{display:flex;flex-wrap:wrap;gap:6px}
+.opt{background:var(--panel2);color:var(--ink);border:1px solid #4a4038;border-radius:7px;padding:6px 10px;font-size:13px;text-align:left;max-width:100%}
+.opt:hover{border-color:var(--gold)}
+.opt .n{color:var(--gold);margin-right:6px}
+.opt.primary{border-color:#7a6430}
+#more{background:none;border:1px dashed #4a4038;color:var(--dim);border-radius:7px;padding:5px 10px;font-size:12px}
+#textrow{display:flex;gap:6px;margin-top:6px}
+#textrow input,#chatin{flex:1;background:#0f0d0c;color:var(--ink);border:1px solid #4a4038;border-radius:6px;padding:7px;font:inherit}
+.go{background:var(--gold);color:#1b1408;border:0;border-radius:6px;padding:0 14px;font-weight:bold}
+#status{color:var(--dim);font-size:12px;margin-top:4px}
+/* party */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px}
+.card h3{margin:0;color:var(--gold);font-size:16px}
+.card .sub{color:var(--dim);font-size:13px}
+.bar{height:10px;background:#3a1d1d;border-radius:5px;overflow:hidden;margin:6px 0 2px}
+.bar i{display:block;height:100%;background:var(--green)}
+.stats{display:flex;gap:14px;font-size:13px;margin:6px 0}
+.chip{display:inline-block;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:1px 8px;font-size:12px;margin:2px 3px 0 0}
+.card button{background:var(--panel2);color:var(--ink);border:1px solid #4a4038;border-radius:6px;padding:4px 10px;font-size:13px;margin-top:8px}
+.lvl{color:var(--green);font-weight:bold}
+/* journal */
+.jsec{margin-bottom:16px}.jsec h3{color:var(--gold);margin:0 0 6px;font-size:15px}
+.jsec li{margin-bottom:4px}
+/* chat */
+#chatlog div{margin-bottom:4px}#chatlog .who{color:var(--gold)}
+#chatbar{display:flex;gap:6px;position:sticky;bottom:0;background:var(--bg);padding-top:8px}
+/* modal */
+#modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:30;align-items:center;justify-content:center}
+#modal .box{background:var(--panel);border:1px solid var(--gold);border-radius:10px;width:min(860px,96vw);max-height:90vh;display:flex;flex-direction:column}
+#modal .top{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);color:var(--gold)}
+#modal pre{margin:0;padding:12px 14px;overflow:auto;font:13px/1.4 ui-monospace,Menlo,Consolas,monospace}
+#modal .top button{background:none;border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:2px 10px}
+.b{font-weight:bold}.d{opacity:.6}
+.c31,.c91{color:var(--red)}.c32,.c92{color:var(--green)}.c33,.c93{color:#f4d35e}
+.c34,.c94{color:#6fa8ff}.c35,.c95{color:#e08ce0}.c36,.c96{color:#7fd8e6}
+#join{position:fixed;inset:0;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;z-index:40}
+#join div{background:var(--panel);padding:22px;border:1px solid var(--gold);border-radius:10px;width:340px}
+#join input{width:100%;margin:6px 0 12px;background:#0f0d0c;color:var(--ink);border:1px solid #4a4038;border-radius:6px;padding:7px;font:inherit}
+.empty{color:var(--dim);font-style:italic}
+</style></head><body>
+<div id="join"><div>
+<h2 style="margin-top:0;color:var(--gold)">Join the table</h2>
+<label>Your name</label><input id="jname" maxlength="30" placeholder="e.g. Alice">
+<label>Table</label><input id="jtable" maxlength="32" value="main">
+<label id="pwl">Password</label><input id="jpw" type="password">
+<button class="go" style="width:100%;padding:9px" onclick="join()">Join</button>
+</div></div>
+
+<header><b>D&amp;D 3.5 &mdash; <span id="tname"></span></b><span id="here"></span>
+<span id="where" style="color:var(--dim);font-size:13px"></span>
+<button id="gear" onclick="toggleSettings()" title="Narrator & settings">&#128266; &#9881;</button></header>
+<div id="settings">
+<b style="color:var(--gold)">Narrator (read aloud)</b>
+<label>What to read</label><select id="nmode"><option value="off">Off</option><option value="story">Story &amp; dialogue</option><option value="all">Story + combat</option></select>
+<label>Narrator voice</label><select id="nvoice"></select>
+<label>Character dialogue voice</label><select id="npcvoice"></select>
+<label>Speed</label><input id="nrate" type="range" min="0.7" max="1.4" step="0.05">
+<div style="display:flex;gap:6px;margin-top:10px"><button class="opt" onclick="speechSynthesis.cancel()">Skip current line</button><button class="opt" onclick="toggleSettings()">Close</button></div>
+<label style="margin-top:12px">Story tab</label>
+<label style="color:var(--ink)"><input type="checkbox" id="showrolls" style="width:auto"> Show dice rolls in the story too</label>
+</div>
+
+<nav id="tabs">
+<button data-tab="story" class="on">&#128214; Story<span class="badge" id="b-story" style="display:none">!</span></button>
+<button data-tab="party">&#128737; Party</button>
+<button data-tab="journal">&#128220; Journal</button>
+<button data-tab="dice">&#127922; Dice</button>
+<button data-tab="chat">&#128172; Chat<span class="badge" id="b-chat" style="display:none">0</span></button>
+<button data-tab="full">&#128203; Full log</button>
+</nav>
+<main>
+<div class="pane on" id="story"></div>
+<div class="pane" id="party"><div class="empty">Start or load a game to see your party.</div></div>
+<div class="pane" id="journal"><div class="empty">No journal yet.</div></div>
+<div class="pane" id="dice"></div>
+<div class="pane" id="chat"><div id="chatlog"></div>
+<form id="chatbar" onsubmit="sendChat();return false"><input id="chatin" placeholder="talk to the table..."><button class="go">Send</button></form></div>
+<div class="pane" id="full"></div>
+</main>
+<div id="bottom"><div id="prompt"></div><div id="opts"></div>
+<form id="textrow" onsubmit="send(inp.value);return false"><input id="inp" autocomplete="off" placeholder="or type an answer / number"><button class="go">Send</button></form>
+<div id="status"></div></div>
+
+<div id="modal" onclick="if(event.target.id=='modal')closeModal()"><div class="box">
+<div class="top"><span id="mtitle"></span><button onclick="closeModal()">Close</button></div><pre id="mbody"></pre></div></div>
+
+<script>
+const NEEDPW=__NEEDPW__;
+let me=localStorage.getItem('dndname')||'', table=new URLSearchParams(location.search).get('table')||localStorage.getItem('dndtable')||'main', pw=localStorage.getItem('dndpw')||'';
+let next=0, polling=false, tab='story', unreadChat=0, lastState=null, stateTimer=null, primed=false;
+const $=id=>document.getElementById(id), inp=$('inp');
+const blocks={};
+if(!NEEDPW){$('jpw').style.display='none';$('pwl').style.display='none'}
+$('jname').value=me;$('jtable').value=table;
+
+// ---------------------------------------------------------------- tabs
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
+function showTab(t){tab=t;document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab==t));
+ document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on',p.id==t));
+ if(t=='chat'){unreadChat=0;$('b-chat').style.display='none';$('chatin').focus()}
+ if(t=='story')$('b-story').style.display='none';
+ if(t=='party'||t=='journal')refreshState();
+ $('bottom').style.display=(t=='chat')?'none':'block';
+ const p=$(t);p.scrollTop=p.scrollHeight}
+function toggleSettings(){const s=$('settings');s.style.display=s.style.display=='block'?'none':'block'}
+
+// ---------------------------------------------------------------- text helpers
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function ansi(s){let out='',open=0;const parts=String(s).split(/\x1b\[([0-9;]*)m/);
+ for(let i=0;i<parts.length;i++){if(i%2==0){out+=esc(parts[i]);continue}
+  const codes=parts[i].split(';').filter(x=>x);while(open>0){out+='</span>';open--}
+  if(!codes.length||codes[0]=='0')continue;
+  out+='<span class="'+codes.map(c=>c=='1'?'b':c=='2'?'d':'c'+c).join(' ')+'">';open++}
+ while(open>0){out+='</span>';open--}return out}
+const strip=s=>String(s).replace(/\x1b\[[0-9;]*m/g,'');
+function add(pane,html,cls){const d=document.createElement('div');if(cls)d.className=cls;d.innerHTML=html||'&nbsp;';$(pane).appendChild(d);
+ const p=$(pane);while(p.childNodes.length>2500)p.removeChild(p.firstChild);return d}
+function isRoll(t){return /\x1b\[([0-9]+;)*2(;[0-9]+)*m/.test(t)}
+function isMenu(t){const s=strip(t);return /^\s{1,3}\d{1,2}\. /.test(s)||/^\s+0\. \(back\)/.test(s)}
+
+// ---------------------------------------------------------------- join & poll
+function join(){me=$('jname').value.trim()||'Player';table=$('jtable').value.trim()||'main';pw=$('jpw').value;
+ localStorage.setItem('dndname',me);localStorage.setItem('dndtable',table);localStorage.setItem('dndpw',pw);
+ $('join').style.display='none';$('tname').textContent='table '+table;
+ history.replaceState(null,'','?table='+encodeURIComponent(table));poll();inp.focus()}
+function handle(ev){
+ narrateEvent(ev);
+ if(ev.t=='line'){const t=ev.text;add('full',ansi(t));
+  if(isRoll(t)){add('dice',ansi(t));if($('showrolls').checked)add('story',ansi(t));return}
+  if(isMenu(t))return;
+  if(/^\[[^\]|]+\| Day \d+/.test(strip(t)))return;   // status line: shown in header & Party tab
+  add('story',ansi(t),ev.kind=='echo'?'echo':null)}
+ else if(ev.t=='prompt'){add('full','<span class="c93">'+esc(ev.text)+'</span>')}
+ else if(ev.t=='block'){blocks[ev.seq]=ev;
+  add('story','&#128220; <span class="sheetlink" onclick="openBlock('+ev.seq+')">'+esc(ev.title)+' &mdash; open character sheet</span>');
+  add('full',ansi(ev.text))}
+ else if(ev.t=='chat'){add('chatlog','<span class="who">'+esc(ev.who)+':</span> '+esc(ev.text));
+  add('full','<span class="c95">['+esc(ev.who)+'] '+esc(ev.text)+'</span>');
+  if(tab!='chat'&&primed&&ev.who!=me){unreadChat++;$('b-chat').textContent=unreadChat;$('b-chat').style.display='inline'}}}
+async function poll(){if(polling)return;polling=true;
+ while(true){try{const r=await fetch('/api/poll?table='+encodeURIComponent(table)+'&since='+next+'&name='+encodeURIComponent(me),{headers:{'X-Password':pw}});
+  if(r.status==403){alert('Wrong password');localStorage.removeItem('dndpw');location.reload();return}
+  const j=await r.json();
+  if(j.reset){['story','dice','full','chatlog'].forEach(id=>$(id).innerHTML='')}
+  for(const ev of j.events){if(ev.seq<next&&!j.reset)continue;handle(ev)}
+  const got=j.events.length;next=j.next;primed=true;
+  if(j.waiting){const ps=j.events.filter(e=>e.t=='prompt');if(ps.length)showPrompt(ps[ps.length-1]);
+   if(tab!='story'&&tab!='chat'&&got)$('b-story').style.display='inline'}else clearPrompt();
+  $('here').textContent='• '+j.here.join(', ');
+  $('status').textContent=j.waiting?'Waiting for an answer — anyone at the table can click.':'The GM is thinking…';
+  if(got){for(const id of ['story','dice','full']){const p=$(id);p.scrollTop=p.scrollHeight}scheduleState()}
+ }catch(e){$('status').textContent='Connection lost, retrying…';await new Promise(r=>setTimeout(r,2000))}}}
+
+// ---------------------------------------------------------------- choices
+const GROUP_ORDER=['Actions','Fight','Travel','Move','Tactics','Explore','Party','Turn','Game'];
+const GROUP_LABEL={Actions:'Do something here',Fight:'Attack & magic',Travel:'Go somewhere',Move:'Move',Tactics:'Tactics',Explore:'Explore',Party:'Party',Turn:'',Game:'More'};
+let showMore=false;
+function optButton(ev,o,i){const b=document.createElement('button');b.className='opt';let val;
+ if(ev.kind=='confirm')val=(i==0?'y':'n');else if(ev.kind=='pause')val='';else val=(o=='(back)'?'0':String(i+1));
+ b.innerHTML=(ev.kind=='choose'?'<span class="n">'+(o=='(back)'?'0':(i+1))+'</span>':'')+esc(o);b.onclick=()=>send(val);return b}
+function showPrompt(ev){$('prompt').textContent=ev.text.replace(/:\s*$/,'');const box=$('opts');box.innerHTML='';
+ const opts=ev.options||[];
+ if(!ev.groups){const row=document.createElement('div');row.className='row';row.style.display='flex';row.style.flexWrap='wrap';row.style.gap='6px';
+  opts.forEach((o,i)=>row.appendChild(optButton(ev,o,i)));box.appendChild(row);return}
+ const by={};opts.forEach((o,i)=>{const g=ev.groups[i]||'Game';(by[g]=by[g]||[]).push([o,i])});
+ for(const g of GROUP_ORDER.concat(Object.keys(by).filter(k=>!GROUP_ORDER.includes(k)))){if(!by[g])continue;
+  if(g=='Game'&&!showMore){const m=document.createElement('button');m.id='more';m.textContent='More options (sheet, journal, save, help…) ▾';
+   m.onclick=()=>{showMore=true;showPrompt(ev)};box.appendChild(m);continue}
+  const d=document.createElement('div');d.className='grp';
+  if(GROUP_LABEL[g])d.innerHTML='<div class="gl">'+esc(GROUP_LABEL[g]||g)+'</div>';
+  const row=document.createElement('div');row.className='row';by[g].forEach(([o,i])=>{const b=optButton(ev,o,i);if(g=='Actions'||g=='Fight')b.classList.add('primary');row.appendChild(b)});
+  d.appendChild(row);box.appendChild(d)}}
+function clearPrompt(){$('prompt').textContent='';$('opts').innerHTML='';showMore=false}
+async function send(text){inp.value='';clearPrompt();
+ const r=await fetch('/api/input',{method:'POST',headers:{'Content-Type':'application/json','X-Password':pw},body:JSON.stringify({table,name:me,text})});
+ const j=await r.json();if(!j.ok)$('status').textContent='The GM is not waiting for input right now.'}
+async function sendChat(){const t=$('chatin');if(!t.value.trim())return;
+ await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json','X-Password':pw},body:JSON.stringify({table,name:me,text:t.value})});t.value=''}
+
+// ---------------------------------------------------------------- party & journal
+function scheduleState(){clearTimeout(stateTimer);stateTimer=setTimeout(refreshState,700)}
+async function refreshState(){try{const r=await fetch('/api/state?table='+encodeURIComponent(table),{headers:{'X-Password':pw}});
+ const s=await r.json();if(s.busy)return;lastState=s;renderParty(s);renderJournal(s);
+ $('where').textContent=s.active?('📍 '+s.location+' • '+s.time):''}catch(e){}}
+function renderParty(s){const el=$('party');if(!s.active){el.innerHTML='<div class="empty">Start or load a game to see your party.</div>';return}
+ el.innerHTML='<div class="cards">'+s.party.map((p,i)=>{
+  const pct=Math.max(0,Math.min(100,100*p.hp/p.max_hp));const col=pct>50?'var(--green)':pct>25?'#f4d35e':'var(--red)';
+  const xp=p.xp_next?`XP ${p.xp} / ${p.xp_next}`:`XP ${p.xp} (max level)`;
+  return `<div class="card"><h3>${esc(p.name)}</h3><div class="sub">${esc(p.race)} ${esc(p.classes)}${p.player?' • played by '+esc(p.player):''}</div>
+  <div class="bar"><i style="width:${pct}%;background:${col}"></i></div>
+  <div style="font-size:13px">HP <b>${p.hp}</b> / ${p.max_hp}${p.temp_hp?' (+'+p.temp_hp+' temp)':''} ${p.status!='ok'?'<span class="chip" style="color:var(--red)">'+esc(p.status)+'</span>':''}</div>
+  <div class="stats"><span>AC <b>${p.ac}</b></span><span>touch ${p.touch}</span><span>flat ${p.flat}</span>${p.spells?'<span>spells ready: '+p.spells+'</span>':''}</div>
+  <div style="font-size:13px;color:var(--dim)">${xp} • ${esc(p.money)}</div>
+  ${p.can_level?'<div class="lvl">⬆ Can level up! (choose "Level up!" in More options)</div>':''}
+  <div>${p.effects.map(e=>'<span class="chip">'+esc(e)+'</span>').join('')}</div>
+  <button onclick="openSheet(${i})">Full character sheet</button></div>`}).join('')+'</div>'}
+function renderJournal(s){const el=$('journal');if(!s.active){el.innerHTML='<div class="empty">No journal yet.</div>';return}
+ el.innerHTML=`<div class="jsec"><h3>${esc(s.adventure)}</h3><div>📍 ${esc(s.location)} • ${esc(s.time)}${s.heroic?' • heroic mode':''}</div></div>
+ <div class="jsec"><h3>Quest log &amp; notes</h3>${s.journal.length?'<ul>'+s.journal.slice().reverse().map(j=>'<li>'+esc(j)+'</li>').join('')+'</ul>':'<div class="empty">Nothing yet. Talk to people!</div>'}</div>
+ <div class="jsec"><h3>Places visited</h3><div>${s.visited.map(v=>'<span class="chip">'+esc(v)+'</span>').join('')}</div></div>`}
+function openSheet(i){const p=lastState.party[i];$('mtitle').textContent=p.name+' — character sheet';$('mbody').innerHTML=esc(p.sheet);$('modal').style.display='flex'}
+function openBlock(seq){const b=blocks[seq];$('mtitle').textContent=b.title;$('mbody').innerHTML=ansi(b.text);$('modal').style.display='flex'}
+function closeModal(){$('modal').style.display='none'}
+document.addEventListener('keydown',e=>{if(e.key=='Escape'){closeModal();$('settings').style.display='none'}});
+
+// ---------------------------------------------------------------- narrator
+const N={mode:localStorage.getItem('nmode')||'off',voice:localStorage.getItem('nvoice')||'',
+ npc:localStorage.getItem('npcvoice')||'',rate:parseFloat(localStorage.getItem('nrate')||'1')};
+let voices=[];
+function loadVoices(){if(!('speechSynthesis' in window)){$('gear').textContent='⚙';return}
+ voices=speechSynthesis.getVoices().filter(v=>/^en/i.test(v.lang));if(!voices.length)voices=speechSynthesis.getVoices();
+ for(const [id,cur] of [['nvoice',N.voice],['npcvoice',N.npc]]){const sel=$(id);sel.innerHTML='';
+  voices.forEach(v=>{const o=document.createElement('option');o.value=v.name;o.textContent=v.name.replace(/Microsoft |Google /g,'');sel.appendChild(o)});
+  if(cur&&voices.some(v=>v.name==cur))sel.value=cur;
+  else if(voices.length){const pref=voices.findIndex(v=>/natural|neural|daniel|google uk english male|alex/i.test(v.name));sel.selectedIndex=id=='npcvoice'?Math.min(1,voices.length-1):Math.max(0,pref)}}}
+if('speechSynthesis' in window){speechSynthesis.onvoiceschanged=loadVoices}
+function speak(text,voiceName,pitch){if(N.mode=='off'||!text||!('speechSynthesis' in window))return;
+ const chunks=text.match(/[^.!?]+[.!?”"']*|.+$/g)||[text];
+ for(const ch of chunks){const t=ch.trim();if(!t)continue;const u=new SpeechSynthesisUtterance(t);
+  const v=voices.find(v=>v.name==voiceName);if(v)u.voice=v;u.rate=N.rate;u.pitch=pitch||1;speechSynthesis.speak(u)}}
+function narrateEvent(ev){if(!primed||N.mode=='off')return;
+ if(ev.t=='narrate'){if(ev.kind=='npc')speak(ev.text,$('npcvoice').value,1.05);else speak(ev.text,$('nvoice').value,ev.kind=='title'?0.9:1)}
+ else if(ev.t=='line'&&N.mode=='all'){let t=ev.text;
+  if(/\x1b\[([0-9]+;)*(2|96|95|93|33)(;[0-9]+)*m/.test(t))return;
+  const colored=/\x1b\[([0-9]+;)*(91|92|31|32)(;[0-9]+)*m/.test(t);
+  t=strip(t).trim();
+  if(!t||/^(\d+\.|>|--|\||=|\+|\[)/.test(t))return;
+  if(/\bHP -?\d+\/|\| melee:|: (unhurt|scratched|wounded|badly wounded|near death|dead)\b/.test(t))return;
+  if(!colored&&!/\b(attacks|casts|takes \d+|slain|falls|rushes|flees|charges|CHARGES|drinks|pours|moves|closes in|turned|crumbles|wakes|asleep|PARALYZED|prone|stabilizes|dying)\b/.test(t))return;
+  t=t.replace(/: d20=.*?-> */,'. ').replace(/\(.*?\)/g,'');speak(t,$('nvoice').value,1)}}
+(function initNarrator(){loadVoices();const m=$('nmode'),r=$('nrate');m.value=N.mode;r.value=N.rate;
+ m.onchange=()=>{N.mode=m.value;localStorage.setItem('nmode',N.mode);speechSynthesis.cancel();if(N.mode!='off')speak('The narrator is ready.',$('nvoice').value,1)};
+ r.oninput=()=>{N.rate=parseFloat(r.value);localStorage.setItem('nrate',r.value)};
+ $('nvoice').onchange=e=>localStorage.setItem('nvoice',e.target.value);
+ $('npcvoice').onchange=e=>localStorage.setItem('npcvoice',e.target.value);
+ $('showrolls').checked=localStorage.getItem('showrolls')=='1';$('showrolls').onchange=e=>localStorage.setItem('showrolls',e.target.checked?'1':'0')})();
+
+if(me&&(!NEEDPW||pw)){join()}
+</script></body></html>

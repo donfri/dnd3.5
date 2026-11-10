@@ -124,6 +124,8 @@ class GM:
         self.ui = ui
         self.gs = gs
         self.adv = gs.adv
+        if hasattr(ui, "game_state"):
+            ui.game_state = gs  # lets the web page show party / journal tabs
 
     # ------------------------------------------------------------ checks
     def check_bonus(self, ch: Character, skill: str) -> Optional[int]:
@@ -1086,7 +1088,11 @@ class GM:
         opts += [("Look around again", "look", None), ("Journal & quest notes", "journal", None),
                  ("Save game", "save", None), ("Help / rules summary", "help", None),
                  ("Quit (offers to save)", "quit", None)]
-        i = ui.choose("What do you do?", [o[0] for o in opts])
+        group_of = {"feature": "Actions", "exit": "Travel", "search": "Explore",
+                    "sneak": "Explore", "rest": "Explore", "levelup": "Party",
+                    "sheet": "Party", "inv": "Party", "cast": "Party"}
+        i = ui.choose("What do you do?", [o[0] for o in opts],
+                      groups=[group_of.get(o[1], "Game") for o in opts])
         _, kind, data = opts[i]
         if kind == "feature":
             self.do_feature(data)

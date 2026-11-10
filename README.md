@@ -14,9 +14,18 @@ It needs only Python 3.8 or newer. There are no third-party packages to install.
 ## Play online (friends in different places)
 
 The game includes a small web server. One person hosts it, and everyone opens the
-same link in a browser. You all see the same GM output live. You can click menu
-choices or type answers, and there's a chat sidebar. Nobody needs to install
-anything.
+same link in a browser. You all see the same GM output live. Nobody needs to
+install anything. The page is split into tabs:
+
+- **Story**: narration and results, with your choices grouped underneath (*Do
+  something here*, *Go somewhere*, *Attack & magic*, *Move*...). The rarely used
+  options sit behind **More options**.
+- **Party**: a card for each hero with HP bar, AC, conditions, XP and gold. The
+  **Full character sheet** button opens the complete sheet.
+- **Journal**: where you are, the quest log and rumors, and places visited.
+- **Dice**: every roll with its math, so the story stays readable.
+- **Chat**: talk to each other. A badge shows unread messages.
+- **Full log**: everything, unfiltered.
 
 ### Host it on Fly.io (recommended)
 

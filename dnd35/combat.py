@@ -589,7 +589,21 @@ class Combat:
             if self.can_flee and full_ok:
                 add("Flee the battle (withdraw out of the fight)", self.act_flee, x)
             add("End turn", None)
-            i = ui.choose(f"{p.name}, what do you do?", [a[0] for a in acts])
+            groups = []
+            for a in acts:
+                lab = a[0]
+                if lab.startswith(("Attack", "Full attack", "Charge", "Cast", "Use an item",
+                                   "Turn undead", "Rage", "Feat of Strength")):
+                    groups.append("Fight")
+                elif lab.startswith(("Move", "Stand", "Draw", "Withdraw", "Flee")):
+                    groups.append("Move")
+                elif lab.startswith(("End turn",)):
+                    groups.append("Turn")
+                elif lab.startswith(("Look",)):
+                    groups.append("Game")
+                else:
+                    groups.append("Tactics")
+            i = ui.choose(f"{p.name}, what do you do?", [a[0] for a in acts], groups=groups)
             label, fn, args = acts[i]
             if fn is None:
                 return
