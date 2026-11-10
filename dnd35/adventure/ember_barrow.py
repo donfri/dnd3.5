@@ -8,6 +8,10 @@ on Ashen Hill, where something older than goblins is waking up.
 
 ID = "ember_barrow"
 TITLE = "The Ember King's Barrow"
+LEVELS = "1-3"
+START_LEVEL = 1
+SUMMARY = ("Goblins have kidnapped the miller's apprentice. Their trail leads to an old barrow "
+           "where something older than goblins is waking up. The classic first adventure.")
 START = "millbrook"
 REST_ENCOUNTER_CHANCE = 0.25
 

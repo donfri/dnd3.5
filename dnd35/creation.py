@@ -14,6 +14,8 @@ from .sheet import render
 from .ui import c
 
 ELITE_ARRAY = [15, 14, 13, 12, 10, 8]
+# DMG "character wealth by level" (minus the 1st-level kit), to spend in town
+LEVEL_WEALTH_GP = {2: 900, 3: 2700, 4: 5400, 5: 9000}
 POINT_BUY_COST = {8: 0, 9: 1, 10: 2, 11: 3, 12: 4, 13: 5, 14: 6, 15: 8, 16: 10, 17: 13,
                   18: 16}
 
@@ -229,7 +231,7 @@ def create_character(ui, player: str = "", start_level: int = 1) -> Character:
         from .shop import shop_menu
         shop_menu(ui, [ch], "Outfitter's Market", ["general", "weapons", "armor", "temple"])
     if start_level > 1:
-        ch.cp += {2: 900, 3: 2700, 4: 5400, 5: 9000}.get(start_level, 0) * GP
+        ch.cp += LEVEL_WEALTH_GP.get(start_level, 0) * GP
         ui.out(f"Higher-level start: +{rules.money_str(ch.cp)} total wealth to spend in town.")
     prepare_spells(ch, ui, auto=auto, keep_ok=False)
     ui.out(render(ch))
@@ -281,6 +283,7 @@ def build_pregen(key: str, player: str = "", level: int = 1) -> Character:
     ch.xp = rules.xp_for_level(ch.level)
     random_physical(ch, p["cls"])
     apply_kit(ch, p["cls"])
+    ch.cp += LEVEL_WEALTH_GP.get(level, 0) * GP
     if p["cls"] == "ranger":
         bow = ch.find_item("longbow")
         if bow:
@@ -289,13 +292,13 @@ def build_pregen(key: str, player: str = "", level: int = 1) -> Character:
     return ch
 
 
-def choose_pregen(ui, player: str, taken: List[str]) -> Character:
+def choose_pregen(ui, player: str, taken: List[str], level: int = 1) -> Character:
     keys = [k for k in PREGENS if k not in taken]
     i = ui.choose("Choose a hero", [f"{c(PREGENS[k]['name'], 'bold')}: {PREGENS[k]['blurb']}"
                                     for k in keys])
     key = keys[i]
     taken.append(key)
-    ch = build_pregen(key, player)
+    ch = build_pregen(key, player, level=level)
     ui.out(render(ch))
     if ui.confirm(f"Rename {ch.name}?", False):
         nm = ui.ask("New name").strip()

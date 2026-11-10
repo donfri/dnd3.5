@@ -155,4 +155,76 @@ MONSTERS = {
         "desc": "A charred, crowned corpse whose ribs glow like a banked forge. Embers drift "
                 "from its jaw with every rasping breath.",
     },
+    # ---------------------------------------------------------------- added for more adventures
+    "gnoll": {
+        # AC 15, battleaxe +3 (1d8+2/x3), shortbow +1 (1d6/x3)
+        "name": "Gnoll", "type": "humanoid", "subtypes": ["gnoll"], "size": "medium",
+        "hd": 2, "hit_die": 8, "bab": 1, "base_saves": (3, 0, 0), "cr": 1,
+        "abilities": {"str": 15, "dex": 10, "con": 13, "int": 8, "wis": 11, "cha": 8},
+        "armor": "leather", "shield": "heavy steel shield", "natural": 1,
+        "weapons": ["battleaxe", "shortbow"], "speed": 30,
+        "skills": {"Listen": 2, "Spot": 3}, "feats": ["Power Attack"],
+        "vision": "darkvision 60 ft.", "evil": True, "morale": True,
+        "desc": "A hyena-headed humanoid, seven feet of mangy fur and yellow teeth.",
+    },
+    "ogre": {
+        # Large: AC 16, greatclub +8 (2d8+7), javelin +1 (1d8+5)
+        "name": "Ogre", "type": "giant", "size": "large",
+        "hd": 4, "hit_die": 8, "bab": 3, "base_saves": (4, 1, 1), "cr": 3,
+        "abilities": {"str": 21, "dex": 8, "con": 15, "int": 6, "wis": 10, "cha": 7},
+        "armor": "hide", "natural": 5, "weapons": ["greatclub", "javelin"], "speed": 30,
+        "skills": {"Climb": 5, "Listen": 2, "Spot": 2},
+        "feats": ["Toughness", "Weapon Focus (greatclub)"],
+        "vision": "darkvision 60 ft., low-light", "evil": True,
+        "desc": "A ten-foot brute with warty grey skin, wearing badly cured hides.",
+    },
+    "worg": {
+        # AC 14, bite +7 (1d6+4) plus trip
+        "name": "Worg", "type": "magical beast", "size": "medium",
+        "hd": 4, "hit_die": 10, "bab": 4, "base_saves": (4, 4, 1), "cr": 2,
+        "abilities": {"str": 17, "dex": 15, "con": 15, "int": 6, "wis": 14, "cha": 10},
+        "natural": 2, "speed": 50,
+        "natural_attacks": [{"name": "bite", "damage": "1d6", "dtype": "P", "primary": True,
+                             "str_mult": 1.5, "trip": True}],
+        "skills": {"Hide": 4, "Listen": 6, "Move Silently": 6, "Spot": 6, "Survival": 2},
+        "feats": ["Alertness", "Track"], "vision": "darkvision 60 ft., scent", "evil": True,
+        "desc": "A wolf the size of a pony, with clever, hateful eyes.",
+    },
+    "monstrous spider": {
+        # Medium monstrous spider: AC 14, bite +4 (1d6 plus poison)
+        "name": "Giant Spider", "type": "vermin", "size": "medium",
+        "hd": 2, "hit_die": 8, "bab": 1, "base_saves": (3, 0, 0), "cr": 1,
+        "abilities": {"str": 11, "dex": 17, "con": 12, "int": None, "wis": 10, "cha": 2},
+        "natural": 1, "speed": 30,
+        "natural_attacks": [{"name": "bite", "damage": "1d6", "dtype": "P", "primary": True,
+                             "poison": {"dc": 12, "ability": "str", "damage": "1d4",
+                                        "name": "spider venom"}}],
+        "skills": {"Climb": 11, "Hide": 7, "Jump": 0, "Spot": 4},
+        "feats": ["Weapon Finesse"], "vision": "darkvision 60 ft., tremorsense",
+        "mindless": True, "immune": ["mind-affecting"],
+        "desc": "A hairy spider as big as a large dog, mandibles glistening.",
+    },
+    "smuggler": {
+        # Human warrior 1: AC 14, short sword +2 (1d6+1/19-20), light crossbow +2 (1d8)
+        "name": "Smuggler", "type": "humanoid", "subtypes": ["human"], "size": "medium",
+        "hd": 1, "hit_die": 8, "bab": 1, "base_saves": (2, 0, 0), "cr": 1 / 2,
+        "abilities": {"str": 13, "dex": 12, "con": 12, "int": 10, "wis": 10, "cha": 9},
+        "armor": "studded leather", "weapons": ["short sword", "light crossbow"],
+        "speed": 30, "skills": {"Listen": 1, "Spot": 1, "Swim": 5}, "feats": ["Alertness"],
+        "evil": True, "morale": True,
+        "desc": "A weathered sailor with a short sword and a crossbow, eyes like a gull's.",
+    },
+    "captain merrow": {
+        # Human fighter 3: AC 17, rapier +6 (1d6+2/18-20), light crossbow +5 (1d8/19-20)
+        "name": "Captain Ilsa Merrow", "type": "humanoid", "subtypes": ["human"],
+        "size": "medium", "hd": 3, "hit_die": 10, "bab": 3, "base_saves": (3, 1, 1), "cr": 3,
+        "abilities": {"str": 12, "dex": 15, "con": 13, "int": 12, "wis": 10, "cha": 14},
+        "armor": "chain shirt", "weapons": ["masterwork rapier", "light crossbow"],
+        "speed": 30, "bonus_hp": 3,
+        "skills": {"Bluff": 6, "Listen": 2, "Spot": 4, "Swim": 7},
+        "feats": ["Weapon Finesse", "Weapon Focus (rapier)", "Dodge", "Mobility"],
+        "evil": True,
+        "desc": "A tall woman in a salt-stained captain's coat, rapier drawn, smiling like "
+                "she has already won.",
+    },
 }

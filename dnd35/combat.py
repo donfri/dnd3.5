@@ -422,6 +422,13 @@ class Combat:
                     if target.is_pc and not any(a["name"] == dz["name"] for a in target.afflictions):
                         target.afflictions.append(dict(dz, successes=0))
                         ui.warn(f"  {target.name} has contracted {dz['name']}!")
+            if special.get("poison") and target.ctype not in ("undead",):
+                pz = special["poison"]
+                if not saving_throw(ui, target, "fort", pz["dc"], ["poison"], pz["name"]):
+                    amt = dice.roll(pz["damage"]).total
+                    ab = pz["ability"]
+                    target.ability_damage[ab] = target.ability_damage.get(ab, 0) + amt
+                    ui.bad(f"  {target.name} takes {amt} {ab.upper()} damage from {pz['name']}!")
             if special.get("paralysis") and target.conscious:
                 elf = getattr(target, "race", "") == "elf"
                 if elf:

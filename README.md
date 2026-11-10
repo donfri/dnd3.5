@@ -1,4 +1,4 @@
-# D&D 3.5 Text Adventure: *The Ember King's Barrow*
+# D&D 3.5 Text Adventures
 
 A D&D 3.5 game for one to four players, played in a shared browser page (online)
 or at one keyboard in the terminal. The
@@ -10,6 +10,25 @@ python3 play.py
 ```
 
 It needs only Python 3.8 or newer. There are no third-party packages to install.
+
+## Adventures
+
+| Adventure | Levels | What's in it |
+|---|---|---|
+| **The Ember King's Barrow** | 1-3 | Goblins have kidnapped the miller's apprentice; an old barrow, undead, a riddle door, a fire-crowned king. |
+| **The Drowned Lantern** | 1-3 | A dark lighthouse, kobold wreckers, smugglers, giant spiders, a sunken wreck, and a traitor in the village. |
+| **Greyfang Pass** | 3-5 | A sequel: gnoll raiders, worgs, a broken bridge, a captured keep, dwarf prisoners and Skarn the ogre warlord. |
+
+Pick one under **New game**. Each adventure is designed so two heroes can win it,
+and gets harder automatically when there are more heroes.
+
+**Keep your heroes:** when you finish an adventure, the game offers to take the
+same heroes straight into the next one. You can also do it later: choose **New
+game → bring our heroes from a saved game**. They keep their levels, gear and
+gold, and arrive rested. New heroes for a higher-level adventure are built at
+the right level with the right starting wealth.
+
+To write your own adventure, see *Extending it* below.
 
 ## Play online (friends in different places)
 
@@ -215,7 +234,10 @@ python3 -m unittest discover -s tests
   as for PCs. `tests/test_rules.py` checks them against Monster Manual numbers.
 - **New spell**: add it to `data/spells.py` and give it a branch in
   `magic.cast_spell`.
-- **New adventure**: copy `adventure/ember_barrow.py`. Rooms have `exits`,
+- **New adventure**: copy one of the files in `dnd35/adventure/`, give it a new
+  `ID`, `TITLE`, `LEVELS` and `SUMMARY`, and add it to `ORDER` in
+  `dnd35/adventure/__init__.py`. `python -m unittest` checks that every exit,
+  encounter, item and script it uses actually exists. Rooms have `exits`,
   `features` (actions with optional skill checks and success/failure effects),
   `traps`, `secrets`, and `encounters_enter`. Effects are small dicts such as
   `{"do": "xp", "amount": 100}` or `{"do": "fight", "enc": "guards"}`.

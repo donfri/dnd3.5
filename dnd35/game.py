@@ -5,13 +5,13 @@ import argparse
 import sys
 
 from . import __version__, dice
-from .adventure import ember_barrow
-from .adventure.engine import GM, GameOver, GameState, list_saves, load_game, save_game
+from .adventure import ORDER
+from .adventure.engine import (GM, GameOver, GameState, list_saves, load_game, save_game,
+                               save_info)
 from .creation import build_pregen, choose_pregen, create_character
 from .sheet import render
 from .ui import UI, Color, QuitGame, c
 
-ADVENTURES = {ember_barrow.ID: ember_barrow}
 
 BANNER = r"""
   ____        ____     _____ ____
@@ -66,12 +66,76 @@ def make_heroic(ch) -> None:
     ch.bonus_hp = ch.base_ability_score("con") // 2
 
 
+def choose_adventure(ui: UI, prompt: str = "Which adventure?"):
+    opts = [f"{a.TITLE} (levels {a.LEVELS}): {a.SUMMARY}" for a in ORDER]
+    return ORDER[ui.choose(prompt, opts, default=0)]
+
+
+def ready_party(party) -> list:
+    """Bring heroes into a new adventure: alive, rested, conditions cleared."""
+    out = []
+    for p in party:
+        if p.dead:
+            continue
+        p.damage = 0
+        p.temp_hp = 0
+        p.stable = False
+        p.effects = []
+        p.daily = {}
+        p.ability_damage = {}
+        p.afflictions = []
+        p.reset_spells()
+        out.append(p)
+    return out
+
+
+def start_adventure(ui: UI, adv, party, settings) -> GameState:
+    gs = GameState(adv, party, settings)
+    ui.header(adv.TITLE.upper())
+    ui.gm(adv.INTRO)
+    return gs
+
+
+def bring_heroes(ui: UI):
+    """Pick a save and return (party, settings) from it, or None."""
+    saves = list_saves()
+    if not saves:
+        ui.warn("There are no saved games to bring heroes from.")
+        return None
+    i = ui.choose("Bring the heroes from which save?", [save_info(n) for n in saves],
+                  allow_cancel=True)
+    if i is None:
+        return None
+    old = load_game(saves[i])
+    party = ready_party(old.party)
+    if not party:
+        ui.warn("Everyone in that save is dead.")
+        return None
+    ui.good("The heroes arrive, rested and ready: " +
+            ", ".join(f"{p.name} (level {p.level})" for p in party))
+    return party, dict(old.settings)
+
+
 def new_game(ui: UI, quick: bool = False) -> GameState:
     ui.header("NEW GAME")
-    adv = ember_barrow
-    ui.para(f"Adventure: {adv.TITLE}. Designed for 1-4 first-level heroes; with two "
-            f"players, each of you can run one hero (heroic mode recommended) or two heroes "
-            f"each (the classic four-person party).")
+    adv = choose_adventure(ui)
+    ui.para(f"{adv.TITLE}: designed for 1-4 heroes of level {adv.LEVELS}. With two players, "
+            f"each of you can run one hero (heroic mode recommended) or two heroes each "
+            f"(the classic four-person party).")
+    start_level = getattr(adv, "START_LEVEL", 1)
+    if not quick:
+        how = ui.choose("Who is going on this adventure?", [
+            "New heroes" + (f" (built at level {start_level})" if start_level > 1 else ""),
+            "Bring our heroes from a saved game (keeps levels, gear and gold)"], default=0)
+        if how == 1:
+            got = bring_heroes(ui)
+            if got:
+                party, settings = got
+                low = [p.name for p in party if p.level < start_level]
+                if low:
+                    ui.warn(f"Heads up: {', '.join(low)} is below level {start_level}; this "
+                            f"one will be tough.")
+                return start_adventure(ui, adv, party, settings)
     n = 2 if quick else ui.ask_int("How many heroes in the party?", 1, 4, 2)
     heroic = True if quick else ui.confirm(
         "Heroic mode? (max hit points every level + bonus hit points equal to half your "
@@ -85,29 +149,26 @@ def new_game(ui: UI, quick: bool = False) -> GameState:
         player = "" if quick else ui.ask("Player name", f"Player {i + 1}")
         with ui.acting(player):
             ch = _make_hero(ui, quick, i, player or (seats[i] if i < len(seats) else ""),
-                            taken)
+                            taken, start_level)
         if heroic:
             make_heroic(ch)
         party.append(ch)
-    gs = GameState(adv, party, {"heroic": heroic})
-    ui.header(adv.TITLE.upper())
-    ui.gm(adv.INTRO)
-    return gs
+    return start_adventure(ui, adv, party, {"heroic": heroic})
 
 
-def _make_hero(ui, quick, i, player, taken):
+def _make_hero(ui, quick, i, player, taken, level=1):
     if quick:
         key = ["thorgar", "lyra", "pip", "aldric"][i]
-        ch = build_pregen(key, player or f"Player {i + 1}")
+        ch = build_pregen(key, player or f"Player {i + 1}", level=level)
         taken.append(key)
     else:
         choice = ui.choose(f"{player}, how do you want to make your hero?", [
             "Create a new character (full D&D 3.5 creation)",
             "Pick a ready-made hero"], default=0)
         if choice == 0:
-            ch = create_character(ui, player)
+            ch = create_character(ui, player, start_level=level)
         else:
-            ch = choose_pregen(ui, player, taken)
+            ch = choose_pregen(ui, player, taken, level=level)
     return ch
 
 
@@ -122,16 +183,23 @@ def play(ui: UI, gs: GameState) -> None:
                 ui.gm(gs.adv.ENDING)
                 for p in gs.party:
                     ui.out(render(p, full=False))
-                save_game(gs, "victory")
-                ui.good("Final state saved as 'victory'. Thanks for playing!")
+                name = f"victory-{gs.adv.ID}"
+                save_game(gs, name)
+                ui.good(f"Your heroes are saved as '{name}'.")
+                if ui.confirm("Take these heroes on another adventure now?", True):
+                    nxt = choose_adventure(ui, "Where to next?")
+                    gs = start_adventure(ui, nxt, ready_party(gs.party), dict(gs.settings))
+                    gm = GM(ui, gs)
+                    continue
+                ui.good("Thanks for playing! (Later: New game -> bring heroes from a save.)")
                 return
             ui.header("THE PARTY HAS FALLEN")
-            ui.gm("Darkness closes in. The barrow claims more bones... unless fate allows a "
-                  "second chance.")
+            ui.gm("Darkness closes in, and the tale ends here... unless fate allows a second "
+                  "chance.")
             saves = list_saves()
             if "autosave" in saves and ui.confirm("Load the last autosave (start of the "
                                                   "current area)?", True):
-                gs = load_game("autosave", gs.adv)
+                gs = load_game("autosave")
                 gm = GM(ui, gs)
                 gm.describe_brief()
                 continue
@@ -155,9 +223,10 @@ def main_menu(ui: UI) -> None:
             elif label.startswith("Quick start"):
                 play(ui, new_game(ui, quick=True))
             elif label.startswith("Load"):
-                j = ui.choose("Load which save?", saves, allow_cancel=True)
+                j = ui.choose("Load which save?", [save_info(n) for n in saves],
+                              allow_cancel=True)
                 if j is not None:
-                    gs = load_game(saves[j], ember_barrow)
+                    gs = load_game(saves[j])
                     ui.good(f"Loaded '{saves[j]}' ({gs.time_str()}).")
                     gm_play_loaded(ui, gs)
             elif label == "How to play":

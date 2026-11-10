@@ -59,16 +59,66 @@ class TestSaveLoad(unittest.TestCase):
 
 
 class TestAdventureData(unittest.TestCase):
-    def test_exits_and_encounters_valid(self):
+    def test_all_adventures_valid(self):
+        from dnd35.adventure import ORDER
+        from dnd35.adventure.engine import GM
+        from dnd35.data.items import make_item
+        from dnd35.data.skills import SKILLS
         from dnd35.data.monsters import MONSTERS
-        for rid, room in ember_barrow.ROOMS.items():
-            for ex in room.get("exits", {}).values():
-                self.assertIn(ex["to"], ember_barrow.ROOMS, rid)
-            for enc in room.get("encounters_enter", []):
-                self.assertIn(enc, ember_barrow.ENCOUNTERS)
-        for enc in ember_barrow.ENCOUNTERS.values():
-            for m in enc["monsters"] + enc.get("per_extra_hero", []):
-                self.assertIn(m, MONSTERS)
+        known_effects = {"text", "say", "xp", "gold", "item", "items_each", "remove_item",
+                         "flag", "unflag", "journal", "damage", "ability_damage", "buff",
+                         "heal_all", "fight", "stealth_fight", "resolve_enc", "remove_monster",
+                         "add_monster", "reveal_exit", "unlock_exit", "goto", "shop", "rest",
+                         "temple", "rumors", "recruit", "riddle", "end_adventure", "custom"}
+        for adv in ORDER:
+            for attr in ("ID", "TITLE", "LEVELS", "SUMMARY", "START", "INTRO", "ENDING",
+                         "ROOMS", "ENCOUNTERS", "RUMORS", "WANDERING"):
+                self.assertTrue(hasattr(adv, attr), (adv.ID, attr))
+            self.assertIn(adv.START, adv.ROOMS)
+
+            def check_effects(effs, where):
+                for e in effs:
+                    self.assertIn(e["do"], known_effects, where)
+                    if e["do"] in ("item", "items_each", "remove_item"):
+                        make_item(e["id"])
+                    if e["do"] in ("fight", "stealth_fight", "resolve_enc", "remove_monster",
+                                   "add_monster"):
+                        self.assertIn(e["enc"], adv.ENCOUNTERS, where)
+                    if e["do"] == "custom":
+                        self.assertTrue(callable(getattr(adv, e["fn"], None)), where)
+                    if e["do"] == "riddle":
+                        check_effects(e["success"] + e["failure"], where)
+
+            for rid, room in adv.ROOMS.items():
+                where = f"{adv.ID}:{rid}"
+                for ex in room.get("exits", {}).values():
+                    self.assertIn(ex["to"], adv.ROOMS, where)
+                    if ex.get("trap"):
+                        self.assertIn(ex["trap"], room.get("traps", {}), where)
+                    if ex.get("blocked_by"):
+                        self.assertIn(ex["blocked_by"], adv.ENCOUNTERS, where)
+                    if ex.get("lock", {}).get("key"):
+                        make_item(ex["lock"]["key"])
+                    check_effects(ex.get("effects", []), where)
+                for enc in room.get("encounters_enter", []):
+                    self.assertIn(enc, adv.ENCOUNTERS, where)
+                for f in room.get("features", []) + room.get("secrets", []):
+                    chk = f.get("check")
+                    if chk and not chk["skill"].startswith("ability:") and \
+                            chk["skill"] != "Wild Empathy":
+                        self.assertIn(chk["skill"], SKILLS, where)
+                    for key in ("effects", "success", "failure", "fail_by_5"):
+                        check_effects(f.get(key, []), f"{where}:{f.get('id')}")
+                for t in room.get("traps", {}).values():
+                    check_effects(t["effects"], where)
+                check_effects(room.get("on_enter", []) + room.get("on_first_enter", []), where)
+            for enc in adv.ENCOUNTERS.values():
+                for m in enc["monsters"] + enc.get("per_extra_hero", []):
+                    self.assertIn(m, MONSTERS)
+            for w in adv.WANDERING:
+                for m in w["monsters"]:
+                    self.assertIn(m, MONSTERS)
+        self.assertTrue(GM)
 
 
 class TestFuzz(unittest.TestCase):

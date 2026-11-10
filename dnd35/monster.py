@@ -65,6 +65,12 @@ class Monster(Creature):
     def feat_list(self):
         return self.feats
 
+    def static_bonuses(self, stat):
+        out = []
+        if stat == "ac" and "Dodge" in self.feats:
+            out.append(("dodge", 1, "Dodge"))
+        return out
+
     def armor_data(self):
         return item_data(self.armor) if self.armor else None
 

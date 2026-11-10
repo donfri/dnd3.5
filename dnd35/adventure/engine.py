@@ -113,9 +113,29 @@ def list_saves() -> List[str]:
     return files
 
 
-def load_game(name: str, adventure) -> GameState:
+def load_game(name: str, adventure=None) -> GameState:
+    """Load a save. The adventure is taken from the save file itself."""
+    from . import get
     with open(os.path.join(SAVE_DIR, f"{name}.json")) as f:
-        return GameState.from_dict(json.load(f), adventure)
+        d = json.load(f)
+    return GameState.from_dict(d, get(d.get("adventure", "")) if adventure is None
+                               or d.get("adventure") not in (None, adventure.ID)
+                               else adventure)
+
+
+def save_info(name: str) -> str:
+    """One-line description of a save for menus."""
+    from . import get
+    try:
+        with open(os.path.join(SAVE_DIR, f"{name}.json")) as f:
+            d = json.load(f)
+        adv = get(d.get("adventure", ""))
+        heroes = ", ".join(f"{p['name']} (L{len(p.get('class_levels', []))})"
+                           for p in d.get("party", []) if not p.get("dead"))
+        room = adv.ROOMS.get(d.get("room"), {}).get("name", "")
+        return f"{name}: {adv.TITLE} - {room} - {heroes}"
+    except (OSError, ValueError, KeyError):
+        return name
 
 
 # ================================================================ the GM
@@ -724,10 +744,14 @@ class GM:
         if trap_id and self.trap_state(trap_id) != "disabled":
             trap = self.adv.ROOMS[gs.room]["traps"][trap_id]
             if self.trap_state(trap_id) == "found":
-                i = ui.choose(f"The {trap['name']} lies in your path.", [
-                    "Try to disable it (Disable Device)",
-                    trap.get("bypass_label", "Carefully get past it"),
-                    "Stay here"])
+                opts = ["Try to disable it (Disable Device)",
+                        trap.get("bypass_label", "Carefully get past it"), "Stay here"]
+                if trap.get("no_disable"):
+                    opts[0] = "(can't be disabled)"
+                i = ui.choose(f"The {trap['name']} lies in your path.", opts)
+                if i == 0 and trap.get("no_disable"):
+                    ui.out("That won't work here.")
+                    return
                 if i == 0:
                     self.disable_trap(trap_id)
                     return
@@ -929,10 +953,12 @@ class GM:
                     "Healing: cure moderate wounds (60 gp)",
                     "Lesser restoration: heal all ability damage on one hero (60 gp)",
                     "Remove disease (150 gp)", "Leave the shrine"]
-            i = ui.choose("Sister Elowen, the priestess of Pelor, smiles. 'How may the Dawnfather "
-                          "help?'", opts)
+            i = ui.choose(getattr(self.adv, "TEMPLE_GREETING",
+                                  "Sister Elowen, the priestess of Pelor, smiles. 'How may "
+                                  "the Dawnfather help?'"), opts)
             if i == 0:
-                shop_menu(ui, gs.living(), "Shrine of Pelor", ["temple"])
+                shop_menu(ui, gs.living(), getattr(self.adv, "TEMPLE_NAME", "Shrine of Pelor"),
+                          ["temple"])
             elif i in (1, 2):
                 cost = 10 if i == 1 else 60
                 who = self.pick_hero("Who is healed?", heroes=gs.living())

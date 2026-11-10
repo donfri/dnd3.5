@@ -142,6 +142,8 @@ GEAR = {
     "grappling hook": _g("Grappling hook", 1 * GP, 4),
     "silver holy symbol": _g("Silver holy symbol", 25 * GP, 1, "Divine focus."),
     "iron key": _g("Iron key", 0, 0, "A heavy key stamped with an ember."),
+    "lighthouse key": _g("Lighthouse key", 0, 0, "Old Corwin's spare key to the Lantern."),
+    "postern key": _g("Postern key", 0, 0, "A greasy key to Greyfang Keep's postern gate."),
     "ember sigil": _g("Ember Sigil", 0, 1, "A warm bronze disc bearing the mark of the Ember "
                       "King."),
 }
@@ -282,4 +284,11 @@ SHOP_STOCK = {
                "potion of shield of faith", "holy water", "scroll of cure light wounds",
                "scroll of bless", "silver holy symbol"],
     "magic": ["scroll of magic missile", "scroll of sleep", "potion of bull's strength"],
+    "fine": ["masterwork longsword", "masterwork rapier", "masterwork greataxe",
+             "masterwork longbow", "+1 longsword", "+1 rapier", "+1 greataxe",
+             "+1 greatsword", "+1 battleaxe", "+1 warhammer", "+1 heavy mace",
+             "+1 morningstar", "+1 longbow", "+1 shortbow", "+1 quarterstaff",
+             "+1 chain shirt", "+1 studded leather", "+1 breastplate", "+1 full plate",
+             "+1 heavy steel shield", "ring of protection +1", "cloak of resistance +1",
+             "amulet of natural armor +1", "potion of cure moderate wounds"],
 }

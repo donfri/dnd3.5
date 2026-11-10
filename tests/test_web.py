@@ -33,6 +33,8 @@ class TestWeb(unittest.TestCase):
         self.assertTrue(j["waiting"])
         post("/api/chat", {"table": "test", "name": "Bob", "text": "hi"})
         self.assertTrue(post("/api/input", {"table": "test", "name": "Bob", "text": "2"})["ok"])
+        time.sleep(0.3)
+        self.assertTrue(post("/api/input", {"table": "test", "name": "Bob", "text": "1"})["ok"])
         time.sleep(0.5)
         j = poll("Bob", since=0)
         texts = " ".join(e.get("text", "") for e in j["events"])
