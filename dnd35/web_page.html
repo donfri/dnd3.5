@@ -71,17 +71,17 @@ main{flex:1;min-height:0;position:relative}
 .c31,.c91{color:var(--red)}.c32,.c92{color:var(--green)}.c33,.c93{color:#f4d35e}
 .c34,.c94{color:#6fa8ff}.c35,.c95{color:#e08ce0}.c36,.c96{color:#7fd8e6}
 #join{position:fixed;inset:0;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;z-index:40}
-#join div{background:var(--panel);padding:22px;border:1px solid var(--gold);border-radius:10px;width:340px}
+#join form{background:var(--panel);padding:22px;border:1px solid var(--gold);border-radius:10px;width:340px}
 #join input{width:100%;margin:6px 0 12px;background:#0f0d0c;color:var(--ink);border:1px solid #4a4038;border-radius:6px;padding:7px;font:inherit}
 .empty{color:var(--dim);font-style:italic}
 </style></head><body>
-<div id="join"><div>
+<div id="join"><form onsubmit="join();return false">
 <h2 style="margin-top:0;color:var(--gold)">Join the table</h2>
 <label>Your name</label><input id="jname" maxlength="30" placeholder="e.g. Alice">
 <label>Table</label><input id="jtable" maxlength="32" value="main">
 <label id="pwl">Password</label><input id="jpw" type="password">
-<button class="go" style="width:100%;padding:9px" onclick="join()">Join</button>
-</div></div>
+<button type="submit" class="go" style="width:100%;padding:9px">Join</button>
+</form></div>
 
 <header><b>D&amp;D 3.5 &mdash; <span id="tname"></span></b><span id="here"></span>
 <span id="where" style="color:var(--dim);font-size:13px"></span>
