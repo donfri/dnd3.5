@@ -145,10 +145,22 @@ class WebUI(UI):
         if self._pending_kind == "text":
             self._pending_options = None
         if str(prompt).startswith(("Player name", "Who will play the new hero")):
-            # online, the person who answers is the player (Enter = use my name)
+            return self._pick_player(prompt, default)
+        return super().ask(prompt, default)
+
+    def _pick_player(self, prompt, default=None) -> str:
+        """Online, a hero's player must be someone at the table (so 'whose turn'
+        matching works), so offer the joined names as buttons."""
+        here = self.table.present()
+        if not here:
             ans = super().ask(prompt, "")
             return ans or self.last_who or (default or "")
-        return super().ask(prompt, default)
+        opts = here + ["Someone not here yet (type their name)"]
+        i = self.choose("Who plays this hero?", opts)
+        if i is not None and i < len(here):
+            return here[i]
+        ans = super().ask("Their name (it must match the name they join with)", "")
+        return ans or self.last_who or (default or "")
 
     def _with_options(self, opts, kind, fn, *args):
         prev = (self._pending_options, self._pending_kind)
@@ -201,16 +213,20 @@ class Table:
         now = time.time()
         return [n for n, t in self.presence.items() if now - t < POLL_SECONDS + 15]
 
+    @staticmethod
+    def _norm(name: str) -> str:
+        return " ".join(str(name).split()).lower()
+
     def may_answer(self, who: str) -> bool:
         """The hero's player answers for that hero. If they're not connected
         (or the hero isn't claimed by anyone here), anyone may answer."""
         owner = self.owner
         if not owner:
             return True
-        here = {n.lower() for n in self.present()}
-        if owner.lower() not in here:
+        here = {self._norm(n) for n in self.present()}
+        if self._norm(owner) not in here:
             return True
-        return who.lower() == owner.lower()
+        return self._norm(who) == self._norm(owner)
 
     def submit(self, text: str, who: str):
         with self.cond:
@@ -267,8 +283,8 @@ class Table:
                 "heroic": gs.settings.get("heroic", False)}
 
     def poll(self, since: int, who: str, timeout: float = POLL_SECONDS) -> dict:
-        if who:
-            self.presence[who[:30]] = time.time()
+        if who and who.strip():
+            self.presence[" ".join(who.split())[:30]] = time.time()
         deadline = time.time() + timeout
         with self.cond:
             while self.seq <= since and time.time() < deadline:
