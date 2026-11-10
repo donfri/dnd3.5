@@ -42,6 +42,18 @@ campaign at the same time, give it a different table name.
   enter a new area. Use **Save game** before you stop for the night.
 - To update after a code change, run `git pull`, then `fly deploy`.
 
+### Auto-deploy from GitHub
+
+This repo includes `.github/workflows/fly-deploy.yml`. Every push to `main` runs
+the tests and then runs `fly deploy`. To turn it on:
+
+1. Do the one-time Fly setup above (`fly launch`, volume, secret, `fly deploy`,
+   `fly scale count 1`). Then commit the `fly.toml` with your app name in it.
+2. Run `fly tokens create deploy -x 999999h` and copy the token.
+3. On GitHub, open the repo's **Settings → Secrets and variables → Actions →
+   New repository secret**. Name it `FLY_API_TOKEN` and paste the token.
+4. From then on, `git push` deploys. You can watch it in the repo's **Actions** tab.
+
 ### Or host it from your own computer
 
 ```bash
