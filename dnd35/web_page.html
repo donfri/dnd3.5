@@ -89,6 +89,7 @@ main{flex:1;min-height:0;position:relative}
 <label>Character dialogue voice</label><select id="npcvoice"></select>
 <label>Volume</label><input id="nvol" type="range" min="0.05" max="1" step="0.05">
 <label>Speed</label><input id="nrate" type="range" min="0.7" max="1.4" step="0.05">
+<label style="color:var(--ink)"><input type="checkbox" id="nsmooth" style="width:auto"> Smooth sentence breaks (fixes popping on some Macs / Firefox)</label>
 <div style="display:flex;gap:6px;margin-top:10px"><button class="opt" onclick="speechSynthesis.cancel()">Skip current line</button><button class="opt" onclick="toggleSettings()">Close</button></div>
 <label style="margin-top:12px">Story tab</label>
 <label style="color:var(--ink)"><input type="checkbox" id="showrolls" style="width:auto"> Show dice rolls in the story too</label>
@@ -241,7 +242,14 @@ document.addEventListener('keydown',e=>{if(e.key=='Escape'){closeModal();$('sett
 // ---------------------------------------------------------------- narrator
 const N={mode:localStorage.getItem('nmode')||'off',voice:localStorage.getItem('nvoice')||'',
  npc:localStorage.getItem('npcvoice')||'',rate:parseFloat(localStorage.getItem('nrate')||'1'),
- vol:parseFloat(localStorage.getItem('nvol')||'0.5')};
+ vol:parseFloat(localStorage.getItem('nvol')||'0.5'),
+ smooth:localStorage.getItem('nsmooth')!=null?localStorage.getItem('nsmooth')=='1'
+   :(/firefox/i.test(navigator.userAgent)&&/mac/i.test(navigator.platform||navigator.userAgent))};
+// Some speech engines (macOS voices in Firefox) click at every sentence end. "Smooth" mode
+// turns sentence endings into commas so the engine never hits a hard stop.
+function smoothText(t){if(!N.smooth)return t;
+ return t.replace(/\.{3}|\u2026/g,',').replace(/([.!?;:])(["\u201d\u2019']?)(\s+|$)/g,(m,p,q,sp)=>(sp?', ':''))
+         .replace(/[\u201c\u201d"]/g,'').replace(/,\s*,/g,',').replace(/,\s*$/,'').trim()}
 let speechQueue=[];
 let voices=[];
 function loadVoices(){if(!('speechSynthesis' in window)){$('gear').textContent='⚙';return}
@@ -264,7 +272,7 @@ function flushSpeech(){const q=speechQueue;speechQueue=[];
   let buf='';const parts=[];
   for(const sn of sentences){if((buf+sn).length>300&&buf){parts.push(buf);buf=''}buf+=sn}
   if(buf.trim())parts.push(buf);
-  for(const part of parts){const u=new SpeechSynthesisUtterance(part.trim());
+  for(const part of parts){const txt=smoothText(part.trim());if(!txt)continue;const u=new SpeechSynthesisUtterance(txt);
    const v=voices.find(v=>v.name==item.voice);if(v)u.voice=v;
    u.rate=N.rate;u.volume=N.vol;u.pitch=1;speechSynthesis.speak(u)}}}
 function narrateEvent(ev){if(!primed||N.mode=='off')return;
@@ -280,6 +288,8 @@ function narrateEvent(ev){if(!primed||N.mode=='off')return;
 (function initNarrator(){loadVoices();const m=$('nmode'),r=$('nrate');m.value=N.mode;r.value=N.rate;
  m.onchange=()=>{N.mode=m.value;localStorage.setItem('nmode',N.mode);speechSynthesis.cancel();if(N.mode!='off'){speak('The narrator is ready.',$('nvoice').value);flushSpeech()}};
  r.oninput=()=>{N.rate=parseFloat(r.value);localStorage.setItem('nrate',r.value)};
+ const sm=$('nsmooth');sm.checked=N.smooth;sm.onchange=()=>{N.smooth=sm.checked;localStorage.setItem('nsmooth',sm.checked?'1':'0');
+   speechSynthesis.cancel();if(N.mode!='off'){speak('Testing. One sentence. Then another.',$('nvoice').value);flushSpeech()}};
  const vo=$('nvol');vo.value=N.vol;vo.onchange=()=>{N.vol=parseFloat(vo.value);localStorage.setItem('nvol',vo.value);
    speechSynthesis.cancel();if(N.mode!='off'){speak('This is the narrator volume.',$('nvoice').value);flushSpeech()}};
  $('nvoice').onchange=e=>localStorage.setItem('nvoice',e.target.value);
