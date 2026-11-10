@@ -4,7 +4,7 @@
 #              fly secrets set TABLE_PASSWORD=something-secret
 #              fly deploy
 #              fly scale count 1     # the game lives in memory: keep exactly ONE machine
-app = "dnd35-table-CHANGE-ME"
+app = "dnd35"
 primary_region = "ord"   # Chicago: roughly halfway across the US
 
 [build]
