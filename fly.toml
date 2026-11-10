@@ -39,4 +39,4 @@ primary_region = "ord"   # Chicago: roughly halfway across the US
 
 [[vm]]
   size = "shared-cpu-1x"
-  memory = "256mb"
+  memory = "1gb"     # room for the neural narrator voices

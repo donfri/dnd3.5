@@ -65,3 +65,11 @@ class TestOwnership(unittest.TestCase):
         t.presence = {"Alice": time.time()}  # Bob left: anyone may answer
         ok, _ = t.submit("1", "Alice")
         self.assertTrue(ok)
+
+
+class TestTTS(unittest.TestCase):
+    def test_status_and_fallback(self):
+        from dnd35 import tts
+        st = tts.status()
+        self.assertIn("available", st)
+        self.assertEqual(set(st["voices"]), {"gm", "npc"})

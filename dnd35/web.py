@@ -357,6 +357,10 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:  # game thread mid-update; the page will retry
                 self._json({"active": False, "busy": True})
             return
+        if u.path == "/api/tts/status":
+            from . import tts
+            self._json(tts.status())
+            return
         if u.path == "/healthz":
             self._json({"ok": True})
             return
@@ -386,6 +390,23 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/api/input":
             ok, why = t.submit(str(body.get("text", "")), who)
             self._json({"ok": ok, "why": why})
+        elif u.path == "/api/tts":
+            from . import tts
+            if not tts.status()["available"]:
+                self._json({"error": "server voice not installed"}, 503)
+                return
+            try:
+                data = tts.synthesize(str(body.get("text", "")), str(body.get("role", "gm")),
+                                      float(body.get("speed", 1.0) or 1.0))
+            except Exception as e:  # noqa: BLE001
+                self._json({"error": str(e)}, 500)
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "audio/wav")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
         elif u.path == "/api/claim":
             try:
                 ok, why = t.claim(int(body.get("hero", -1)), who)

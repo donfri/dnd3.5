@@ -52,11 +52,17 @@ campaign at the same time, give it a different table name.
   choices are party decisions anyone can make. If a hero's player isn't connected,
   anyone can answer for them, or use **Play this hero** on the Party tab to take
   it over. Names aren't passwords; this is to keep turns tidy among friends.
-- **Narrator:** the 🔊 menu at the top reads the story aloud using your browser's
-  built-in voices. Choose *story* (narration and character dialogue, with a
-  separate voice for characters) or *story + combat* (also reads attacks, hits,
-  and knockouts). Each player sets it for themselves, and *skip* stops the
-  current line. Edge and Chrome have the most natural-sounding voices.
+- **Narrator:** the 🔊⚙ menu reads the story aloud. Choose *Story & dialogue* or
+  *Story + combat*. By default the **server voice** is used: the server renders
+  speech with [Piper](https://github.com/rhasspy/piper), a free offline neural
+  voice, and the page plays it as one continuous audio stream. It sounds the same
+  for everyone and avoids the clicks that some computers' built-in voices make
+  (macOS in particular). There are two voices: a narrator, and a different voice
+  for characters' dialogue. You can switch to *This computer's voices* if you
+  prefer. Volume and speed are per player, and *Skip* stops the current reading.
+  Piper and its two voices (~120 MB) are installed by the Dockerfile. If they're
+  missing, the page quietly falls back to browser voices. To use them locally:
+  `pip install piper-tts && python -m dnd35.tts --download`.
 - When nobody's connected, the machine sleeps, which costs next to nothing. It
   wakes up when you open the page. The game in memory is lost while it sleeps,
   so pick **Load a saved game → autosave**. The game autosaves every time you
