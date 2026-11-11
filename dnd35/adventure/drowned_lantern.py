@@ -352,7 +352,7 @@ ROOMS = {
         "exits": {"down": {"to": "lighthouse_base", "label": "Down the spiral stair"}},
     },
     "cellar": {
-        "name": "The Cellar", "flee_to": "lighthouse_base",
+        "dark": True, "name": "The Cellar", "flee_to": "lighthouse_base",
         "desc": "A damp stone cellar of oil casks and gnawed flour sacks. In the far wall, "
                 "a crack wide enough to squeeze through breathes cold sea air.",
         "encounters_enter": ["cellar"],
@@ -388,7 +388,7 @@ ROOMS = {
         },
     },
     "sea_caves": {
-        "name": "The Sea Caves", "flee_to": "cove",
+        "dark": True, "name": "The Sea Caves", "flee_to": "cove",
         "desc": "Twisting caves of black rock, thick with old web. The tide sighs somewhere "
                 "ahead. Passages lead to a flooded grotto (west), up through a crack "
                 "(the lighthouse cellar), and toward lamplight (north).",
@@ -405,13 +405,15 @@ ROOMS = {
         "exits": {
             "south": {"to": "cove", "label": "Out to the cove"},
             "crack": {"to": "cellar", "label": "Up the crack to the lighthouse cellar"},
-            "west": {"to": "wreck_grotto", "label": "Toward the sound of water"},
+            "west": {"to": "wreck_grotto", "label": "Toward the sound of water (swim the "
+                                                    "flooded passage, Swim DC 10)",
+                     "effects": [{"do": "swim", "dc": 10}]},
             "north": {"to": "captains_den", "label": "Toward the lamplight",
                       "blocked_by": "spiders"},
         },
     },
     "wreck_grotto": {
-        "name": "The Wreck Grotto", "flee_to": "sea_caves",
+        "dark": True, "name": "The Wreck Grotto", "flee_to": "sea_caves",
         "desc": "A cathedral of a cave, half flooded by the tide. The broken stern of an "
                 "older ship, the Merry Ann, juts from the water, its strongroom door hanging "
                 "open below the waterline.",

@@ -74,7 +74,7 @@ def wound_word(cr: Creature) -> str:
 class Combat:
     def __init__(self, ui, party: Sequence[Creature], monsters: Sequence[Creature],
                  surprised: Sequence[Creature] = (), can_flee: bool = True,
-                 title: str = "COMBAT"):
+                 title: str = "COMBAT", dark: bool = False):
         self.ui = ui
         self.party = list(party)
         self.monsters = list(monsters)
@@ -99,6 +99,17 @@ class Combat:
                     self.surprised.add(id(comp))
         for m in self.monsters:
             self.st[m.uid] = CState(m, "mon")
+        self.dark = dark
+        if dark:
+            for x in self.st.values():
+                cr = x.c
+                if getattr(cr, "is_pc", False):
+                    form = cr.wild_form()
+                    vision = form.get("vision", "") if form else cr.race_data["vision"]
+                else:
+                    vision = getattr(cr, "block", {}).get("vision", "")
+                if "darkvision" not in vision and "blindsense" not in vision:
+                    cr.add_effect(Effect("In the dark", None, tags=["blinded"], hidden=False))
         self._name_monsters()
         self.order: List[CState] = []
         self.xp_monsters: List[Creature] = []
@@ -325,7 +336,7 @@ class Combat:
                              "_spiritual_weapon", "_sphere", "_stun_primed", "_smite",
                              "stunned", "dazed", "entangled", "frightened", "grappled",
                              "pinned"} \
-                        or e.name in ("Dazed", "Turned", "Aura of Courage") \
+                        or e.name in ("Dazed", "Turned", "Aura of Courage", "In the dark") \
                         or e.name.startswith("Terror ("):
                     p.effects.remove(e)
             st = self.s(p)
@@ -504,6 +515,8 @@ class Combat:
                 return False
         # concealment
         conc = target.bonus("concealment")
+        if attacker.has_tag("blinded"):
+            conc = max(conc, 50)   # can't see the target: total concealment
         if ranged:
             conc = max(conc, target.bonus("concealment_ranged"))
             if attacker.has_feat("Improved Precise Shot") and conc < 100:

@@ -198,6 +198,17 @@ ROOMS = {
             {"id": "sneak", "label": "Sneak up on the camp (Move Silently vs their Listen)",
              "requires": {"enc_active": "camp"},
              "effects": [{"do": "stealth_fight", "enc": "camp"}]},
+            {"id": "parley", "label": "Parley with the gnolls (Diplomacy: from hostile to "
+                                      "indifferent, DC 25)",
+             "requires": {"enc_active": "camp"}, "effects": [
+                {"do": "diplomacy", "npc": "the gnoll raiders", "start": "hostile",
+                 "goal": "indifferent", "success": [
+                    {"do": "text", "text": "The gnolls' leader barks a laugh, takes a bribe of "
+                                           "your bread and salt, and leads her pack off into "
+                                           "the crags. 'Skarn pays badly anyway.'"},
+                    {"do": "resolve_enc", "enc": "camp", "factor": 0.75}],
+                 "failure": [{"do": "text", "text": "The gnolls start circling, grinning."},
+                             {"do": "fight", "enc": "camp"}]}]},
             {"id": "scare", "label": "Make the gnolls think an army is coming "
                                      "(Bluff DC 18)",
              "requires": {"enc_active": "camp"}, "once": True, "once_on_fail": True,
@@ -257,6 +268,8 @@ ROOMS = {
     },
     "goat_trail": {
         "name": "The Goat Trail", "flee_to": "gorge",
+        "on_first_enter": [{"do": "text", "text": "The wind off the peaks cuts like a knife."},
+                           {"do": "exposure", "type": "cold", "dc": 12}],
         "desc": "A dizzying ledge along the gorge wall, wide enough for one. It ends in a "
                 "cave that reeks of wet dog, and beyond it, the north wall of the keep.",
         "features": [],
@@ -266,7 +279,7 @@ ROOMS = {
         },
     },
     "worg_den": {
-        "name": "The Worg Den", "flee_to": "goat_trail",
+        "dark": True, "name": "The Worg Den", "flee_to": "goat_trail",
         "desc": "A cave floored with bones and fur. A tunnel at the back climbs toward the "
                 "keep: the old postern passage.",
         "encounters_enter": ["den"],
@@ -363,7 +376,7 @@ ROOMS = {
         },
     },
     "cells": {
-        "name": "The Cells", "flee_to": "keep_yard",
+        "dark": True, "name": "The Cells", "flee_to": "keep_yard",
         "desc": "A row of iron-barred cells. Inside, a dozen grimy, furious dwarves glare "
                 "out at you, then realize you're not gnolls.",
         "features": [

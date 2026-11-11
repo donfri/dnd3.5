@@ -69,7 +69,8 @@ class TestAdventureData(unittest.TestCase):
                          "flag", "unflag", "journal", "damage", "ability_damage", "buff",
                          "heal_all", "fight", "stealth_fight", "resolve_enc", "remove_monster",
                          "add_monster", "reveal_exit", "unlock_exit", "goto", "shop", "rest",
-                         "temple", "rumors", "recruit", "riddle", "end_adventure", "custom"}
+                         "temple", "rumors", "recruit", "riddle", "end_adventure", "custom",
+                         "swim", "exposure", "fall", "diplomacy", "paladin_falls"}
         for adv in ORDER:
             for attr in ("ID", "TITLE", "LEVELS", "SUMMARY", "START", "INTRO", "ENDING",
                          "ROOMS", "ENCOUNTERS", "RUMORS", "WANDERING"):
@@ -86,7 +87,7 @@ class TestAdventureData(unittest.TestCase):
                         self.assertIn(e["enc"], adv.ENCOUNTERS, where)
                     if e["do"] == "custom":
                         self.assertTrue(callable(getattr(adv, e["fn"], None)), where)
-                    if e["do"] == "riddle":
+                    if e["do"] in ("riddle", "diplomacy"):
                         check_effects(e["success"] + e["failure"], where)
 
             for rid, room in adv.ROOMS.items():

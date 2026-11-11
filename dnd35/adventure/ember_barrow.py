@@ -313,7 +313,7 @@ ROOMS = {
     },
     # ================================================================ upper barrow
     "entry": {
-        "name": "The Collapsed Antechamber", "flee_to": "barrow_hill",
+        "dark": True, "name": "The Collapsed Antechamber", "flee_to": "barrow_hill",
         "first": "Stale, warm air rolls up the steps. The walls are blackened with ancient "
                  "soot, though no fire has burned here in centuries.",
         "desc": "A long hall of fitted stone, half collapsed. Goblin rubbish is everywhere. A "
@@ -337,7 +337,7 @@ ROOMS = {
         },
     },
     "cistern": {
-        "name": "The Old Cistern", "flee_to": "entry",
+        "dark": True, "name": "The Old Cistern", "flee_to": "entry",
         "desc": "A round chamber around a deep pool of black water. The smell of rat is "
                 "overpowering. Something glints at the bottom of the pool.",
         "encounters_enter": ["rats"],
@@ -356,7 +356,7 @@ ROOMS = {
         "exits": {"west": {"to": "entry", "label": "Back to the antechamber"}},
     },
     "guard_room": {
-        "name": "The Guard Room", "flee_to": "entry",
+        "dark": True, "name": "The Guard Room", "flee_to": "entry",
         "desc": "A square room with a goblin cookfire, gnawed bones, and an iron-bound chest "
                 "against the wall. Doors lead west and north.",
         "encounters_enter": ["guards"],
@@ -386,7 +386,7 @@ ROOMS = {
         },
     },
     "crypt": {
-        "name": "The Crypt of the Honor Guard", "flee_to": "guard_room",
+        "dark": True, "name": "The Crypt of the Honor Guard", "flee_to": "guard_room",
         "first": "Rows of burial niches line the walls. Each holds a skeleton in the rags of "
                  "a red tabard, a rusted blade across its chest.",
         "desc": "A long, cold crypt. Faded murals show a crowned man standing in fire while "
@@ -457,7 +457,7 @@ ROOMS = {
         },
     },
     "treasury": {
-        "name": "The Hidden Treasury", "flee_to": "shrine",
+        "dark": True, "name": "The Hidden Treasury", "flee_to": "shrine",
         "desc": "A tiny vault, untouched for centuries. A small bronze-bound coffer sits on a "
                 "plinth.",
         "traps": {
@@ -474,7 +474,7 @@ ROOMS = {
         "exits": {"west": {"to": "shrine", "label": "Back to the shrine"}},
     },
     "barracks": {
-        "name": "The Goblin Barracks", "flee_to": "guard_room",
+        "dark": True, "name": "The Goblin Barracks", "flee_to": "guard_room",
         "desc": "Filthy bunks of straw and stolen blankets. A heavy iron door stands in the "
                 "east wall; a stench of animal comes from an opening to the north.",
         "encounters_enter": ["barracks"],
@@ -497,7 +497,7 @@ ROOMS = {
         },
     },
     "kennel": {
-        "name": "The Kennel", "flee_to": "barracks",
+        "dark": True, "name": "The Kennel", "flee_to": "barracks",
         "desc": "Gnawed bones and a heavy chain bolted to the wall. A big grey wolf, ribs "
                 "showing, growls low in its throat.",
         "features": [
@@ -539,7 +539,7 @@ ROOMS = {
         },
     },
     "lower_hall": {
-        "name": "The Hall of Servants", "flee_to": "lower_stairs",
+        "dark": True, "name": "The Hall of Servants", "flee_to": "lower_stairs",
         "desc": "A pillared hall where dozens of robed corpses stand in alcoves, as if waiting "
                 "to serve. To the north, firelight and goblin laughter. To the east, a pair of "
                 "bronze doors marked with a crowned flame.",
@@ -556,7 +556,7 @@ ROOMS = {
         },
     },
     "warren": {
-        "name": "Grukk's Warren", "flee_to": "lower_hall",
+        "dark": True, "name": "Grukk's Warren", "flee_to": "lower_hall",
         "desc": "A cave crammed with stolen sacks, barrels and chicken bones. A crude throne "
                 "of grain sacks stands at the back. A young man in a miller's apron is tied "
                 "to a post, gagged and wide-eyed.",
@@ -607,7 +607,7 @@ ROOMS = {
         "exits": {"south": {"to": "lower_hall", "label": "Back to the Hall of Servants"}},
     },
     "antechamber": {
-        "name": "The King's Antechamber", "flee_to": "lower_hall",
+        "dark": True, "name": "The King's Antechamber", "flee_to": "lower_hall",
         "desc": "Heat shimmers above the floor. Bones are scattered everywhere, cracked open "
                 "for the marrow. A great archway glows dull red to the east.",
         "encounters_enter": ["antechamber"],

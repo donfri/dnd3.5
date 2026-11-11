@@ -270,6 +270,18 @@ Command-line options:
   ones. Resting in the dungeon can bring wandering monsters. Diseases are tracked.
 - Experience follows the DMG table and is split among the party. Level-ups are
   interactive, or you can use a recommended build.
+- **Light and darkness**: underground areas are dark. The party lights torches
+  (1 hour), a lantern (6 hours per flask of oil) or a *light* spell
+  automatically. Without light, heroes who lack darkvision fight blind (50% miss
+  chance, -2 AC) and can't search.
+- **Hazards**: swimming (Swim checks, nearly drowning), cold and heat exposure
+  (*endure elements* protects you), and falls (1d6 per 10 ft.).
+- **Diplomacy** follows the SRD attitude table: hostile, unfriendly, indifferent,
+  friendly, helpful. Talk a troll into letting you pass or a gnoll band into
+  leaving. You can also **haggle** in shops (10% off on a good day).
+- **Crafting** in town: Brew Potion, Scribe Scroll, Craft Wand, Craft Wondrous
+  Item, and Craft Magic Arms and Armor. Each item costs half its price in gold,
+  1/25 of its price in XP (never enough to lose a level), and a day per 1,000 gp.
 - Save/load (JSON in `saves/`) and an autosave every time you enter an area.
 
 ## Tips for surviving

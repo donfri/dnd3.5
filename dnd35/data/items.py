@@ -381,6 +381,43 @@ MAGIC.update({
                                              "without using a higher slot."},
 })
 
+# ---------------------------------------------------------------- generated consumables
+# Every spell can be scribed into a scroll; low-level ones can be brewed into potions or
+# crafted into wands (SRD prices: scroll 25 x spell level x CL, potion 50x, wand 750x).
+def _gen_spell_items():
+    from .spells import SPELLS
+    for name, sp in SPELLS.items():
+        lvls = {k: v for k, v in sp["levels"].items() if k != "cleric_domain"}
+        if not lvls:
+            continue
+        lvl = min(lvls.values())
+        cl = max(1, 2 * lvl - 1) if lvl else 1
+        arcane = any(k in ("wizard", "sorcerer", "bard") for k in lvls)
+        price = (12.5 if lvl == 0 else 25 * lvl) * cl
+        key = f"scroll of {name.lower()}"
+        if key not in CONSUMABLES and sp["target"] != "summon":
+            CONSUMABLES[key] = {"kind": "consumable", "name": f"Scroll of {name.lower()}",
+                                "cost": int(price * GP), "weight": 0, "stack": True,
+                                "use": "scroll", "spell": name, "cl": cl,
+                                "list": "arcane" if arcane else "divine",
+                                "desc": f"{'Arcane' if arcane else 'Divine'} scroll.",
+                                "generated": True}
+        if lvl <= 3 and sp["target"] in ("ally", "self") and sp["combat"]:
+            key = f"potion of {name.lower()}"
+            if key not in CONSUMABLES:
+                CONSUMABLES[key] = {"kind": "consumable", "name": f"Potion of {name.lower()}",
+                                    "cost": int((25 if lvl == 0 else 50 * lvl) * cl * GP),
+                                    "weight": 0.1, "stack": True, "use": "spell",
+                                    "spell": name, "cl": cl, "desc": sp["desc"],
+                                    "generated": True}
+        if 1 <= lvl <= 4 and sp["target"] not in ("summon", "none"):
+            key = f"wand of {name.lower()}"
+            if key not in MAGIC:
+                MAGIC[key] = dict(_wand(name, cl, 750 * lvl * cl), generated=True)
+
+
+_gen_spell_items()
+
 # where each kind of worn item goes
 WORN_SLOTS = {"ring": ["ring", "ring2"], "cloak": ["cloak"], "amulet": ["amulet"],
               "bracers": ["wrists"], "gloves": ["hands"], "head": ["head"], "belt": ["belt"]}

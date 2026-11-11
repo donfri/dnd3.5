@@ -17,6 +17,7 @@ from ..effects import Effect, ROUNDS_PER_MINUTE
 from ..levelup import level_up_interactive, prepare_spells
 from ..abilities import ability_menu, has_usable
 from ..companions import rest_companion
+from ..crafting import can_anyone_craft, craft_menu
 from ..magic import cast_out_of_combat, heal, saving_throw
 from ..monster import Monster
 from ..sheet import render, short_status
@@ -44,6 +45,8 @@ class GameState:
         self.settings = settings or {"heroic": False}
         self.sneaking = False
         self.journal: List[str] = []
+        self.light_minutes = 0          # how long the party's torch/lantern/light lasts
+        self.attitudes: Dict[str, str] = {}
 
     # ------------------------------------------------------------ helpers
     def rs(self, room_id: Optional[str] = None) -> dict:
@@ -69,6 +72,10 @@ class GameState:
 
     def pass_time(self, minutes: int, ui=None) -> None:
         self.minutes += minutes
+        if self.light_minutes > 0:
+            self.light_minutes = max(0, self.light_minutes - minutes)
+            if self.light_minutes == 0 and ui:
+                ui.warn("Your light gutters and goes out.")
         rounds = minutes * ROUNDS_PER_MINUTE
         for p in self.party:
             msgs = p.tick(rounds)
@@ -84,7 +91,8 @@ class GameState:
         return {"adventure": self.adv.ID, "party": [p.to_dict() for p in self.party],
                 "room": self.room, "flags": sorted(self.flags), "rooms": self.rooms,
                 "minutes": self.minutes, "settings": self.settings,
-                "sneaking": self.sneaking, "journal": self.journal}
+                "sneaking": self.sneaking, "journal": self.journal,
+                "light_minutes": self.light_minutes, "attitudes": self.attitudes}
 
     @classmethod
     def from_dict(cls, d: dict, adventure) -> "GameState":
@@ -95,6 +103,8 @@ class GameState:
         gs.minutes = d.get("minutes", 480)
         gs.sneaking = d.get("sneaking", False)
         gs.journal = d.get("journal", [])
+        gs.light_minutes = d.get("light_minutes", 0)
+        gs.attitudes = d.get("attitudes", {})
         return gs
 
 
@@ -354,7 +364,20 @@ class GM:
         elif do == "goto":
             self.enter(eff["room"])
         elif do == "shop":
-            shop_menu(ui, gs.living(), eff["name"], eff["sections"], eff.get("markup", 1.0))
+            markup = eff.get("markup", 1.0)
+            key = f"haggle:{eff['name']}:{gs.minutes // 1440}"
+            if key not in gs.flags and ui.confirm("Haggle with the shopkeeper first? "
+                                                  "(Diplomacy DC 20: 10% off today)", False):
+                gs.flags.add(key)
+                h = self.pick_hero("Who haggles?", "Diplomacy")
+                if h and self.roll_check(h, "Diplomacy", 20) >= 20:
+                    gs.flags.add(key + ":won")
+                    ui.good("The shopkeeper sighs and knocks 10% off everything.")
+                else:
+                    ui.out("The shopkeeper isn't budging.")
+            if key + ":won" in gs.flags:
+                markup *= 0.9
+            shop_menu(ui, gs.living(), eff["name"], eff["sections"], markup)
         elif do == "rest":
             self.rest(eff.get("cost_sp", 0), safe=eff.get("safe", True))
         elif do == "temple":
@@ -365,6 +388,10 @@ class GM:
             self.recruit()
         elif do == "riddle":
             self.riddle(eff)
+        elif do in ("swim", "exposure", "fall"):
+            self.hazard(eff)
+        elif do == "diplomacy":
+            self.diplomacy(eff, actor)
         elif do == "paladin_falls":
             for p in gs.living():
                 if p.class_level("paladin") and not p.fallen:
@@ -508,7 +535,7 @@ class GM:
         if enc.get("text"):
             ui.gm(enc["text"])
         combat = Combat(ui, gs.party, mons, surprised, can_flee=enc.get("can_flee", True),
-                        title=enc.get("title", "COMBAT"))
+                        title=enc.get("title", "COMBAT"), dark=self.in_darkness())
         result = combat.run()
         award_xp(ui, gs.party, combat.xp_monsters, gs.party_level())
         gs.pass_time(1, ui)
@@ -633,7 +660,12 @@ class GM:
         ui.out("The party searches the area carefully (taking 20; about 2 minutes)...")
         gs.pass_time(2, ui)
         found_any = False
-        for h in gs.able():
+        seers = [h for h in gs.able() if not self.in_darkness()
+                 or "darkvision" in h.race_data["vision"]]
+        if not seers:
+            ui.bad("It's too dark to search without a light.")
+            return
+        for h in seers:
             total = self.roll_check(h, "Search", None, take=20)
             for tid, trap in room.get("traps", {}).items():
                 if tid in st["found_traps"] or tid in st["disabled_traps"]:
@@ -852,6 +884,8 @@ class GM:
         if first and room.get("first"):
             ui.gm(room["first"])
         ui.gm(room["desc"])
+        if room.get("dark"):
+            self.ensure_light()
         self.passive_checks()
         self.run(room.get("on_enter", []))
         if first:
@@ -864,6 +898,121 @@ class GM:
                     self.start_encounter(enc_id)
                 if gs.room != room_id:
                     return
+
+    # ------------------------------------------------------------ light & darkness
+    def in_darkness(self) -> bool:
+        room = self.adv.ROOMS[self.gs.room]
+        return bool(room.get("dark")) and self.gs.light_minutes <= 0
+
+    def ensure_light(self) -> None:
+        ui, gs = self.ui, self.gs
+        if gs.light_minutes > 0:
+            return
+        for p in gs.able():
+            caster = next((c for c in p.available_casts() if c["spell"] == "Light"), None)
+            if caster:
+                p.expend(caster)
+                gs.light_minutes = 10 * max(1, p.caster_level(caster["class"]))
+                ui.out(f"{p.name} casts light on a pebble; it glows like a torch.")
+                return
+        for p in gs.living():
+            lamp = p.find_item("lantern")
+            oil = p.find_item("oil")
+            if lamp and oil:
+                p.remove_item(oil, 1)
+                gs.light_minutes = 6 * 60
+                ui.out(f"{p.name} fills and lights the lantern (6 hours of light).")
+                return
+            torch = p.find_item("torch")
+            if torch:
+                p.remove_item(torch, 1)
+                gs.light_minutes = 60
+                ui.out(f"{p.name} lights a torch (1 hour of light).")
+                return
+        blind = [p.name for p in gs.able() if "darkvision" not in p.race_data["vision"]]
+        if blind:
+            ui.bad("It's pitch dark and you have no light! " + ", ".join(blind) +
+                   " can't see a thing (blind in a fight: 50% miss chance, -2 AC). "
+                   "Buy torches, a lantern and oil, or bring a light spell.")
+
+    # ------------------------------------------------------------ hazards & talking
+    def hazard(self, eff: dict) -> None:
+        ui, gs = self.ui, self.gs
+        kind = eff["do"]
+        for p in gs.able():
+            if kind == "swim":
+                total = self.roll_check(p, "Swim", eff["dc"])
+                if total >= eff["dc"]:
+                    continue
+                if any(q.has_item("rope") for q in gs.living()) and total >= eff["dc"] - 5:
+                    ui.out(f"  A rope from the others hauls {p.name} through.")
+                    continue
+                amt = dice.roll("1d6").total
+                p.take_nonlethal(amt)
+                ui.bad(f"  {p.name} goes under and swallows water ({amt} nonlethal damage).")
+                if total <= eff["dc"] - 5:
+                    r = dice.roll("2d6").total
+                    p.take_nonlethal(r)
+                    ui.bad(f"  {p.name} is nearly drowned ({r} more)!")
+            elif kind == "exposure":
+                if p.get_effect("Endure Elements") or eff.get("type", "cold") in p.immunities():
+                    ui.out(f"  {p.name} is comfortable (endure elements).")
+                    continue
+                if not saving_throw(ui, p, "fort", eff["dc"], [], f"{eff.get('type', 'cold')} "
+                                                                   f"exposure"):
+                    amt = dice.roll(eff.get("dice", "1d6")).total
+                    p.take_nonlethal(amt)
+                    ui.bad(f"  The {eff.get('type', 'cold')} saps {p.name} ({amt} nonlethal "
+                           f"damage).")
+            elif kind == "fall":
+                feet = eff["feet"]
+                if p.skill_total("Jump") + dice.d20() >= 15 or \
+                        (p.can_use_skill("Tumble") and p.skill_total("Tumble") + dice.d20() >= 15):
+                    feet = max(0, feet - 10)
+                n = min(20, feet // 10)
+                if n:
+                    r = dice.roll(f"{n}d6")
+                    dealt, _ = p.take_damage(r.total, "", magic=True)
+                    ui.bad(f"  {p.name} falls {eff['feet']} ft. and takes {dealt} damage.")
+        if gs.able() and all(not p.conscious for p in gs.living()):
+            raise GameOver("defeat")
+
+    ATTITUDES = ["hostile", "unfriendly", "indifferent", "friendly", "helpful"]
+    DIPLOMACY_DC = {("hostile", "unfriendly"): 20, ("hostile", "indifferent"): 25,
+                    ("hostile", "friendly"): 35, ("hostile", "helpful"): 50,
+                    ("unfriendly", "indifferent"): 15, ("unfriendly", "friendly"): 25,
+                    ("unfriendly", "helpful"): 40, ("indifferent", "friendly"): 15,
+                    ("indifferent", "helpful"): 30, ("friendly", "helpful"): 20}
+
+    def diplomacy(self, eff: dict, actor) -> None:
+        """Shift an NPC's attitude (SRD Diplomacy table). One try per NPC per day."""
+        ui, gs = self.ui, self.gs
+        npc = eff["npc"]
+        cur = gs.attitudes.get(npc, eff.get("start", "indifferent"))
+        goal = eff["goal"]
+        A = self.ATTITUDES
+        if A.index(cur) >= A.index(goal):
+            self.run(eff.get("success", []), actor)
+            return
+        day_key = f"diplo:{npc}:{gs.minutes // 1440}"
+        if day_key in gs.flags:
+            ui.out(f"{npc} won't be talked around again today.")
+            return
+        gs.flags.add(day_key)
+        h = self.pick_hero(f"Who talks to {npc}? ({cur} -> {goal}, Diplomacy)", "Diplomacy")
+        if h is None:
+            return
+        total = self.roll_check(h, "Diplomacy", None) + eff.get("bonus", 0)
+        best = cur
+        for att in A[A.index(cur) + 1:]:
+            if total >= self.DIPLOMACY_DC[(cur, att)]:
+                best = att
+        gs.attitudes[npc] = best
+        ui.out(f"{npc} is now {best}." if best != cur else f"{npc} remains {cur}.")
+        if A.index(best) >= A.index(goal):
+            self.run(eff.get("success", []), h)
+        else:
+            self.run(eff.get("failure", []), h)
 
     # ------------------------------------------------------------ rest
     def rest(self, cost_sp: int = 0, safe: bool = True) -> None:
@@ -918,6 +1067,8 @@ class GM:
             if p.caster_classes():
                 with ui.acting(p.player):
                     prepare_spells(p, ui)
+        if self.adv.ROOMS[gs.room].get("dark"):
+            self.ensure_light()
         for p in gs.living():
             if p.can_level_up():
                 level_up_interactive(p, ui, gs.settings.get("heroic", False))
@@ -1225,6 +1376,8 @@ class GM:
         if not room.get("town") and any(p.familiar and p.conscious for p in gs.living()) \
                 and self.exits():
             opts.append(("Send a familiar to scout ahead", "scout", None))
+        if room.get("town") and can_anyone_craft(gs.living()):
+            opts.append(("Craft magic items (downtime: days pass)", "craft", None))
         if has_usable(gs.living()):
             opts.append(("Use a class ability (lay on hands, wild shape...)", "ability", None))
         if not room.get("town"):
@@ -1236,7 +1389,7 @@ class GM:
         group_of = {"feature": "Actions", "exit": "Travel", "search": "Explore",
                     "sneak": "Explore", "rest": "Explore", "levelup": "Party",
                     "sheet": "Party", "inv": "Party", "cast": "Party", "ability": "Party",
-                    "scout": "Explore"}
+                    "scout": "Explore", "craft": "Party"}
         i = ui.choose("What do you do?", [o[0] for o in opts],
                       groups=[group_of.get(o[1], "Game") for o in opts])
         _, kind, data = opts[i]
@@ -1262,6 +1415,8 @@ class GM:
             inventory_menu(ui, gs.living())
         elif kind == "cast":
             cast_out_of_combat(ui, gs.party)
+        elif kind == "craft":
+            craft_menu(ui, gs.living(), gs)
         elif kind == "scout":
             self.familiar_scout()
         elif kind == "ability":

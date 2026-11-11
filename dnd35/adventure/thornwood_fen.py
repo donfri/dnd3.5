@@ -238,6 +238,15 @@ ROOMS = {
             {"id": "toll", "label": "Pay the troll's toll (200 gp)",
              "requires": {"enc_active": "bridge", "not_flag": "paid"},
              "effects": [{"do": "custom", "fn": "pay_toll"}]},
+            {"id": "talk", "label": "Talk Old Gutch into letting you pass for free "
+                                    "(Diplomacy: make him friendly)",
+             "requires": {"enc_active": "bridge"}, "effects": [
+                {"do": "diplomacy", "npc": "Old Gutch", "start": "unfriendly",
+                 "goal": "friendly", "success": [
+                    SAY("Old Gutch", "Gutch likes you. Gutch lets friends pass. Friends tell "
+                                     "Gutch stories next time, yes?"),
+                    {"do": "resolve_enc", "enc": "bridge", "factor": 0.75}],
+                 "failure": [T("Gutch grunts and folds his long arms. 'Toll, or fight.'")]}]},
             {"id": "bluff", "label": "Convince Old Gutch the Warden sent you to pay later "
                                      "(Bluff DC 22)",
              "requires": {"enc_active": "bridge"}, "once": True, "once_on_fail": True,
@@ -303,14 +312,15 @@ ROOMS = {
             "west": {"to": "causeway", "label": "Back over the causeway"},
             "south": {"to": "barrow_isle", "label": "Row out to the barrow island"},
             "north": {"to": "abbey_gate", "label": "Wade the channel north to the abbey "
-                                                  "gate"},
+                                                  "gate (Swim DC 10)",
+                      "effects": [{"do": "swim", "dc": 10}]},
             "boat": {"to": "undercroft", "label": "Let the lizardfolk row you to the "
                                                  "abbey's water-door",
                      "requires": {"flag": "lizards_free"}},
         },
     },
     "barrow_isle": {
-        "name": "The Fen Knight's Barrow", "flee_to": "lizard_village",
+        "dark": True, "name": "The Fen Knight's Barrow", "flee_to": "lizard_village",
         "desc": "A grassy mound on a reed island, its stone door cracked open. Inside, "
                 "burial niches line a short passage to a knight's tomb.",
         "encounters_enter": ["barrow"],
@@ -375,7 +385,7 @@ ROOMS = {
         },
     },
     "undercroft": {
-        "name": "The Undercroft", "flee_to": "chapter_house", "no_rest": True,
+        "dark": True, "name": "The Undercroft", "flee_to": "chapter_house", "no_rest": True,
         "no_rest_text": "Not with children in cages and a hag overhead.",
         "desc": "A vaulted cellar, half flooded. Wicker cages hang from the ribs of the "
                 "vault, and small frightened faces peer out. A water-door opens on the "

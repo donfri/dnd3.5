@@ -173,7 +173,8 @@ PREP_PRIORITY = {
 MONK_BONUS_FEATS = {1: ["Stunning Fist", "Improved Grapple"],
                     2: ["Deflect Arrows", "Combat Reflexes"],
                     6: ["Improved Trip", "Improved Disarm"]}
-CASTER_BONUS_FEATS = ["Extend Spell", "Empower Spell", "Brew Potion", "Craft Wondrous Item",
+CASTER_BONUS_FEATS = ["Extend Spell", "Empower Spell", "Brew Potion", "Craft Wand",
+                      "Craft Wondrous Item",
                       "Craft Magic Arms and Armor", "Maximize Spell", "Quicken Spell",
                       "Spell Penetration"]
 

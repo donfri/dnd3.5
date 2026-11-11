@@ -447,8 +447,9 @@ def _cast_spell(ui, caster, spell_name, targets, cl, dc, combat, allies, enemies
             buff(t0, "Dazed", tags=["dazed"], dur=1)
     elif n == "Resistance":
         buff(t0, "Resistance", [("saves", "resistance", 1)])
-    elif n in ("Detect Magic", "Light", "Mage Hand", "Prestidigitation", "Know Direction",
-               "Endure Elements"):
+    elif n == "Endure Elements":
+        buff(t0, "Endure Elements", dur=24 * ROUNDS_PER_HOUR)
+    elif n in ("Detect Magic", "Light", "Mage Hand", "Prestidigitation", "Know Direction"):
         ui.out(f"  {sp['desc']}")
     # ------------------------------------------------------------ arcane 1
     elif n == "Magic Missile":

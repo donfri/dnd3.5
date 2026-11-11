@@ -149,9 +149,9 @@ FEATS = {
                                   "prereq": {"feats": ["Armor Proficiency (medium)"]}},
     "Shield Proficiency": {"desc": "No attack penalty from shields."},
     "Track": {"desc": "Use Survival to follow tracks.", "hidden": True},
-    "Scribe Scroll": {"desc": "Create scrolls of spells you know (downtime).",
+    "Scribe Scroll": {"desc": "Create scrolls of spells you can cast (downtime in town).",
                       "prereq": {"caster": 1}},
-    "Brew Potion": {"desc": "Create potions of spells you know (downtime, flavor).",
+    "Brew Potion": {"desc": "Create potions of spells up to 3rd level (downtime in town).",
                     "prereq": {"caster": 3}},
     "Empower Spell": {"desc": "Metamagic: spell dice x1.5. Uses a slot 2 levels higher.",
                       "prereq": {"caster": 1}, "metamagic": True},
@@ -165,10 +165,13 @@ FEATS = {
                             "higher.", "prereq": {"caster": 1}, "metamagic": True},
     "Silent Spell": {"desc": "Metamagic: no words (cast in silence). Uses a slot 1 level "
                              "higher.", "prereq": {"caster": 1}, "metamagic": True},
-    "Craft Wondrous Item": {"desc": "Create wondrous items (downtime, flavor).",
+    "Craft Wand": {"desc": "Create wands of spells of 4th level or lower (downtime in town).",
+                   "prereq": {"caster": 5}},
+    "Craft Wondrous Item": {"desc": "Create rings, cloaks, amulets, belts and more "
+                                    "(downtime in town).",
                             "prereq": {"caster": 3}},
-    "Craft Magic Arms and Armor": {"desc": "Create magic weapons and armor (downtime, "
-                                           "flavor).", "prereq": {"caster": 5}},
+    "Craft Magic Arms and Armor": {"desc": "Enchant weapons, armor and shields (downtime "
+                                           "in town).", "prereq": {"caster": 5}},
     "Spell Penetration": {"desc": "+2 on caster level checks to beat spell resistance."},
 }
 
