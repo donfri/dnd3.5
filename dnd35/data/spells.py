@@ -329,7 +329,144 @@ SPELLS = {s["name"]: s for s in [
       "Up to 4 foes become confused for 1 round/level: each turn they may babble, wander off, "
       "or attack whoever is nearest (Will negates).", save=("will", "negates"),
       desc_tags=["mind-affecting", "compulsion"], max_targets=4),
+    # ---------------------------------------------------------------- 5th-9th level (v4)
+    S("Greater Heroism", {"bard": 5, "wizard": 6, "sorcerer": 6}, "enchantment", "ally",
+      "+4 morale on attacks, saves and skills, immunity to fear, and temporary hp equal to "
+      "your caster level (max 20), 1 min/level.", desc_tags=["mind-affecting"]),
+    S("Song of Discord", {"bard": 5}, "enchantment", "enemies",
+      "Up to 4 foes turn on each other (Will negates) for 1 round/level.",
+      save=("will", "negates"), desc_tags=["mind-affecting", "sonic"], max_targets=4),
+    S("Greater Dispel Magic", {"bard": 5, "cleric": 6, "druid": 6, "wizard": 6,
+                               "sorcerer": 6}, "abjuration", "creature",
+      "Like dispel magic, but the check is d20 + caster level (max +20), and it tries every "
+      "spell on the target.", sr=False),
+    S("Mass Cure Moderate Wounds", {"bard": 6, "cleric": 6, "druid": 7}, "conjuration",
+      "allies", "Whole party: cures 2d8 +1/level (max +30).", desc_tags=["healing"]),
+    S("Heroes' Feast", {"bard": 6, "cleric": 6}, "conjuration", "allies",
+      "A magical feast: the party gains 1d8 + half your level temporary hp, +1 morale on "
+      "attacks and Will saves, and immunity to fear and poison for 12 hours.", combat=False),
+    S("Mass Bull's Strength", {"wizard": 6, "sorcerer": 6, "cleric": 6, "druid": 6},
+      "transmutation", "allies", "Party: +4 Strength for 1 min/level."),
+    S("Mass Cat's Grace", {"wizard": 6, "sorcerer": 6, "bard": 6, "druid": 6},
+      "transmutation", "allies", "Party: +4 Dexterity for 1 min/level."),
+    S("Mass Bear's Endurance", {"wizard": 6, "sorcerer": 6, "cleric": 6, "druid": 6},
+      "transmutation", "allies", "Party: +4 Constitution for 1 min/level."),
+    S("Mass Owl's Wisdom", {"wizard": 6, "sorcerer": 6, "cleric": 6, "druid": 6},
+      "transmutation", "allies", "Party: +4 Wisdom for 1 min/level."),
+    S("Mass Eagle's Splendor", {"wizard": 6, "sorcerer": 6, "bard": 6, "cleric": 6},
+      "transmutation", "allies", "Party: +4 Charisma for 1 min/level."),
+    S("Chain Lightning", {"wizard": 6, "sorcerer": 6}, "evocation", "enemies",
+      "Lightning arcs to up to 1 foe per level (max 8 here): 1d6 per level (max 20d6) to "
+      "the first, half that to the others (Reflex half).", save=("ref", "half"),
+      desc_tags=["electricity"], max_targets=8),
+    S("Disintegrate", {"wizard": 6, "sorcerer": 6}, "transmutation", "enemy",
+      "Ranged touch: 2d6 per level (max 40d6); a creature reduced to 0 hp is turned to dust "
+      "(Fort: 5d6 instead).", save=("fort", "partial")),
+    S("Globe of Invulnerability", {"wizard": 6, "sorcerer": 6}, "abjuration", "self",
+      "Simplified: immune to enemy spells of 4th level or lower (1 round/level)."),
+    S("Heal", {"cleric": 6, "druid": 7}, "conjuration", "ally",
+      "Heals 10 hp per level (max 150) and cures ability damage, disease, fatigue, "
+      "confusion, blindness and similar ills. Deals the same to undead (Will half).",
+      desc_tags=["healing"]),
+    S("Harm", {"cleric": 6}, "necromancy", "enemy",
+      "Melee touch: 10 damage per level (max 150), but can't drop the target below 1 hp "
+      "(Will half).", save=("will", "half")),
+    S("Blade Barrier", {"cleric": 6}, "evocation", "enemies",
+      "A wall of whirling blades cuts up to 4 foes: 1d6 per level (max 15d6), Reflex half.",
+      save=("ref", "half"), sr=True, max_targets=4),
+    S("Delayed Blast Fireball", {"wizard": 7, "sorcerer": 7}, "evocation", "enemies",
+      "As fireball, but 1d6 per level (max 20d6).", save=("ref", "half"),
+      desc_tags=["fire"], max_targets=8),
+    S("Finger of Death", {"wizard": 7, "sorcerer": 7, "druid": 8}, "necromancy", "enemy",
+      "The target dies (Fort save: 3d6 +1/level damage instead).", save=("fort", "partial"),
+      desc_tags=["death"]),
+    S("Power Word Blind", {"wizard": 7, "sorcerer": 7}, "enchantment", "enemy",
+      "A creature with 200 hp or less is blinded (no save).", sr=True,
+      desc_tags=["mind-affecting"]),
+    S("Mordenkainen's Sword", {"wizard": 7, "sorcerer": 7}, "evocation", "enemy",
+      "A blade of force attacks a foe every round (your level + 3 + Int, 4d6+3, crit 19-20) "
+      "for 1 round/level.", sr=False, desc_tags=["force"]),
+    S("Destruction", {"cleric": 7}, "necromancy", "enemy",
+      "The target is slain and turned to ash (Fort save: 10d6 damage instead).",
+      save=("fort", "partial"), desc_tags=["death"]),
+    S("Holy Word", {"cleric_domain": 7, "cleric": 7}, "evocation", "enemies",
+      "Evil foes are struck by a word of power: by Hit Dice they are deafened, blinded, "
+      "paralyzed or killed (no save).", desc_tags=["good", "sonic"], max_targets=8),
+    S("Mass Cure Serious Wounds", {"cleric": 7, "druid": 8}, "conjuration", "allies",
+      "Whole party: cures 3d8 +1/level (max +35).", desc_tags=["healing"]),
+    S("Resurrection", {"cleric": 7}, "conjuration", "ally",
+      "Restores a dead ally to full health (10,000 gp diamond; the hero loses a quarter level "
+      "of experience). Out of combat only.", combat=False),
+    S("Fire Storm", {"cleric": 8, "druid": 7}, "evocation", "enemies",
+      "A sheet of roaring flame on up to 6 foes: 1d6 per level (max 20d6), Reflex half.",
+      save=("ref", "half"), desc_tags=["fire"], max_targets=6),
+    S("Creeping Doom", {"druid": 7}, "conjuration", "enemies",
+      "A carpet of biting insects swarms up to 4 foes: 2d6 a round for 1 round per level.",
+      sr=False, max_targets=4),
+    S("Sunbeam", {"druid": 7}, "evocation", "enemies",
+      "Beams of sunlight: 4d6 (undead: 1d6 per level, max 20d6) and blinded on a failed "
+      "Reflex save, to up to 4 foes.", save=("ref", "half"), desc_tags=["light"],
+      max_targets=4),
+    S("Horrid Wilting", {"wizard": 8, "sorcerer": 8}, "necromancy", "enemies",
+      "Drains the water from up to 6 living foes: 1d6 per level (max 20d6), Fort half.",
+      save=("fort", "half"), max_targets=6),
+    S("Polar Ray", {"wizard": 8, "sorcerer": 8}, "evocation", "enemy",
+      "Ranged touch: 1d6 per level (max 25d6) cold.", desc_tags=["cold"]),
+    S("Power Word Stun", {"wizard": 8, "sorcerer": 8}, "enchantment", "enemy",
+      "A creature with 150 hp or less is stunned (4d4 rounds under 50 hp, 2d4 under 100, "
+      "1d4 under 150; no save).", desc_tags=["mind-affecting"]),
+    S("Sunburst", {"wizard": 8, "sorcerer": 8, "druid": 8}, "evocation", "enemies",
+      "A globe of searing light on up to 6 foes: 6d6 (undead 1d6 per level, max 25d6) and "
+      "blinded (Reflex half and not blinded).", save=("ref", "half"), desc_tags=["light"],
+      max_targets=6),
+    S("Holy Aura", {"cleric": 8}, "abjuration", "allies",
+      "Party: +4 deflection AC and +4 resistance on saves, spell resistance 25 against evil "
+      "spells (simplified: +4 vs evil), 1 round/level.", desc_tags=["good"]),
+    S("Mass Cure Critical Wounds", {"cleric": 8, "druid": 9}, "conjuration", "allies",
+      "Whole party: cures 4d8 +1/level (max +40).", desc_tags=["healing"]),
+    S("Meteor Swarm", {"wizard": 9, "sorcerer": 9}, "evocation", "enemies",
+      "Four meteors: each foe struck takes 2d6 bludgeoning and 6d6 fire (Reflex half the "
+      "fire); up to 4 foes.", save=("ref", "half"), desc_tags=["fire"], max_targets=4),
+    S("Power Word Kill", {"wizard": 9, "sorcerer": 9}, "enchantment", "enemy",
+      "A creature with 100 hp or less dies (no save).", desc_tags=["death", "mind-affecting"]),
+    S("Wail of the Banshee", {"wizard": 9, "sorcerer": 9}, "necromancy", "enemies",
+      "A deadly scream: up to 1 living foe per level (max 8 here) must make a Fortitude save "
+      "or die.", save=("fort", "negates"), desc_tags=["death", "sonic"], max_targets=8),
+    S("Mass Hold Monster", {"wizard": 9, "sorcerer": 9}, "enchantment", "enemies",
+      "As hold monster on up to 6 foes.", save=("will", "negates"),
+      desc_tags=["mind-affecting", "compulsion"], max_targets=6),
+    S("Implosion", {"cleric": 9}, "evocation", "enemy",
+      "A creature collapses in on itself and dies (Fort negates).", save=("fort", "negates"),
+      desc_tags=["death"]),
+    S("Mass Heal", {"cleric": 9}, "conjuration", "allies",
+      "As heal, on the whole party.", desc_tags=["healing"]),
+    S("True Resurrection", {"cleric": 9}, "conjuration", "ally",
+      "Returns a dead ally to life with no loss of experience (25,000 gp diamond). Out of "
+      "combat only.", combat=False),
+    S("Storm of Vengeance", {"druid": 9, "cleric_domain": 9}, "conjuration", "enemies",
+      "A storm cloud batters up to 8 foes: acid rain 1d6, then lightning 10d6 (Reflex half), "
+      "then hail 5d6.", save=("ref", "half"), desc_tags=["electricity"], max_targets=8),
+    S("Elemental Swarm", {"druid": 9}, "conjuration", "summon",
+      "Summon three Large elementals to fight for you for 10 minutes per level.", sr=False),
 ]}
+
+for _n, _r in [(6, "VI"), (7, "VII"), (8, "VIII"), (9, "IX")]:
+    SPELLS[f"Summon Monster {_r}"] = S(
+        f"Summon Monster {_r}", {"wizard": _n, "sorcerer": _n, "cleric": _n,
+                                 **({"bard": 6} if _n == 6 else {})},
+        "conjuration", "summon",
+        f"Call a creature from another plane to fight for you for 1 round/level "
+        f"(level {_n} list).", sr=False)
+    SPELLS[f"Summon Nature's Ally {_r}"] = S(
+        f"Summon Nature's Ally {_r}", {"druid": _n}, "conjuration", "summon",
+        f"Call a wild creature to fight for you for 1 round/level (level {_n} list).", sr=False)
+
+# paladin and ranger spells for levels 11-20
+for _name, _cls, _lvl in [("Prayer", "paladin", 3), ("Magic Circle against Evil", "paladin", 3),
+                          ("Dispel Magic", "paladin", 3), ("Dispel Evil", "paladin", 4),
+                          ("Cure Serious Wounds", "ranger", 4), ("Freedom of Movement",
+                                                                  "paladin", 4)]:
+    SPELLS[_name]["levels"].setdefault(_cls, _lvl)
 
 for _n, _r in enumerate(["I", "II", "III", "IV", "V"], 1):
     SPELLS[f"Summon Monster {_r}"] = S(

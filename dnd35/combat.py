@@ -391,6 +391,8 @@ class Combat:
         # spiritual weapon / flaming sphere
         if cr.get_effect("Spiritual Weapon"):
             self.spiritual_weapon_attack(cr)
+        if cr.get_effect("Mordenkainen's Sword"):
+            self.spiritual_weapon_attack(cr, "Mordenkainen's Sword")
         if cr.get_effect("Flaming Sphere"):
             self.flaming_sphere_attack(cr)
         can = cr.can_act()
@@ -504,6 +506,8 @@ class Combat:
         conc = target.bonus("concealment")
         if ranged:
             conc = max(conc, target.bonus("concealment_ranged"))
+            if attacker.has_feat("Improved Precise Shot") and conc < 100:
+                conc = 0
         if conc:
             r = dice.percent()
             if r <= conc:
@@ -554,6 +558,21 @@ class Combat:
                 r = dice.roll(f"{sa}d6")
                 ui.roll(f"Sneak attack! {r.detail()}")
                 total += r.total
+                da = attacker.get_effect("Death attack ready")
+                if da and da.data["target"] == target.uid and not w.get("ranged"):
+                    attacker.remove_effect("Death attack ready")
+                    dc = 10 + attacker.class_level("assassin") + attacker.mod("int")
+                    if target.is_living() and "death" not in target.immunities() and \
+                            not saving_throw(ui, target, "fort", dc, ["death"], "death attack"):
+                        ui.bad(f"  DEATH ATTACK! {target.name} drops, dead.")
+                        target.damage = target.max_hp() + 10
+                        target.dead = True
+                        self.after_damage(target)
+                        return
+                if "crippling strike" in getattr(attacker, "rogue_specials", []) and \
+                        target.ability("str") is not None:
+                    target.ability_damage["str"] = target.ability_damage.get("str", 0) + 2
+                    ui.out(f"  Crippling strike: {target.name} takes 2 Strength damage.")
         special = w.get("special") or {}
         nonlethal = (w.get("nonlethal") and not attacker.has_feat("Improved Unarmed Strike")) \
             or attacker.get_effect("Subduing") is not None
@@ -570,11 +589,23 @@ class Combat:
             return
         if special.get("no_damage"):
             total = 0
+        du = getattr(attacker, "class_level", lambda c_: 0)("duelist")
+        if du >= 5 and "P" in w.get("dtype", "") and not w.get("two_handed") \
+                and not w.get("ranged") and not target.crit_immune():
+            r = dice.roll("2d6" if du >= 10 else "1d6")
+            ui.roll(f"Precise strike: {r.detail()}")
+            total += r.total
         dmg_type = "" if w.get("magic_force") else w.get("dtype", "B")
         if dmg_type and (attacker.weapon_enhancement(w) > 0 or (
                 w.get("wid") == "unarmed strike" and
                 getattr(attacker, "class_level", lambda c: 0)("monk") >= 4)):
             dmg_type += "*"   # magic weapon: overcomes DR x/magic
+        if total and target.is_pc and target.hp - total <= 0 and \
+                target.uses_left("defensive_roll") and not self.is_flat_footed(target):
+            target.spend("defensive_roll")
+            if saving_throw(ui, target, "ref", total, [], "defensive roll"):
+                total //= 2
+                ui.good(f"  {target.name} rolls with the blow and takes only half!")
         if total:
             deal_damage(ui, target, total, dmg_type, self, magic=False)
         fs = target.get_effect("Fire Shield")
@@ -997,6 +1028,55 @@ class Combat:
             p.add_effect(Effect("Subduing", None, hidden=True))
             self.ui.out(f"{p.name} pulls their blows, fighting to subdue (nonlethal).")
 
+    def act_stance(self, x: CState) -> None:
+        p = x.c
+        p.spend("stance")
+        con_after = (p.ability("con") or 10) + 4
+        dur = 3 + rules.ability_mod(con_after)
+        p.add_effect(Effect("Defensive stance", dur,
+                            [("str", "morale", 2), ("con", "morale", 4),
+                             ("saves", "resistance", 2), ("ac", "dodge", 4)], ["rooted"],
+                            data={"on_end": "rage",
+                                  "tireless": p.class_level("dwarven defender") >= 8}))
+        self.ui.warn(f"{p.name} plants their feet like the roots of a mountain! (+2 Str, +4 "
+                     f"Con, +2 saves, +4 AC; can't move, {dur} rounds)")
+
+    def act_hail(self, x: CState) -> None:
+        p = x.c
+        w = next(w for w in p.weapon_infos() if w.get("bow"))
+        if not self._ready_weapon(x, w):
+            return
+        x.std = False
+        p.spend("hail_of_arrows")
+        foes = self.enemies(p)[:p.class_level("arcane archer")]
+        self.ui.out(f"{p.name} fires a hail of arrows!", ("bmagenta",))
+        for f in foes:
+            if not f.dead and self._spend_ammo(p, w):
+                self.make_attack(p, f, w, p.bab())
+
+    def act_study(self, x: CState) -> None:
+        p = x.c
+        foes = [f for f in self.enemies(p) if not f.dead]
+        st_eff = p.get_effect("Studying")
+        tgt = None
+        if st_eff:
+            tgt = next((f for f in foes if f.uid == st_eff.data["target"]), None)
+        if tgt is None:
+            tgt = self._pick_target(p, foes, "Study whom?")
+            if not tgt:
+                return
+            st_eff = p.add_effect(Effect("Studying", None, hidden=True,
+                                         data={"target": tgt.uid, "n": 0}))
+        x.std = False
+        st_eff.data["n"] += 1
+        self.ui.out(f"{p.name} studies {tgt.name}'s movements ({st_eff.data['n']}/3).")
+        if st_eff.data["n"] >= 3:
+            p.remove_effect("Studying")
+            p.add_effect(Effect("Death attack ready", 3, hidden=True,
+                                data={"target": tgt.uid}))
+            self.ui.warn(f"{p.name} is ready: the next sneak attack on {tgt.name} within 3 "
+                         f"rounds is a DEATH ATTACK.")
+
     def act_step(self, x: CState) -> None:
         p = x.c
         foe = self.engaged_foes(p)[0]
@@ -1080,8 +1160,8 @@ class Combat:
                 break
         return mover.damage - before
 
-    def spiritual_weapon_attack(self, caster: Creature) -> None:
-        e = caster.get_effect("Spiritual Weapon")
+    def spiritual_weapon_attack(self, caster: Creature, name: str = "Spiritual Weapon") -> None:
+        e = caster.get_effect(name)
         if not e:
             return
         tgt = None
@@ -1098,7 +1178,7 @@ class Combat:
         bonus = e.data["bonus"]
         ac = tgt.ac(attacker=caster)
         hit = roll == 20 or (roll != 1 and roll + bonus >= ac)
-        self.ui.out(f"{caster.name}'s spiritual weapon strikes at {tgt.name}: d20={roll}"
+        self.ui.out(f"{caster.name}'s {name.lower()} strikes at {tgt.name}: d20={roll}"
                     f"{bonus:+d} = {roll + bonus} vs AC {ac} -> {'HIT' if hit else 'miss'}")
         if hit:
             r = dice.roll(e.data["damage"])
@@ -1268,7 +1348,7 @@ class Combat:
 
             single = x.single
             grappled = p.has_tag("grappled")
-            entangled = p.has_tag("entangled") or grappled
+            entangled = p.has_tag("entangled") or grappled or p.has_tag("rooted")
             full_ok = (x.std and (x.move or x.stepped) and not x.moved and not single
                        and not disabled)
             foes_all = self.enemies(p)
@@ -1297,6 +1377,9 @@ class Combat:
                 add("Death touch (Death domain, 1/day)", self.act_death_touch, x)
             if x.std and p.uses_left("protective_ward"):
                 add("Protective ward on an ally (Protection domain, 1/day)", self.act_ward, x)
+            if x.std and p.uses_left("quivering_palm") and eng and not p.wild_form():
+                add("Quivering palm (1/day: an unarmed hit can kill outright)",
+                    self.act_attack, x, False, "palm")
             if x.std and p.uses_left("stunning_fist") and not p.wild_form():
                 add(f"Stunning Fist ({p.uses_left('stunning_fist')} left): unarmed attack that "
                     f"can stun", self.act_attack, x, False, "stun")
@@ -1361,11 +1444,25 @@ class Combat:
             if x.std and p.uses_left("wholeness") and p.damage > 0:
                 add(f"Wholeness of body ({p.uses_left('wholeness')} hp left)",
                     self.act_wholeness, x)
-            if x.std and p.uses_left("wild_shape") and not p.wild_form():
+            if x.std and (p.uses_left("wild_shape") or p.uses_left("elemental_shape")) \
+                    and not p.wild_form():
                 add(f"Wild shape: become an animal ({p.uses_left('wild_shape')} left)",
                     self.act_wild_shape, x)
             if x.std and p.wild_form():
                 add("Return to your normal form", self.act_revert, x)
+            if p.uses_left("stance") and not p.has_tag("rooted") and not p.has_tag("fatigued"):
+                add(f"Defensive stance! (free action; {p.uses_left('stance')} left)",
+                    self.act_stance, x)
+            if x.std and p.uses_left("hail_of_arrows") and any(
+                    w.get("bow") for w in p.weapon_infos()):
+                add("Hail of arrows (1/day: one arrow at every foe)", self.act_hail, x)
+            if x.std and p.uses_left("arrow_of_death") and any(
+                    w.get("bow") for w in p.weapon_infos()):
+                add("Arrow of death (1/day)", self.act_attack, x, False, "death_arrow")
+            if x.std and p.class_level("assassin") and not p.get_effect("Death attack ready"):
+                st_eff = p.get_effect("Studying")
+                n = st_eff.data["n"] if st_eff else 0
+                add(f"Study a foe for a death attack ({n}/3 rounds)", self.act_study, x)
             if p.uses_left("rage") and not p.has_tag("raging") and not p.has_tag("fatigued"):
                 add("Rage! (free action)", self.act_rage, x)
             if p.uses_left("feat_of_strength") and not p.get_effect("Feat of Strength"):
@@ -1421,7 +1518,8 @@ class Combat:
                                    "Lay on", "Wholeness", "Wild shape", "Return to",
                                    "Trip", "Disarm", "Grapple", "Bull rush", "Sunder",
                                    "Overrun", "Feint", "Aid another", "Coup de grace",
-                                   "Destruction", "Death touch", "Protective")):
+                                   "Destruction", "Death touch", "Protective", "Quivering",
+                                   "Defensive stance", "Hail", "Arrow of", "Study")):
                     groups.append("Fight")
                 elif lab.startswith(("Move", "Stand", "Draw", "Withdraw", "Flee", "5-foot")):
                     groups.append("Move")
@@ -1554,7 +1652,9 @@ class Combat:
                 self.make_attack(p, partner, w, p.bab(), power=0)
                 p.remove_effect("Stunning Fist")
             return
-        if mode == "stun":
+        if mode == "death_arrow":
+            w = next(w for w in p.weapon_infos() if w.get("bow"))
+        elif mode in ("stun", "palm"):
             w = next((w for w in p.weapon_infos() if w.get("wid") == "unarmed strike"), None)
             if w is None:
                 ui.bad("You need your fists free for that.")
@@ -1645,6 +1745,29 @@ class Combat:
                 p.spend("stunning_fist")
                 p.add_effect(Effect("Stunning Fist", 1, tags=["_stun_primed"], hidden=True))
                 ui.out(f"{p.name} strikes at a nerve cluster...")
+            elif mode == "death_arrow":
+                p.spend("arrow_of_death")
+                ui.out(f"{p.name} looses a black-fletched arrow of death!", ("bmagenta",))
+                if self.make_attack(p, tgt, w, p.bab(), sit) and not tgt.dead and \
+                        tgt.is_living() and "death" not in tgt.immunities():
+                    if not saving_throw(ui, tgt, "fort", 20 + p.mod("cha"), ["death"],
+                                        "arrow of death"):
+                        ui.bad(f"  {tgt.name} falls dead!")
+                        tgt.dead = True
+                        self.after_damage(tgt)
+                return
+            elif mode == "palm":
+                p.spend("quivering_palm")
+                ui.out(f"{p.name} strikes with the quivering palm...", ("bmagenta",))
+                if self.make_attack(p, tgt, w, p.bab(), sit, power=power) and not tgt.dead:
+                    if tgt.is_living() and tgt.hit_dice() <= p.level and \
+                            "death" not in tgt.immunities() and \
+                            not saving_throw(ui, tgt, "fort", 10 + p.class_level("monk") // 2
+                                             + p.mod("wis"), [], "quivering palm"):
+                        ui.bad(f"  {p.name} wills the vibrations to stop. {tgt.name} dies!")
+                        tgt.dead = True
+                        self.after_damage(tgt)
+                return
             self.make_attack(p, tgt, w, p.bab(), sit, power=power, extra_damage=extra)
             p.remove_effect("Stunning Fist")
             if p.hp == 0 and not p.dead:
@@ -1692,7 +1815,7 @@ class Combat:
                 and ui.confirm("Flurry of blows (one extra attack"
                                + (", all attacks " + str(-2 if monk <= 4 else -1)
                                   if monk <= 8 else "") + ")?", True)):
-            extra += 1
+            extra += 2 if monk >= 11 else 1
             if monk <= 8:
                 sit = sit + [("untyped", -2 if monk <= 4 else -1, "flurry of blows")]
         seq = [babs[0]] * (1 + extra + (1 if rapid else 0)) + babs[1:]
@@ -1713,6 +1836,8 @@ class Combat:
             off_babs = [babs[0]]
             if p.has_feat("Improved Two-Weapon Fighting"):
                 off_babs.append(babs[0] - 5)
+            if p.has_feat("Greater Two-Weapon Fighting"):
+                off_babs.append(babs[0] - 10)
             for b in off_babs:
                 if not self.active(tgt) or tgt.dead:
                     alts = [f for f in self.engaged_foes(p)]
@@ -1908,13 +2033,18 @@ class Combat:
     def act_rage(self, x: CState) -> None:
         p = x.c
         p.spend("rage")
-        con_after = (p.ability("con") or 10) + 4
+        b = p.class_level("barbarian")
+        sc, will, name = (8, 4, "MIGHTY RAGE") if b >= 20 else (6, 3, "GREATER RAGE") \
+            if b >= 11 else (4, 2, "RAGE")
+        con_after = (p.ability("con") or 10) + sc
         dur = 3 + rules.ability_mod(con_after)
-        p.add_effect(Effect("Rage", dur, [("str", "morale", 4), ("con", "morale", 4),
-                                          ("save_will", "morale", 2)], ["raging"],
-                            data={"on_end": "rage"}))
-        self.ui.warn(f"{p.name} flies into a RAGE! (+4 Str, +4 Con, +2 Will, -2 AC for "
-                     f"{dur} rounds)")
+        mods = [("str", "morale", sc), ("con", "morale", sc), ("save_will", "morale", will)]
+        if b >= 14:
+            mods.append(("saves_vs_enchantment", "untyped", 4))
+        p.add_effect(Effect("Rage", dur, mods, ["raging"],
+                            data={"on_end": "rage", "tireless": b >= 17}))
+        self.ui.warn(f"{p.name} flies into a {name}! (+{sc} Str, +{sc} Con, +{will} Will, -2 AC "
+                     f"for {dur} rounds)")
 
     def act_feat_strength(self, x: CState) -> None:
         p = x.c

@@ -108,6 +108,15 @@ FEATS = {
                                      "prereq": {"dex": 17, "bab": 6,
                                                 "feats": ["Two-Weapon Fighting"]},
                                      "fighter": True},
+    "Improved Precise Shot": {"desc": "Ranged attacks ignore concealment (short of total) "
+                                      "and cover from the melee.",
+                              "prereq": {"dex": 19, "bab": 11, "feats": ["Precise Shot"]},
+                              "fighter": True},
+    "Greater Two-Weapon Fighting": {"desc": "A third off-hand attack at -10 on a full "
+                                            "attack.",
+                                    "prereq": {"dex": 19, "bab": 11,
+                                               "feats": ["Improved Two-Weapon Fighting"]},
+                                    "fighter": True},
     "Natural Spell": {"desc": "Cast spells while in wild shape.",
                       "prereq": {"wis": 13, "wild_shape": True}},
     "Extra Smiting": {"desc": "Smite evil two more times per day.",

@@ -300,6 +300,39 @@ MAGIC.update({
                                      "natural weapons."),
 })
 
+# higher-level versions of the worn items (+3 to +6)
+for _n in (3, 4, 5):
+    MAGIC[f"ring of protection +{_n}"] = _wi("ring", f"Ring of protection +{_n}",
+                                            2000 * _n * _n, [("ac", "deflection", _n)],
+                                            f"+{_n} deflection bonus to AC.")
+    MAGIC[f"cloak of resistance +{_n}"] = _wi("cloak", f"Cloak of resistance +{_n}",
+                                             1000 * _n * _n, [("saves", "resistance", _n)],
+                                             f"+{_n} resistance bonus on all saves.", 1)
+for _n in (3, 4):
+    MAGIC[f"amulet of natural armor +{_n}"] = _wi(
+        "amulet", f"Amulet of natural armor +{_n}", 2000 * _n * _n,
+        [("ac", "natural_enh", _n)], f"+{_n} enhancement bonus to natural armor.")
+for _n in (4, 6):
+    MAGIC[f"bracers of armor +{_n}"] = _wi("bracers", f"Bracers of armor +{_n}",
+                                          1000 * _n * _n, [("ac", "armor", _n)],
+                                          f"+{_n} armor bonus to AC.", 1)
+    for _key, _kind, _ab, _nm in (("gloves of dexterity", "gloves", "dex", "Gloves of Dexterity"),
+                                  ("headband of intellect", "head", "int",
+                                   "Headband of intellect"),
+                                  ("periapt of wisdom", "amulet", "wis", "Periapt of Wisdom"),
+                                  ("cloak of charisma", "cloak", "cha", "Cloak of Charisma"),
+                                  ("amulet of health", "amulet", "con", "Amulet of health")):
+        MAGIC[f"{_key} +{_n}"] = _wi(_kind, f"{_nm} +{_n}", 1000 * _n * _n,
+                                    [(_ab, "enhancement", _n)],
+                                    f"+{_n} enhancement bonus to {_ab.upper()}.")
+MAGIC["belt of giant strength +6"] = _wi("belt", "Belt of giant strength +6", 36000,
+                                         [("str", "enhancement", 6)],
+                                         "+6 enhancement bonus to Strength.", 1)
+MAGIC["amulet of mighty fists +3"] = _wi("amulet", "Amulet of mighty fists +3", 54000,
+                                         [("natural_weapon_enh", "enhancement", 3)],
+                                         "+3 on attack and damage with unarmed strikes and "
+                                         "natural weapons.")
+
 # wands, staffs and metamagic rods
 def _wand(spell, cl, gp, lvl_note=""):
     return {"kind": "wand", "name": f"Wand of {spell.lower()}" + lvl_note, "cost": gp * GP,
@@ -460,5 +493,17 @@ SHOP_STOCK = {
              "bracers of armor +1", "bracers of armor +2", "amulet of mighty fists +1",
              "gauntlets of ogre power", "gloves of dexterity +2", "headband of intellect +2",
              "periapt of wisdom +2", "cloak of charisma +2", "amulet of health +2",
-             "belt of giant strength +4"],
+             "belt of giant strength +4",
+             "+3 longsword", "+3 greatsword", "+3 greataxe", "+3 rapier", "+3 longbow",
+             "+3 full plate", "+3 chain shirt", "+3 heavy steel shield",
+             "+4 longsword", "+4 greatsword", "+4 longbow", "+4 full plate",
+             "+5 longsword", "+5 greatsword", "+5 longbow", "+5 full plate",
+             "ring of protection +3", "ring of protection +4", "ring of protection +5",
+             "cloak of resistance +3", "cloak of resistance +4", "cloak of resistance +5",
+             "amulet of natural armor +3", "amulet of natural armor +4",
+             "bracers of armor +4", "bracers of armor +6", "belt of giant strength +6",
+             "gloves of dexterity +4", "gloves of dexterity +6", "headband of intellect +4",
+             "headband of intellect +6", "periapt of wisdom +4", "periapt of wisdom +6",
+             "cloak of charisma +4", "cloak of charisma +6", "amulet of health +4",
+             "amulet of health +6", "amulet of mighty fists +3"],
 }

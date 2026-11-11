@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import List
 
 from . import dice
-from .data.monsters import MONSTERS, WILD_SHAPES
+from .data.monsters import ELEMENTAL_SHAPES, MONSTERS, WILD_SHAPES
 from .effects import ROUNDS_PER_HOUR, ROUNDS_PER_MINUTE, Effect
 from .magic import heal, saving_throw
 
@@ -34,7 +34,11 @@ def wholeness_of_body(ui, p) -> None:
 
 def shape_options(p) -> List[str]:
     lvl = p.class_level("druid")
-    return [k for k, need in WILD_SHAPES.items() if lvl >= need]
+    out = [k for k, need in WILD_SHAPES.items() if lvl >= need] if p.uses_left("wild_shape") \
+        else []
+    if p.uses_left("elemental_shape"):
+        out += [k for k, need in ELEMENTAL_SHAPES.items() if lvl >= need]
+    return out
 
 
 def wild_shape(ui, p) -> bool:
@@ -51,7 +55,7 @@ def wild_shape(ui, p) -> bool:
     if i is None:
         return False
     key = opts[i]
-    p.spend("wild_shape")
+    p.spend("elemental_shape" if key in ELEMENTAL_SHAPES else "wild_shape")
     p.add_effect(Effect("Wild Shape", ROUNDS_PER_HOUR * p.class_level("druid"),
                         tags=["wild_shape"], data={"form": key},
                         source=MONSTERS[key]["name"]))
@@ -78,9 +82,14 @@ def _shape_heal(ui, p) -> None:
         p.damage = 0
 
 
+def courage_bonus(bard) -> int:
+    lvl = bard.class_level("bard")
+    return 1 + (lvl >= 8) + (lvl >= 14) + (lvl >= 20)
+
+
 def inspire_courage(ui, bard, party) -> None:
     bard.spend("music")
-    b = 2 if bard.class_level("bard") >= 8 else 1
+    b = courage_bonus(bard)
     ui.out(f"{bard.name} strikes up a stirring song of courage!", ("bmagenta",))
     for a in party:
         if not a.dead:
@@ -103,7 +112,7 @@ def music_options(bard, in_combat: bool):
     out = []
     if perf >= 3:
         if in_combat:
-            out.append(("courage", f"Inspire courage (+{2 if lvl >= 8 else 1} attack and "
+            out.append(("courage", f"Inspire courage (+{courage_bonus(bard)} attack and "
                                    f"damage for the party)"))
             out.append(("fascinate", f"Fascinate (up to {1 + (lvl - 1) // 3} foes stand "
                                      f"spellbound until hurt)"))
@@ -117,6 +126,9 @@ def music_options(bard, in_combat: bool):
         if in_combat and lvl >= 9 and perf >= 12:
             out.append(("greatness", "Inspire greatness (one ally: +2d10 temp hp, +2 attack, "
                                      "+1 Fort)"))
+        if in_combat and lvl >= 15 and perf >= 18:
+            out.append(("heroics", "Inspire heroics (one ally: +4 morale on saves, +4 dodge "
+                                   "AC)"))
     return out
 
 
@@ -159,6 +171,12 @@ def bardic_music(ui, bard, allies, enemies, kind: str) -> None:
                                 tags=["frightened"], source=bard.name))
             ui.good(f"  {bard.name} sings softly that this fight isn't worth it... and "
                     f"{f.name} agrees, and walks away.")
+    elif kind == "heroics":
+        tgt = allies[0] if len(allies) == 1 else allies[ui.choose(
+            "Inspire whom?", [a.name for a in allies])]
+        tgt.add_effect(Effect("Inspire heroics", 10, [("saves", "morale", 4),
+                                                      ("ac", "dodge", 4)]))
+        ui.good(f"{tgt.name} stands like a legend: +4 on saves, +4 AC.")
     elif kind == "greatness":
         tgt = allies[0] if len(allies) == 1 else allies[ui.choose(
             "Inspire whom?", [a.name for a in allies])]
@@ -184,9 +202,10 @@ def ability_menu(ui, party) -> None:
         if p.uses_left("wholeness") and p.damage > 0:
             acts.append((f"{p.name}: wholeness of body ({p.uses_left('wholeness')} hp left)",
                          p, "whole"))
-        if p.uses_left("wild_shape") and not p.wild_form():
-            acts.append((f"{p.name}: wild shape ({p.uses_left('wild_shape')} left today)",
-                         p, "shape"))
+        if (p.uses_left("wild_shape") or p.uses_left("elemental_shape")) and not p.wild_form():
+            acts.append((f"{p.name}: wild shape ({p.uses_left('wild_shape')} left today"
+                         + (f", {p.uses_left('elemental_shape')} elemental"
+                            if p.uses_left("elemental_shape") else "") + ")", p, "shape"))
         if p.wild_form():
             acts.append((f"{p.name}: return to normal form", p, "revert"))
         if p.uses_left("protective_ward"):

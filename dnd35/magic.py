@@ -22,6 +22,13 @@ def saving_throw(ui, target: Creature, kind: str, dc: int, tags: Sequence[str] =
     total = roll + bonus
     ok = (roll == 20) or (roll != 1 and total >= dc)
     names = {"fort": "Fortitude", "ref": "Reflex", "will": "Will"}
+    if not ok and "enchantment" in tags and "slippery mind" in getattr(
+            target, "rogue_specials", []) and not getattr(target, "_slipped", False):
+        ui.roll(f"{target.name} {names[kind]} save: {total} vs DC {dc} -> failed... slippery "
+                f"mind! Rerolling.")
+        roll = dice.d20()
+        total = roll + bonus
+        ok = (roll == 20) or (roll != 1 and total >= dc)
     if not ok and getattr(target, "is_pc", False) and target.uses_left("good_fortune"):
         target.spend("good_fortune")
         ui.roll(f"{target.name} {names[kind]} save: d20={roll} {bonus:+d} = {total} vs DC {dc} "
@@ -127,6 +134,7 @@ def duration(spell: str, cl: int) -> int:
         "Greater Invisibility": cl, "Stoneskin": 10 * ROUNDS_PER_MINUTE * cl,
         "Righteous Might": cl, "Dispel Evil": cl,
         "Invisibility": ROUNDS_PER_MINUTE * cl, "Fly": ROUNDS_PER_MINUTE * cl,
+        "Globe of Invulnerability": cl,
         "Entropic Shield": ROUNDS_PER_MINUTE * cl, "Fire Shield": cl, "Confusion": cl,
         "Protection from Energy": 10 * ROUNDS_PER_MINUTE * cl,
     }
@@ -179,21 +187,29 @@ def drain_level(ui, target, dc: int) -> None:
     target.check_death()
 
 
-def raise_dead(ui, target) -> None:
-    """Bring a dead hero back (Raise Dead / temple service), with the 3.5 cost in
-    simplified form: XP drops to half a level below the hero's current level (or 2
-    Constitution at 1st level)."""
+REVIVE = {"Raise Dead": (5000, 2), "Resurrection": (10000, 4), "True Resurrection": (25000, 0)}
+
+
+def raise_dead(ui, target, spell: str = "Raise Dead") -> None:
+    """Bring a dead hero back. Simplified 3.5 cost: raise dead drops XP half a level below
+    the hero's level (or -2 Con at 1st level), resurrection a quarter level, true
+    resurrection nothing."""
     target.dead = False
     target.stable = True
     target.effects = []
-    target.damage = max(0, target.max_hp() - max(1, target.level))
-    if target.level <= 1:
+    target.nonlethal = 0
+    frac = REVIVE.get(spell, (0, 2))[1]
+    target.damage = max(0, target.max_hp() - max(1, target.level)) if spell == "Raise Dead" \
+        else 0
+    if not frac:
+        pass
+    elif target.level <= 1:
         target.base_abilities["con"] = max(3, target.base_abilities["con"] - 2)
         ui.warn(f"  {target.name} returns weakened: -2 Constitution.")
     else:
         lo = rules.xp_for_level(target.level - 1)
         hi = rules.xp_for_level(target.level)
-        target.xp = min(target.xp, hi - (hi - lo) // 2)
+        target.xp = min(target.xp, hi - (hi - lo) // frac)
         ui.warn(f"  {target.name} returns, but much of their recent experience is lost "
                 f"(XP now {target.xp}).")
     for by_level in getattr(target, "prepared", {}).values():
@@ -313,7 +329,7 @@ def resists(ui, caster, target, cl: int) -> bool:
 
 
 # ---------------------------------------------------------------- dispel
-def dispel(ui, caster, target, cl: int, allies) -> None:
+def dispel(ui, caster, target, cl: int, allies, greater: bool = False) -> None:
     ally_names = {a.name for a in allies}
     hostile = target not in allies
     pool = [e for e in target.effects if e.data.get("cl") and
@@ -324,16 +340,17 @@ def dispel(ui, caster, target, cl: int, allies) -> None:
     any_gone = False
     for e in list(pool):
         r = dice.d20()
-        tot = r + min(10, cl)
+        cap = 20 if greater else 10
+        tot = r + min(cap, cl)
         dc = 11 + e.data["cl"]
-        ui.roll(f"Dispel check vs {e.name}: d20={r}+{min(10, cl)} = {tot} vs DC {dc}")
+        ui.roll(f"Dispel check vs {e.name}: d20={r}+{min(cap, cl)} = {tot} vs DC {dc}")
         if tot >= dc:
             target.effects.remove(e)
             ui.good(f"  {e.name} on {target.name} is dispelled!")
             any_gone = True
             if e.data.get("summoned"):
                 target.dead = True
-        if hostile and any_gone:
+        if hostile and any_gone and not greater:
             break   # a targeted dispel strips the strongest effect it can reach
     if not any_gone:
         ui.out("  The magic holds.")
@@ -343,12 +360,19 @@ def dispel(ui, caster, target, cl: int, allies) -> None:
 SUMMON_LISTS = {
     "Summon Monster": {1: ["dire rat", "eagle"], 2: ["wolf", "riding dog"],
                        3: ["black bear", "leopard"], 4: ["dire wolf", "owlbear"],
-                       5: ["brown bear", "dire boar"]},
+                       5: ["brown bear", "dire boar"], 6: ["troll", "wyvern"],
+                       7: ["large fire elemental", "large earth elemental"],
+                       8: ["large air elemental", "large water elemental", "mummy"],
+                       9: ["juvenile white dragon", "ogre mage"]},
     "Summon Nature's Ally": {1: ["eagle", "dire rat"], 2: ["wolf", "riding dog"],
                              3: ["black bear", "leopard"], 4: ["dire boar", "dire wolf"],
-                             5: ["brown bear", "owlbear"]},
+                             5: ["brown bear", "owlbear"],
+                             6: ["large air elemental", "large earth elemental"],
+                             7: ["large fire elemental", "large water elemental"],
+                             8: ["wyvern", "large earth elemental"],
+                             9: ["juvenile white dragon", "large air elemental"]},
 }
-ROMAN = {1: "I", 2: "II", 3: "III", 4: "IV", 5: "V"}
+ROMAN = {1: "I", 2: "II", 3: "III", 4: "IV", 5: "V", 6: "VI", 7: "VII", 8: "VIII", 9: "IX"}
 
 
 def summon_info(spell: str):
@@ -378,6 +402,14 @@ def _cast_spell(ui, caster, spell_name, targets, cl, dc, combat, allies, enemies
     meta_txt = " (" + ", ".join(sorted(m.split()[0].lower() for m in _META)) + ")" \
         if _META else ""
     ui.out(f"{caster.name} casts {spell_name}{meta_txt}!", ("bmagenta",))
+    if sp["target"] in ("enemy", "enemies", "creature") and min(sp["levels"].values()) <= 4:
+        shielded = [t for t in targets if t.get_effect("Globe of Invulnerability")
+                    and t not in (allies or []) and t is not caster]
+        for t in shielded:
+            ui.out(f"  The spell breaks against {t.name}'s shimmering globe.")
+        targets = [t for t in targets if t not in shielded]
+        if not targets:
+            return True
     if sp["sr"] and sp["target"] in ("enemy", "enemies"):
         kept = [t for t in targets if t is caster or t in (allies or [])
                 or not resists(ui, caster, t, cl)]
@@ -766,7 +798,7 @@ def _cast_spell(ui, caster, spell_name, targets, cl, dc, combat, allies, enemies
             t0.afflictions = []
         else:
             ui.out(f"  {t0.name} has no disease to cure.")
-    elif n == "Mass Cure Light Wounds":
+    elif n.startswith("Mass Cure"):
         for a in allies:
             if not a.dead:
                 _cure(ui, caster, a, n, cl, dc, stags, combat)
@@ -902,8 +934,8 @@ def _cast_spell(ui, caster, spell_name, targets, cl, dc, combat, allies, enemies
              tags=["invisible"])
     elif n == "Fly":
         buff(t0, "Fly", [("speed", "enhancement", 30)], tags=["flying"])
-    elif n == "Dispel Magic":
-        dispel(ui, caster, t0, cl, allies or [caster])
+    elif n in ("Dispel Magic", "Greater Dispel Magic"):
+        dispel(ui, caster, t0, cl, allies or [caster], greater=n.startswith("Greater"))
     elif n.startswith(("Summon Monster", "Summon Nature's Ally")):
         base, lvl = summon_info(n)
         if combat is None:
@@ -914,11 +946,229 @@ def _cast_spell(ui, caster, spell_name, targets, cl, dc, combat, allies, enemies
                 "Summon which creature?", [MONSTERS[k]["name"] for k in pool], default=0)]
             rounds = cl * (2 if "Extend Spell" in _META else 1)
             combat.add_summon(caster, key, rounds)
-    elif n == "Raise Dead":
+    # ------------------------------------------------------------ 5th-9th (v4)
+    elif n in ("Mass Bull's Strength", "Mass Cat's Grace", "Mass Bear's Endurance",
+               "Mass Owl's Wisdom", "Mass Eagle's Splendor"):
+        ab = {"Bull's": "str", "Cat's": "dex", "Bear's": "con", "Owl's": "wis",
+              "Eagle's": "cha"}[n.split()[1]]
+        for a in allies:
+            if not a.dead:
+                buff(a, n.replace("Mass ", ""), [(ab, "enhancement", 4)],
+                     dur=ROUNDS_PER_MINUTE * cl)
+    elif n == "Greater Heroism":
+        hp = min(20, cl)
+        t0.temp_hp += hp
+        buff(t0, "Greater Heroism", [("attack", "morale", 4), ("saves", "morale", 4),
+                                     ("skills", "morale", 4)], tags=["fearless"],
+             dur=ROUNDS_PER_MINUTE * cl, data={"on_end": "temp_hp", "amount": hp})
+    elif n == "Song of Discord":
+        for t in targets:
+            if t.dead:
+                continue
+            if _mind_immune(t, sp["tags"]):
+                ui.out(f"  {t.name} is unaffected.")
+            elif not saving_throw(ui, t, "will", dc, stags):
+                buff(t, "Discord", tags=["confused"], dur=cl)
+    elif n == "Heroes' Feast":
+        for a in allies:
+            if a.dead:
+                continue
+            hp = _sroll("1d8").total + cl // 2
+            a.temp_hp += hp
+            buff(a, "Heroes' Feast", [("attack", "morale", 1), ("save_will", "morale", 1)],
+                 tags=["fearless", "feasted"], dur=12 * ROUNDS_PER_HOUR,
+                 data={"on_end": "temp_hp", "amount": hp})
+    elif n == "Chain Lightning":
+        r = _sroll(f"{min(20, cl)}d6")
+        ui.roll(r.detail())
+        for i, t in enumerate(targets):
+            _area_damage(ui, t, r.total if i == 0 else r.total // 2, "electricity", dc, stags,
+                         combat)
+    elif n == "Disintegrate":
+        if touch_attack(ui, caster, t0, True, combat):
+            if saving_throw(ui, t0, "fort", dc, stags):
+                r = _sroll("5d6")
+            else:
+                r = _sroll(f"{min(40, 2 * cl)}d6")
+            ui.roll(r.detail())
+            deal_damage(ui, t0, r.total, "force", combat)
+            if t0.dead:
+                ui.bad(f"  {t0.name} crumbles into a heap of fine grey dust!")
+    elif n == "Globe of Invulnerability":
+        buff(caster, "Globe of Invulnerability", tags=["globe"])
+    elif n in ("Heal", "Mass Heal"):
+        for t in (targets if n == "Heal" else [a for a in allies if not a.dead]):
+            amt = min(150, 10 * cl)
+            if t.ctype == "undead":
+                if saving_throw(ui, t, "will", dc, stags):
+                    amt //= 2
+                deal_damage(ui, t, min(amt, max(0, t.hp - 1)), "positive", combat)
+                continue
+            heal(ui, t, amt)
+            t.ability_damage = {}
+            t.afflictions = []
+            for e in list(t.effects):
+                if e.tags & {"fatigued", "exhausted", "confused", "stunned", "dazed", "blinded"}:
+                    t.effects.remove(e)
+    elif n == "Harm":
+        if touch_attack(ui, caster, t0, False, combat):
+            amt = min(150, 10 * cl)
+            if t0.ctype == "undead":
+                heal(ui, t0, amt)
+            else:
+                if saving_throw(ui, t0, "will", dc, stags):
+                    amt //= 2
+                deal_damage(ui, t0, min(amt, max(0, t0.hp - 1)), "negative", combat)
+    elif n == "Blade Barrier":
+        r = _sroll(f"{min(15, cl)}d6")
+        ui.roll(r.detail())
+        for t in targets:
+            _area_damage(ui, t, r.total, "S", dc, stags, combat)
+    elif n in ("Delayed Blast Fireball", "Fire Storm"):
+        r = _sroll(f"{min(20, cl)}d6")
+        ui.roll(r.detail())
+        for t in targets:
+            _area_damage(ui, t, r.total, "fire", dc, stags, combat)
+    elif n in ("Finger of Death", "Destruction", "Implosion"):
+        if not t0.is_living() or "death" in t0.immunities():
+            ui.out(f"  {t0.name} is unaffected by the death magic.")
+        elif saving_throw(ui, t0, "fort", dc, stags):
+            if n != "Implosion":
+                r = _sroll(f"3d6+{min(25, cl)}" if n == "Finger of Death" else "10d6")
+                ui.roll(r.detail())
+                deal_damage(ui, t0, r.total, "negative", combat)
+        else:
+            ui.bad(f"  {t0.name} dies!" + (" Its body crumbles to ash." if n == "Destruction"
+                                           else ""))
+            t0.damage = t0.max_hp() + 10
+            t0.dead = True
+            if combat is not None:
+                combat.after_damage(t0)
+            else:
+                report_down(ui, t0)
+    elif n in ("Power Word Blind", "Power Word Stun", "Power Word Kill"):
+        cap = {"Blind": 200, "Stun": 150, "Kill": 100}[n.split()[-1]]
+        if t0.hp > cap:
+            ui.out(f"  {t0.name} is too mighty ({t0.hp} hp) for the word to take hold.")
+        elif n.endswith("Blind"):
+            buff(t0, "Blinded (power word)", tags=["blinded"], dur=None)
+        elif n.endswith("Stun"):
+            d = _sroll("4d4" if t0.hp <= 50 else "2d4" if t0.hp <= 100 else "1d4").total
+            buff(t0, "Stunned (power word)", tags=["stunned"], dur=d)
+        elif "death" in t0.immunities():
+            ui.out(f"  {t0.name} is warded against death.")
+        else:
+            ui.bad(f"  {t0.name} hears the word, and dies.")
+            t0.damage = t0.max_hp() + 10
+            t0.dead = True
+            if combat is not None:
+                combat.after_damage(t0)
+    elif n == "Mordenkainen's Sword":
+        buff(caster, "Mordenkainen's Sword", tags=["_spiritual_weapon"],
+             data={"target": t0.uid, "bonus": cl + 3 + caster.mod("int"), "damage": "4d6+3"},
+             dur=cl)
+        ui.out(f"  A shimmering blade of force springs into being and flies at {t0.name}.")
+        if combat is not None:
+            combat.spiritual_weapon_attack(caster, "Mordenkainen's Sword")
+    elif n == "Holy Word":
+        for t in targets:
+            if t.dead or not t.evil:
+                if not t.dead:
+                    ui.out(f"  {t.name} is not evil and is unharmed.")
+                continue
+            hd = t.hit_dice()
+            if hd <= cl - 10:
+                ui.bad(f"  {t.name} is struck dead by the holy word!")
+                t.dead = True
+                if combat is not None:
+                    combat.after_damage(t)
+            elif hd <= cl - 5:
+                buff(t, "Paralyzed (holy word)", tags=["paralyzed"], dur=_sroll("1d10").total)
+            elif hd <= cl - 1:
+                buff(t, "Blinded (holy word)", tags=["blinded"], dur=_sroll("2d4").total)
+            elif hd <= cl:
+                buff(t, "Deafened (holy word)", [("init", "untyped", -4)],
+                     dur=_sroll("1d4").total)
+    elif n == "Creeping Doom":
+        for t in targets:
+            if not t.dead:
+                buff(t, "Creeping Doom", tags=["_dot"], dur=cl,
+                     data={"dot": "2d6", "dtype": "untyped_magic"})
+    elif n in ("Sunbeam", "Sunburst"):
+        for t in targets:
+            if t.dead:
+                continue
+            if t.ctype == "undead":
+                r = _sroll(f"{min(20 if n == 'Sunbeam' else 25, cl)}d6")
+            else:
+                r = _sroll("4d6" if n == "Sunbeam" else "6d6")
+            saved = saving_throw(ui, t, "ref", dc, stags)
+            amt = r.total // 2 if saved else r.total
+            deal_damage(ui, t, amt, "holy", combat)
+            if not saved and not t.dead:
+                buff(t, "Blinded (sunlight)", tags=["blinded"], dur=None)
+    elif n == "Horrid Wilting":
+        r = _sroll(f"{min(20, cl)}d6")
+        ui.roll(r.detail())
+        for t in targets:
+            if t.dead or not t.is_living():
+                continue
+            amt = r.total // 2 if saving_throw(ui, t, "fort", dc, stags) else r.total
+            deal_damage(ui, t, amt, "untyped_magic", combat)
+    elif n == "Polar Ray":
+        if touch_attack(ui, caster, t0, True, combat):
+            r = _sroll(f"{min(25, cl)}d6")
+            ui.roll(r.detail())
+            deal_damage(ui, t0, r.total, "cold", combat)
+    elif n == "Holy Aura":
+        for a in allies:
+            if not a.dead:
+                buff(a, "Holy Aura", [("ac", "deflection", 4), ("saves", "resistance", 4)],
+                     dur=cl)
+    elif n == "Meteor Swarm":
+        for t in targets:
+            if t.dead:
+                continue
+            b = _sroll("2d6")
+            deal_damage(ui, t, b.total, "B", combat, magic=True)
+            if not t.dead:
+                f = _sroll("6d6")
+                ui.roll(f"Meteor fire: {f.detail()}")
+                _area_damage(ui, t, f.total, "fire", dc, stags, combat)
+    elif n == "Wail of the Banshee":
+        for t in targets:
+            if t.dead or not t.is_living() or "death" in t.immunities():
+                continue
+            if not saving_throw(ui, t, "fort", dc, stags):
+                ui.bad(f"  {t.name}'s heart stops at the scream!")
+                t.dead = True
+                if combat is not None:
+                    combat.after_damage(t)
+    elif n == "Mass Hold Monster":
+        for t in targets:
+            if not t.dead:
+                _hold(ui, t, dc, stags, "Hold Monster", buff,
+                      t.is_living() and not _mind_immune(t, sp["tags"]), "mindless")
+    elif n == "Storm of Vengeance":
+        for t in targets:
+            if t.dead:
+                continue
+            deal_damage(ui, t, _sroll("1d6").total, "acid", combat)
+            if not t.dead:
+                _area_damage(ui, t, _sroll("10d6").total, "electricity", dc, stags, combat)
+            if not t.dead:
+                deal_damage(ui, t, _sroll("5d6").total, "B", combat, magic=True)
+    elif n == "Elemental Swarm":
+        if combat is None:
+            ui.out("  The elements stir, but there's nothing to fight.")
+        else:
+            for k in ("large fire elemental", "large earth elemental", "large air elemental"):
+                combat.add_summon(caster, k, 100)
+    elif n in REVIVE:
         if not t0.dead:
             ui.out(f"  {t0.name} isn't dead.")
         else:
-            raise_dead(ui, t0)
+            raise_dead(ui, t0, n)
     elif n == "Righteous Might":
         buff(caster, "Righteous Might", [("str", "size", 4), ("con", "size", 4),
                                          ("dex", "size", -2), ("ac", "natural_enh", 2)],
@@ -997,7 +1247,9 @@ def _area_damage(ui, t: Creature, total: int, dtype: str, dc: int, stags, combat
 def _cure(ui, caster, t, n, cl, dc, stags, combat) -> None:
     table = {"Cure Minor Wounds": (0, 0), "Cure Light Wounds": (1, 5),
              "Cure Moderate Wounds": (2, 10), "Cure Serious Wounds": (3, 15),
-             "Cure Critical Wounds": (4, 20), "Mass Cure Light Wounds": (1, 25)}
+             "Cure Critical Wounds": (4, 20), "Mass Cure Light Wounds": (1, 25),
+             "Mass Cure Moderate Wounds": (2, 30), "Mass Cure Serious Wounds": (3, 35),
+             "Mass Cure Critical Wounds": (4, 40)}
     nd, cap = table[n]
     if getattr(caster, "domains", None) and "Healing" in caster.domains:
         cl += 1
@@ -1190,7 +1442,7 @@ def _cast_for(ui, who, party) -> None:
         return
     casts = [c for c in who.available_casts()
              if SPELLS[c["spell"]]["target"] in ("ally", "self", "allies", "none")
-             and (c["spell"] != "Raise Dead" or any(p.dead for p in party))]
+             and (c["spell"] not in REVIVE or any(p.dead for p in party))]
     if not casts:
         ui.out(f"{who.name} has no spells useful outside combat right now.")
         return
@@ -1208,20 +1460,20 @@ def _cast_for(ui, who, party) -> None:
         if comp is not None and not comp.dead:
             living.append(comp)
     target = who
-    if cast["spell"] == "Raise Dead":
+    if cast["spell"] in REVIVE:
         dead = [p for p in party if p.dead]
         if not dead:
             ui.out("No one here needs raising (thankfully).")
             return
         target = dead[0] if len(dead) == 1 else dead[ui.choose("Raise whom?",
                                                                [p.name for p in dead])]
-        cost = 5000 * 100
-        if who.cp < cost:
-            ui.bad(f"Raise Dead needs a diamond worth 5,000 gp, and {who.name} has only "
+        gp = REVIVE[cast["spell"]][0]
+        if who.cp < gp * 100:
+            ui.bad(f"{cast['spell']} needs a diamond worth {gp:,} gp, and {who.name} has only "
                    f"{rules.money_str(who.cp)}. (Pool the party's gold first.)")
             return
-        who.cp -= cost
-        ui.out(f"{who.name} crushes a 5,000 gp diamond over {target.name}'s body...")
+        who.cp -= gp * 100
+        ui.out(f"{who.name} crushes a {gp:,} gp diamond over {target.name}'s body...")
     elif sp["target"] == "ally" and len(living) > 1:
         target = living[ui.choose("Target", [f"{p.name} ({p.hp}/{p.max_hp()} hp)"
                                              for p in living])]

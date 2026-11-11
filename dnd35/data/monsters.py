@@ -562,6 +562,39 @@ MONSTERS["heavy warhorse"] = {
     "desc": "A great white warhorse with intelligent eyes and a coat that seems to glow.",
 }
 
+def _elemental(name, ab, natural, slam, speed, desc, extra=None, **kw):
+    d = {"name": f"Large {name} Elemental", "type": "elemental", "subtypes": [name.lower()],
+         "size": "large", "hd": 8, "hit_die": 8, "bab": 6, "cr": 5,
+         "abilities": dict(zip(("str", "dex", "con", "int", "wis", "cha"), ab)),
+         "natural": natural, "speed": speed,
+         "natural_attacks": [{"name": "slam", "damage": slam, "dtype": "B", "primary": True,
+                              **({"extra_damage": extra} if extra else {})},
+                             {"name": "slam", "damage": slam, "dtype": "B", "primary": True,
+                              **({"extra_damage": extra} if extra else {})}],
+         "immune": ["poison", "sleep", "paralysis", "stun", "mind-affecting"],
+         "mindless": False, "skills": {"Listen": 7, "Spot": 7}, "feats": ["Power Attack"],
+         "vision": "darkvision 60 ft.", "desc": desc}
+    d.update(kw)
+    return d
+
+
+MONSTERS.update({
+    "large air elemental": _elemental("Air", (18, 25, 16, 6, 11, 11), 4, "2d6", 30,
+                                      "A howling column of wind with a vague, angry face.",
+                                      fly=100, base_saves=(4, 8, 2)),
+    "large earth elemental": _elemental("Earth", (25, 8, 19, 6, 11, 11), 10, "2d8", 20,
+                                        "A hulking mass of stone and soil that shakes the "
+                                        "ground.", base_saves=(8, 2, 2)),
+    "large fire elemental": _elemental("Fire", (16, 25, 16, 6, 11, 11), 4, "2d6", 50,
+                                       "A roaring pillar of living flame.", ["1d8", "fire"],
+                                       base_saves=(4, 8, 2), vulnerable=["cold"]),
+    "large water elemental": _elemental("Water", (24, 14, 19, 6, 11, 11), 7, "2d10", 20,
+                                        "A surging wave that rises up with grasping arms.",
+                                        base_saves=(8, 4, 2)),
+})
+MONSTERS["large fire elemental"]["immune"] = MONSTERS["large fire elemental"]["immune"] + [
+    "fire"]
+
 # Animal companions: key -> (minimum effective druid level, levels subtracted)
 COMPANIONS = {
     "wolf": (1, 0), "riding dog": (1, 0), "eagle": (1, 0),
@@ -585,3 +618,5 @@ FAMILIARS = {
 WILD_SHAPES = {  # key: minimum druid level
     "wolf": 5, "black bear": 5, "leopard": 5, "brown bear": 8, "dire wolf": 8,
 }
+ELEMENTAL_SHAPES = {"large air elemental": 16, "large earth elemental": 16,
+                    "large fire elemental": 16, "large water elemental": 16}

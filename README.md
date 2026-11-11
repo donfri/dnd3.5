@@ -154,10 +154,17 @@ Command-line options:
 - 7 races: human, dwarf, elf, gnome, half-elf, half-orc, halfling, with all
   their combat-relevant traits (stonecunning, sleep immunity, +1 vs goblinoids,
   size modifiers, and so on).
-- All 11 core classes, levels 1 to 10: barbarian, bard, cleric, druid, fighter,
+- All 11 core classes, levels 1 to 20: barbarian, bard, cleric, druid, fighter,
   monk, paladin, ranger, rogue, sorcerer, wizard. **Multiclassing** is supported,
   and class alignment rules apply (paladins are lawful good, monks lawful, and so
   on).
+- **Prestige classes** (each with its Dungeon Master's Guide requirements):
+  Eldritch Knight, Mystic Theurge, Arcane Trickster, Dwarven Defender, Duelist,
+  Arcane Archer, and Assassin (without assassin spells).
+- High-level class features: greater and mighty rage, rogue special abilities
+  (crippling strike, defensive roll, slippery mind...), monk greater flurry,
+  diamond soul, quivering palm and perfect self, elemental wild shape, inspire
+  heroics, and combat style mastery.
 - Ability scores by 4d6-drop-lowest (with the PHB reroll rule), the elite array,
   or 25-point buy.
 - All 44 skills, with class/cross-class ranks, synergies, armor check penalties,
@@ -193,10 +200,12 @@ Command-line options:
     and prohibited schools.
   - **Familiars:** deliver touch spells from 3rd level and scout the next area
     for you.
-- About 100 spells, cantrips through 5th level, with real effects: *magic
+- About 180 spells, cantrips through 9th level, with real effects: *magic
   missile*, *sleep*, *bless*, *hold person*, *fireball*, *haste*, *entangle*,
   *barkskin*, *call lightning*, *slow*, *stoneskin*, *flame strike*, *cone of
-  cold*, *raise dead*, and more. Casters can be prepared or spontaneous, bonus
+  cold*, *raise dead*, *heal*, *chain lightning*, *disintegrate*, *finger of death*,
+  *fire storm*, *power word kill*, *meteor swarm*, *wail of the banshee*, *true
+  resurrection*, and more. Casters can be prepared or spontaneous, bonus
   spells come from high ability scores, and arcane spell failure applies.
 - **Wands** (50 charges, spell trigger or Use Magic Device), **staffs** (several
   spells, using your caster level if it's higher), and **metamagic rods**.
@@ -324,8 +333,8 @@ python3 -m unittest discover -s tests
 - There is no battle grid. Positioning is abstracted as being "in melee with" a
   foe, which still drives attacks of opportunity, flanking, charging, full
   attacks, and firing into melee.
-- Levels are capped at 10, and spells go up to 5th level. The adventures cover
-  levels 1 to 8.
+- Levels go to 20 (no epic levels), and the adventures cover levels 1 to 8.
+  Higher-level heroes can still start any adventure, but it won't be a challenge.
 - *Raise dead* costs the hero half a level of experience instead of a whole
   level (or 2 Constitution at 1st level). The temple can cast it for 5,450 gp.
 - Familiars don't fight.

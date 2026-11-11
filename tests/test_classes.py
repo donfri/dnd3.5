@@ -17,14 +17,15 @@ from dnd35.ui import AutoUI, ScriptedUI
 
 
 class TestClassTables(unittest.TestCase):
-    def test_every_class_to_ten(self):
-        for cls in CLASSES:
+    def test_every_class_to_twenty(self):
+        from dnd35.data.classes import CLASS_ORDER
+        for cls in CLASS_ORDER:
             ch = Character("T", "human")
             ch.base_abilities = {"str": 14, "dex": 14, "con": 14, "int": 14, "wis": 14,
                                  "cha": 14}
-            for _ in range(10):
+            for _ in range(20):
                 gain_level(ch, cls, None, auto=True)
-            self.assertEqual(ch.level, 10)
+            self.assertEqual(ch.level, 20)
             render(ch)
             sheet_data(ch)
             if CLASSES[cls].get("caster"):
@@ -151,9 +152,9 @@ class TestFights(unittest.TestCase):
             self.assertIn(Combat(ui, party, ms).run(), ("victory", "defeat", "fled"))
 
     def test_max_level(self):
-        self.assertEqual(rules.MAX_LEVEL, 10)
-        ch = build_pregen("thorgar", level=10)
-        ch.xp = 10 ** 6
+        self.assertEqual(rules.MAX_LEVEL, 20)
+        ch = build_pregen("thorgar", level=20)
+        ch.xp = 10 ** 7
         self.assertFalse(ch.can_level_up())
 
 

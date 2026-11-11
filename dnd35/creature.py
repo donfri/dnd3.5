@@ -422,6 +422,8 @@ class Creature:
             typed += self.bonuses("saves_vs_spell")
         if "sonic" in tags:
             typed += self.bonuses("saves_vs_sonic")
+        if "enchantment" in tags:
+            typed += self.bonuses("saves_vs_enchantment")
         comps.extend(stacked_breakdown(typed))
         return comps
 
@@ -589,8 +591,7 @@ class Creature:
             msgs.append(f"{self.name}: {e.name} ends.")
             on_end = e.data.get("on_end")
             if on_end == "rage":
-                lvl = self.hit_dice()
-                if lvl < 17:
+                if not e.data.get("tireless"):
                     self.add_effect(Effect("Fatigued (after rage)", 10 * 60, tags=["fatigued"],
                                            source="rage"))
                     msgs.append(f"{self.name} is fatigued after raging.")

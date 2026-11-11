@@ -74,6 +74,8 @@ class Character(Creature):
         self.prohibited: List[str] = []
         self.mount: Optional[dict] = None       # paladin's special mount
         self.fallen = False                     # paladin who broke the code
+        self.rogue_specials: List[str] = []     # rogue 10/13/16/19 special abilities
+        self.prestige_target: Dict[str, str] = {}   # prestige class -> spellcasting class
 
     # ------------------------------------------------------------ basics
     @property
@@ -173,8 +175,13 @@ class Character(Creature):
         if self.class_level("ranger") >= 6 and self.combat_style and self._light_or_no_armor():
             out.append("Manyshot" if self.combat_style == "archery"
                        else "Improved Two-Weapon Fighting")
+        if self.class_level("ranger") >= 11 and self.combat_style and self._light_or_no_armor():
+            out.append("Improved Precise Shot" if self.combat_style == "archery"
+                       else "Greater Two-Weapon Fighting")
         if self.class_level("monk") >= 1 and "Improved Unarmed Strike" not in out:
             out.append("Improved Unarmed Strike")
+        if self.class_level("duelist") >= 9 and "Deflect Arrows" not in out:
+            out.append("Deflect Arrows")
         if self.familiar and "Alertness" not in out:
             out.append("Alertness")
         if "War" in self.domains and self.deity in DEITIES:
@@ -422,6 +429,13 @@ class Character(Creature):
         w["wielded"] = "main"
         return w
 
+    def weapon_enhancement(self, w: dict) -> int:
+        enh = super().weapon_enhancement(w)
+        aa = self.class_level("arcane archer")
+        if aa and w.get("bow"):
+            enh = max(enh, min(5, (aa + 1) // 2))
+        return enh
+
     def weapon_infos(self) -> List[dict]:
         if self.wild_form():
             return self.natural_attacks()
@@ -530,6 +544,19 @@ class Character(Creature):
             if val:
                 out.append(("monk", val, "monk AC bonus"))
         out += _comp.familiar_bonus(self, stat)
+        dd = self.class_level("dwarven defender")
+        if stat == "ac" and dd:
+            out.append(("dodge", 1 + (dd - 1) // 3, "dwarven defender"))
+        du = self.class_level("duelist")
+        if du:
+            if stat == "ac" and not self.equipped("armor") and not self.equipped("shield"):
+                intb = min(max(0, self.mod("int")), du)
+                if intb:
+                    out.append(("canny", intb, "canny defense"))
+            if stat == "init" and du >= 2:
+                out.append(("untyped", 4 if du >= 8 else 2, "improved reaction"))
+            if stat == "save_ref" and du >= 4:
+                out.append(("competence", 2, "grace"))
         if stat == "saves" and self.class_level("paladin") >= 2 and not self.fallen:
             cha = self.mod("cha")
             if cha > 0:
@@ -552,7 +579,8 @@ class Character(Creature):
         return out
 
     def trap_sense(self) -> int:
-        return self.class_level("barbarian") // 3 + self.class_level("rogue") // 3
+        return self.class_level("barbarian") // 3 + self.class_level("rogue") // 3 + \
+            self.class_level("dwarven defender") // 4
 
     def immunities(self):
         out = []
@@ -560,7 +588,15 @@ class Character(Creature):
             out += ["fear", "disease"]
         if self.class_level("monk") >= 5:
             out.append("disease")
-        if self.class_level("druid") >= 9:
+        if self.class_level("druid") >= 9 or self.class_level("monk") >= 11:
+            out.append("poison")
+        form = self.wild_form()
+        if form:
+            out += list(form.get("immune", []))
+        tg = self._effect_tags()
+        if "fearless" in tg:
+            out.append("fear")
+        if "feasted" in tg:
             out.append("poison")
         if self.get_effect("Death Ward"):
             out += ["death", "negative"]
@@ -573,6 +609,11 @@ class Character(Creature):
         b = self.class_level("barbarian")
         if b >= 7:
             out.append((1 + (b - 7) // 3, "-"))
+        if self.class_level("monk") >= 20:
+            out.append((10, "magic"))
+        dd = self.class_level("dwarven defender")
+        if dd >= 6:
+            out.append((6 if dd >= 10 else 3, "-"))
         sk = self.get_effect("Stoneskin")
         if sk:
             out.insert(0, (min(10, sk.data.get("left", 10)), "adamantine"))
@@ -590,10 +631,14 @@ class Character(Creature):
         return dict(self.race_data.get("dodge_vs", {}))
 
     def has_uncanny_dodge(self):
-        return self.class_level("barbarian") >= 2 or self.class_level("rogue") >= 4
+        return (self.class_level("barbarian") >= 2 or self.class_level("rogue") >= 4
+                or self.class_level("dwarven defender") >= 2
+                or self.class_level("assassin") >= 2)
 
     def has_improved_uncanny_dodge(self):
-        return self.class_level("barbarian") >= 5 or self.class_level("rogue") >= 8
+        return (self.class_level("barbarian") >= 5 or self.class_level("rogue") >= 8
+                or self.class_level("dwarven defender") >= 6
+                or self.class_level("assassin") >= 5)
 
     def _evasion_ok(self) -> bool:
         a = self.armor_data()
@@ -605,8 +650,12 @@ class Character(Creature):
                                        or self.class_level("ranger") >= 9)
 
     def has_improved_evasion(self) -> bool:
-        return self._evasion_ok() and (self.class_level("rogue") >= 10
+        return self._evasion_ok() and ("improved evasion" in self.rogue_specials
                                        or self.class_level("monk") >= 9)
+
+    def spell_resistance(self) -> int:
+        m = self.class_level("monk")
+        return 10 + m if m >= 13 else 0
 
     def racial_attack_bonus(self, w, target):
         out = []
@@ -630,7 +679,9 @@ class Character(Creature):
 
     def sneak_attack_dice(self):
         r = self.class_level("rogue")
-        return (r + 1) // 2 if r else 0
+        a = self.class_level("assassin")
+        return ((r + 1) // 2 if r else 0) + self.class_level("arcane trickster") // 2 + \
+            ((a + 1) // 2 if a else 0)
 
     def has_twf_style(self):
         return (self.class_level("ranger") >= 2 and self.combat_style == "two-weapon"
@@ -714,8 +765,20 @@ class Character(Creature):
                 out.append(c)
         return out
 
-    def caster_level(self, cls: str) -> int:
+    def caster_class_level(self, cls: str) -> int:
+        """Class level for spells, including prestige classes that advance it."""
         lvl = self.class_level(cls)
+        kind = CLASSES[cls].get("caster")
+        for pc, n in self.classes().items():
+            prog = CLASSES[pc].get("progression")
+            if not prog or kind not in prog:
+                continue
+            if self.prestige_target.get(f"{pc}:{kind}") == cls:
+                lvl += sum(1 for i in range(1, n + 1) if i in prog[kind])
+        return lvl
+
+    def caster_level(self, cls: str) -> int:
+        lvl = self.caster_class_level(cls)
         if CLASSES[cls].get("caster_level_half"):
             return lvl // 2 if lvl >= 4 else 0
         return lvl
@@ -728,7 +791,7 @@ class Character(Creature):
         if cls == "paladin" and self.fallen:
             return {}
         table = info.get("spells_per_day", {})
-        lvl = min(self.class_level(cls), rules.MAX_LEVEL)
+        lvl = min(self.caster_class_level(cls), rules.MAX_LEVEL)
         row = table.get(lvl)
         if not row:
             return {}
@@ -884,7 +947,12 @@ class Character(Creature):
         d = self.class_level("druid")
         if d < 5:
             return 0
-        return {5: 1, 6: 2, 7: 3, 8: 3, 9: 3}.get(d, 4)
+        return 1 if d < 6 else 2 if d < 7 else 3 if d < 10 else 4 if d < 14 else \
+            5 if d < 18 else 6
+
+    def elemental_shape_per_day(self) -> int:
+        d = self.class_level("druid")
+        return 0 if d < 16 else 1 if d < 18 else 2 if d < 20 else 3
 
     def stunning_fist_per_day(self) -> int:
         if not self.has_feat("Stunning Fist"):
@@ -903,6 +971,12 @@ class Character(Creature):
                 "music": self.music_per_day(), "wild_shape": self.wild_shape_per_day(),
                 "stunning_fist": self.stunning_fist_per_day(),
                 "wholeness": self.wholeness_pool(),
+                "elemental_shape": self.elemental_shape_per_day(),
+                "quivering_palm": 1 if self.class_level("monk") >= 15 else 0,
+                "defensive_roll": 1 if "defensive roll" in self.rogue_specials else 0,
+                "stance": (self.class_level("dwarven defender") + 1) // 2,
+                "hail_of_arrows": 1 if self.class_level("arcane archer") >= 8 else 0,
+                "arrow_of_death": 1 if self.class_level("arcane archer") >= 10 else 0,
                 **{DOMAINS[d]["use"]: 1 for d in self.domains if DOMAINS.get(d, {}).get("use")},
                 "inspire_competence": 0}.get(key, 0)
 
@@ -919,7 +993,11 @@ class Character(Creature):
                     ("wholeness", "Wholeness of body (hp)"), ("death_touch", "Death touch"),
                     ("dsmite", "Destruction smite"), ("good_fortune", "Good fortune"),
                     ("protective_ward", "Protective ward"),
-                    ("greater_turning", "Greater turning")]
+                    ("greater_turning", "Greater turning"),
+                    ("elemental_shape", "Elemental shape"),
+                    ("quivering_palm", "Quivering palm"), ("defensive_roll", "Defensive roll"),
+                    ("stance", "Defensive stance"), ("hail_of_arrows", "Hail of arrows"),
+                    ("arrow_of_death", "Arrow of death")]
 
     def daily_list(self) -> List[str]:
         return [f"{label} {self.uses_left(k)}/{self.uses_total(k)}"
@@ -944,6 +1022,9 @@ class Character(Creature):
             out.append("FALLEN PALADIN: no paladin powers until atonement")
         for fe in self.favored_enemies:
             out.append(f"Favored enemy ({fe['type']}) +{fe['bonus']}")
+        from .data.classes import ROGUE_SPECIALS
+        for sp in self.rogue_specials:
+            out.append(ROGUE_SPECIALS[sp])
         if self.combat_style:
             out.append(f"Combat style: {self.combat_style}")
         for line in (_comp.companion_line(self), _comp.mount_line(self),
@@ -983,6 +1064,7 @@ class Character(Creature):
             "bonus_hp": self.bonus_hp, "companion": self.companion,
             "nonlethal": self.nonlethal, "energy": self.energy, "specialty": self.specialty,
             "prohibited": self.prohibited, "mount": self.mount, "fallen": self.fallen,
+            "rogue_specials": self.rogue_specials, "prestige_target": self.prestige_target,
             "familiar": self.familiar,
         }
 
@@ -995,7 +1077,8 @@ class Character(Creature):
                   "spellbook", "inventory", "cp", "xp", "notes", "damage", "temp_hp",
                   "ability_damage", "stable", "dead", "afflictions", "daily",
                   "power_attack", "bonus_hp", "companion", "familiar", "nonlethal", "energy", "specialty",
-                  "prohibited", "mount", "fallen"):
+                  "prohibited", "mount", "fallen", "rogue_specials",
+                  "prestige_target"):
             if k in d:
                 setattr(c, k, d[k])
         c.spells_known = {int(k): v for k, v in d.get("spells_known", {}).items()}

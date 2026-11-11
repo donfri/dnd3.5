@@ -501,7 +501,7 @@ def learn_spells(ch: Character, cls: str, ui, auto: bool, first: bool) -> None:
             if not auto:
                 ui.good(f"Learned {pick}.")
     elif CLASSES[cls].get("spells_known"):
-        lvl = min(ch.class_level(cls), rules.MAX_LEVEL)
+        lvl = min(ch.caster_class_level(cls), rules.MAX_LEVEL)
         known_table = CLASSES[cls]["spells_known"][lvl]
         for sl, n in enumerate(known_table):
             have = ch.spells_known.setdefault(sl, [])
@@ -610,12 +610,78 @@ def gain_hp(ch: Character, cls: str, ui, auto: bool, method: str = "ask") -> int
     return roll
 
 
+# ---------------------------------------------------------------- prestige classes
+def _casts_level(ch: Character, kind: str, level: int) -> bool:
+    return any(CLASSES[c].get("caster") == kind and
+               max(ch.spells_per_day(c) or {0: 0}) >= level for c in ch.classes()
+               if not CLASSES[c].get("prestige"))
+
+
+def prestige_eligible(ch: Character, cls: str) -> bool:
+    """DMG requirements (slightly simplified) for each prestige class."""
+    r = ch.skill_ranks
+    feats = ch.feat_list()
+    if not alignment_allowed(cls, ch.alignment):
+        return False
+    if cls == "eldritch knight":
+        return "martial" in ch.proficiencies() and _casts_level(ch, "arcane", 3)
+    if cls == "mystic theurge":
+        return (_casts_level(ch, "arcane", 2) and _casts_level(ch, "divine", 2)
+                and r.get("Knowledge (arcana)", 0) >= 6 and r.get("Knowledge (religion)", 0) >= 6)
+    if cls == "arcane trickster":
+        return (r.get("Disable Device", 0) >= 7 and r.get("Escape Artist", 0) >= 7
+                and r.get("Knowledge (arcana)", 0) >= 4 and ch.sneak_attack_dice() >= 2
+                and _casts_level(ch, "arcane", 3))
+    if cls == "dwarven defender":
+        return (ch.race == "dwarf" and ch.bab() >= 7
+                and all(f in feats for f in ("Dodge", "Endurance", "Toughness")))
+    if cls == "duelist":
+        return (ch.bab() >= 6 and all(f in feats for f in ("Dodge", "Mobility",
+                                                           "Weapon Finesse"))
+                and r.get("Perform", 0) >= 2 and r.get("Tumble", 0) >= 5)
+    if cls == "arcane archer":
+        return (ch.race in ("elf", "half-elf") and ch.bab() >= 6
+                and "Point Blank Shot" in feats and "Precise Shot" in feats
+                and any(f in feats for f in ("Weapon Focus (longbow)", "Weapon Focus (shortbow)"))
+                and _casts_level(ch, "arcane", 1))
+    if cls == "assassin":
+        return (r.get("Disguise", 0) >= 4 and r.get("Hide", 0) >= 8
+                and r.get("Move Silently", 0) >= 8)
+    return False
+
+
+def _prestige_progress(ch: Character, cls: str, clvl: int, ui, auto: bool) -> None:
+    prog = CLASSES[cls].get("progression") or {}
+    for kind, levels in prog.items():
+        key = f"{cls}:{kind}"
+        if key not in ch.prestige_target:
+            opts = [c for c in ch.classes() if CLASSES[c].get("caster") == kind
+                    and not CLASSES[c].get("prestige")]
+            if not opts:
+                continue
+            if auto or len(opts) == 1:
+                tgt = max(opts, key=ch.class_level)
+            else:
+                tgt = opts[ui.choose(f"{CLASSES[cls]['name']} advances which {kind} class?",
+                                     [CLASSES[o]["name"] for o in opts])]
+            ch.prestige_target[key] = tgt
+        if clvl in levels:
+            tgt = ch.prestige_target[key]
+            if tgt == "wizard" or CLASSES[tgt].get("spells_known"):
+                learn_spells(ch, tgt, ui, auto, False)
+            if ui and not auto:
+                ui.good(f"{ch.name}'s {CLASSES[tgt]['name']} spellcasting advances "
+                        f"(now as a level {ch.caster_class_level(tgt)} caster).")
+
+
 # ---------------------------------------------------------------- main entry
 def gain_level(ch: Character, cls: str, ui=None, auto: bool = False,
                hp_method: str = "ask") -> None:
     first = ch.level == 0
     first_in_class = ch.class_level(cls) == 0
-    before_spells = dict(ch.spells_per_day(cls)) if CLASSES[cls].get("caster") else {}
+    before_spells = {c: dict(ch.spells_per_day(c)) for c in ch.caster_classes()}
+    rec_cls = cls if cls in RECOMMENDED else (ch.class_levels[0] if ch.class_levels
+                                              else "fighter")
     ch.class_levels.append(cls)
     lvl = ch.level
     clvl = ch.class_level(cls)
@@ -624,7 +690,7 @@ def gain_level(ch: Character, cls: str, ui=None, auto: bool = False,
     # ability increase
     if lvl in ABILITY_INCREASE_LEVELS:
         if auto:
-            ab = RECOMMENDED[cls]["abilities"][0]
+            ab = RECOMMENDED[rec_cls]["abilities"][0]
         else:
             ui.sub("Ability score increase (+1)")
             opts = [f"{rules.ABILITY_NAMES[a]} ({ch.ability(a)})" for a in rules.ABILITIES]
@@ -634,7 +700,7 @@ def gain_level(ch: Character, cls: str, ui=None, auto: bool = False,
     # class features needing choices
     if cls == "cleric" and first_in_class:
         choose_deity_domains(ch, ui, auto)
-    if cls == "ranger" and clvl in (1, 5, 10):
+    if cls == "ranger" and clvl in (1, 5, 10, 15, 20):
         choose_favored_enemy(ch, ui, auto)
     if cls == "ranger" and clvl == 2:
         choose_combat_style(ch, ui, auto)
@@ -645,6 +711,16 @@ def gain_level(ch: Character, cls: str, ui=None, auto: bool = False,
         choose_familiar(ch, ui, auto)
     if cls == "wizard" and first_in_class:
         choose_specialty(ch, ui, auto)
+    if cls == "rogue" and clvl in (10, 13, 16, 19):
+        from .data.classes import ROGUE_SPECIALS
+        opts = [k for k in ROGUE_SPECIALS if k not in ch.rogue_specials]
+        if auto:
+            pick = next(k for k in ("improved evasion", "crippling strike", "defensive roll",
+                                    "slippery mind", "opportunist", "skill mastery")
+                        if k in opts)
+        else:
+            pick = opts[ui.choose("Rogue special ability", [ROGUE_SPECIALS[k] for k in opts])]
+        ch.rogue_specials.append(pick)
     if cls == "paladin" and clvl == 5 and not ch.mount:
         ch.mount = {"kind": "heavy warhorse", "name": "Valor" if auto else (
             ui.ask("Name your celestial warhorse", "Valor").strip() or "Valor"),
@@ -681,10 +757,14 @@ def gain_level(ch: Character, cls: str, ui=None, auto: bool = False,
                 ch.feats.append(opts[0])
             else:
                 ch.feats.append(opts[ui.choose("Wizard bonus feat", opts)])
+    if cls == "eldritch knight" and clvl == 1:
+        choose_feat(ch, ui, auto, fighter_bonus=True, label="eldritch knight bonus feat")
+    if CLASSES[cls].get("prestige"):
+        _prestige_progress(ch, cls, clvl, ui, auto)
     # spells
     if cls == "wizard" or CLASSES[cls].get("spells_known"):
         learn_spells(ch, cls, ui, auto, first_in_class)
-    after = ch.spells_per_day(cls) if CLASSES[cls].get("caster") else {}
+    after = {c: dict(ch.spells_per_day(c)) for c in ch.caster_classes()}
     if after and after != before_spells:
         prepare_spells(ch, ui, auto, keep_ok=False)
     if ui and not auto:
@@ -700,12 +780,17 @@ def _level_up_interactive(ch: Character, ui, heroic: bool = False) -> None:
     while ch.can_level_up():
         if not ui.confirm(f"{ch.name} can advance to level {ch.level + 1}. Level up now?", True):
             return
-        current = list(ch.classes())
+        current = [k for k in ch.classes()
+                   if ch.class_level(k) < CLASSES[k].get("max_level", 99)]
         opts = [f"{CLASSES[k]['name']} (continue, level {ch.class_level(k) + 1})"
                 for k in current]
-        others = [k for k in CLASS_ORDER if k not in current
+        others = [k for k in CLASS_ORDER if k not in ch.classes()
                   and alignment_allowed(k, ch.alignment)]
-        opts += [f"{CLASSES[k]['name']} (multiclass)" for k in others]
+        from .data.classes import PRESTIGE
+        others += [k for k in PRESTIGE if k not in ch.classes() and prestige_eligible(ch, k)]
+        opts += [f"{CLASSES[k]['name']} ("
+                 f"{'prestige class' if CLASSES[k].get('prestige') else 'multiclass'})"
+                 for k in others]
         i = ui.choose("Advance in which class?", opts, default=0)
         cls = (current + others)[i]
         auto = ui.choose("How should the choices be made?",

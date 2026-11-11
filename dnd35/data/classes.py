@@ -20,7 +20,38 @@ BARD_DAY = {1: [2], 2: [3, 0], 3: [3, 1], 4: [3, 2, 0], 5: [3, 3, 1], 6: [3, 3, 
 BARD_KNOWN = {1: [4], 2: [5, 2], 3: [6, 3], 4: [6, 3, 2], 5: [6, 4, 3], 6: [6, 4, 3],
               7: [6, 4, 4, 2], 8: [6, 4, 4, 3], 9: [6, 4, 4, 3], 10: [6, 4, 4, 4, 2]}
 HALF_CASTER_DAY = {4: [None, 0], 5: [None, 0], 6: [None, 1], 7: [None, 1], 8: [None, 1, 0],
-                   9: [None, 1, 0], 10: [None, 1, 1]}
+                   9: [None, 1, 0], 10: [None, 1, 1], 11: [None, 1, 1, 0],
+                   12: [None, 1, 1, 1], 13: [None, 1, 1, 1], 14: [None, 2, 1, 1, 0],
+                   15: [None, 2, 1, 1, 1], 16: [None, 2, 2, 1, 1], 17: [None, 2, 2, 2, 1],
+                   18: [None, 3, 2, 2, 1], 19: [None, 3, 3, 3, 2], 20: [None, 3, 3, 3, 3]}
+CLERIC_DAY.update({11: [6, 5, 4, 4, 3, 2, 1], 12: [6, 5, 4, 4, 3, 3, 2],
+                   13: [6, 5, 5, 4, 4, 3, 2, 1], 14: [6, 5, 5, 4, 4, 3, 3, 2],
+                   15: [6, 5, 5, 5, 4, 4, 3, 2, 1], 16: [6, 5, 5, 5, 4, 4, 3, 3, 2],
+                   17: [6, 5, 5, 5, 5, 4, 4, 3, 2, 1], 18: [6, 5, 5, 5, 5, 4, 4, 3, 3, 2],
+                   19: [6, 5, 5, 5, 5, 5, 4, 4, 3, 3], 20: [6, 5, 5, 5, 5, 5, 4, 4, 4, 4]})
+WIZARD_DAY.update({11: [4, 4, 4, 4, 3, 2, 1], 12: [4, 4, 4, 4, 3, 3, 2],
+                   13: [4, 4, 4, 4, 4, 3, 2, 1], 14: [4, 4, 4, 4, 4, 3, 3, 2],
+                   15: [4, 4, 4, 4, 4, 4, 3, 2, 1], 16: [4, 4, 4, 4, 4, 4, 3, 3, 2],
+                   17: [4, 4, 4, 4, 4, 4, 4, 3, 2, 1], 18: [4, 4, 4, 4, 4, 4, 4, 3, 3, 2],
+                   19: [4, 4, 4, 4, 4, 4, 4, 4, 3, 3], 20: [4, 4, 4, 4, 4, 4, 4, 4, 4, 4]})
+SORC_DAY.update({11: [6, 6, 6, 6, 6, 5, 3], 12: [6, 6, 6, 6, 6, 6, 4],
+                 13: [6, 6, 6, 6, 6, 6, 5, 3], 14: [6, 6, 6, 6, 6, 6, 6, 4],
+                 15: [6, 6, 6, 6, 6, 6, 6, 5, 3], 16: [6, 6, 6, 6, 6, 6, 6, 6, 4],
+                 17: [6, 6, 6, 6, 6, 6, 6, 6, 5, 3], 18: [6, 6, 6, 6, 6, 6, 6, 6, 6, 4],
+                 19: [6, 6, 6, 6, 6, 6, 6, 6, 6, 6], 20: [6, 6, 6, 6, 6, 6, 6, 6, 6, 6]})
+SORC_KNOWN.update({11: [9, 5, 5, 4, 3, 2, 1], 12: [9, 5, 5, 4, 3, 3, 2],
+                   13: [9, 5, 5, 4, 4, 3, 2, 1], 14: [9, 5, 5, 4, 4, 3, 3, 2],
+                   15: [9, 5, 5, 4, 4, 4, 3, 2, 1], 16: [9, 5, 5, 4, 4, 4, 3, 3, 2],
+                   17: [9, 5, 5, 4, 4, 4, 3, 3, 2, 1], 18: [9, 5, 5, 4, 4, 4, 3, 3, 3, 2],
+                   19: [9, 5, 5, 4, 4, 4, 3, 3, 3, 3], 20: [9, 5, 5, 4, 4, 4, 3, 3, 3, 3]})
+BARD_DAY.update({11: [3, 3, 3, 3, 1], 12: [3, 3, 3, 3, 2], 13: [3, 3, 3, 3, 2, 0],
+                 14: [4, 3, 3, 3, 3, 1], 15: [4, 4, 3, 3, 3, 2], 16: [4, 4, 4, 3, 3, 2, 0],
+                 17: [4, 4, 4, 4, 3, 3, 1], 18: [4, 4, 4, 4, 4, 3, 2],
+                 19: [4, 4, 4, 4, 4, 4, 3], 20: [4, 4, 4, 4, 4, 4, 4]})
+BARD_KNOWN.update({11: [6, 4, 4, 4, 3], 12: [6, 4, 4, 4, 4], 13: [6, 4, 4, 4, 4, 2],
+                   14: [6, 4, 4, 4, 4, 3], 15: [6, 4, 4, 4, 4, 3], 16: [6, 5, 4, 4, 4, 4, 2],
+                   17: [6, 5, 5, 4, 4, 4, 3], 18: [6, 5, 5, 5, 4, 4, 3],
+                   19: [6, 5, 5, 5, 5, 4, 4], 20: [6, 5, 5, 5, 5, 5, 4]})
 
 CLASSES = {
     "barbarian": {
@@ -35,6 +66,11 @@ CLASSES = {
             2: ["Uncanny Dodge"], 3: ["Trap Sense +1"], 4: ["Rage 2/day"],
             5: ["Improved Uncanny Dodge"], 6: ["Trap Sense +2"], 7: ["Damage Reduction 1/-"],
             8: ["Rage 3/day"], 9: ["Trap Sense +3"], 10: ["Damage Reduction 2/-"],
+            11: ["Greater Rage (+6 Str/Con, +3 Will)"], 12: ["Rage 4/day", "Trap Sense +4"],
+            13: ["Damage Reduction 3/-"], 14: ["Indomitable Will (+4 vs enchantment in rage)"],
+            15: ["Trap Sense +5"], 16: ["Rage 5/day", "Damage Reduction 4/-"],
+            17: ["Tireless Rage"], 18: ["Trap Sense +6"], 19: ["Damage Reduction 5/-"],
+            20: ["Mighty Rage (+8 Str/Con, +4 Will)", "Rage 6/day"],
         },
         "description": "A ferocious warrior who channels fury into raw power. High hit points, "
                        "rage for big damage.",
@@ -57,7 +93,10 @@ CLASSES = {
             1: ["Bardic Music (inspire courage +1)", "Bardic Knowledge", "Countersong",
                 "Fascinate"],
             3: ["Inspire Competence"], 6: ["Suggestion (flavor)"],
-            8: ["Inspire Courage +2"], 9: ["Inspire Greatness (flavor)"],
+            8: ["Inspire Courage +2"], 9: ["Inspire Greatness"],
+            12: ["Song of Freedom (flavor)"], 14: ["Inspire Courage +3"],
+            15: ["Inspire Heroics (+4 saves and dodge AC to an ally)"],
+            18: ["Mass Suggestion (flavor)"], 20: ["Inspire Courage +4"],
         },
         "description": "Jack of all trades: songs that inspire the party, healing and "
                        "charm magic, lots of skills.",
@@ -93,6 +132,11 @@ CLASSES = {
             2: ["Woodland Stride"], 3: ["Trackless Step"], 4: ["Resist Nature's Lure"],
             5: ["Wild Shape 1/day"], 6: ["Wild Shape 2/day"], 7: ["Wild Shape 3/day"],
             8: ["Wild Shape (Large forms)"], 9: ["Venom Immunity"], 10: ["Wild Shape 4/day"],
+            11: ["Wild Shape (Tiny forms)"], 12: ["Wild Shape (plants)"],
+            13: ["A Thousand Faces (flavor)"], 14: ["Wild Shape 5/day"],
+            15: ["Timeless Body", "Wild Shape (Huge)"], 16: ["Wild Shape (elemental 1/day)"],
+            18: ["Wild Shape 6/day", "Elemental 2/day"],
+            20: ["Elemental 3/day (Huge elementals)"],
         },
         "description": "Nature priest: healing and storm magic, an animal friend, and at 5th "
                        "level turns into beasts.",
@@ -104,9 +148,8 @@ CLASSES = {
                          "Swim"],
         "weapon_prof": ["simple", "martial"],
         "armor_prof": ["light", "medium", "heavy", "shields", "tower"],
-        "bonus_feat_levels": [1, 2, 4, 6, 8, 10],
-        "features": {1: ["Bonus Feat"], 2: ["Bonus Feat"], 4: ["Bonus Feat"],
-                     6: ["Bonus Feat"], 8: ["Bonus Feat"], 10: ["Bonus Feat"]},
+        "bonus_feat_levels": [1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20],
+        "features": {lv: ["Bonus Feat"] for lv in (1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20)},
         "description": "Master of arms and armor. The most feats, the best armor, great "
                        "attack bonus.",
     },
@@ -128,6 +171,14 @@ CLASSES = {
             4: ["Ki Strike (magic)", "Slow Fall (flavor)"], 5: ["Purity of Body"],
             6: ["Bonus Feat", "Fast Movement +20"], 7: ["Wholeness of Body"],
             9: ["Improved Evasion", "Fast Movement +30"], 10: ["Ki Strike (lawful)"],
+            11: ["Diamond Body (immune to poison)", "Greater Flurry (2 extra attacks)"],
+            12: ["Abundant Step (flavor)", "Fast Movement +40", "Unarmed 2d6"],
+            13: ["Diamond Soul (spell resistance 10 + level)"],
+            15: ["Quivering Palm (1/week)", "Fast Movement +50"],
+            16: ["Ki Strike (adamantine)", "Unarmed 2d8"],
+            17: ["Timeless Body", "Tongue of the Sun and Moon"],
+            18: ["Fast Movement +60"], 19: ["Empty Body (flavor)"],
+            20: ["Perfect Self (DR 10/magic)", "Unarmed 2d10"],
         },
         "description": "Unarmed martial artist: fast, hard to hit, flurries of blows, "
                        "great saves. No armor.",
@@ -149,7 +200,9 @@ CLASSES = {
             3: ["Aura of Courage (immune to fear)", "Divine Health (immune to disease)"],
             4: ["Turn Undead", "Spells"], 5: ["Smite Evil 2/day", "Special Mount (flavor)"],
             6: ["Remove Disease 1/week"], 9: ["Remove Disease 2/week"],
-            10: ["Smite Evil 3/day"],
+            10: ["Smite Evil 3/day"], 12: ["Remove Disease 3/week"],
+            15: ["Smite Evil 4/day", "Remove Disease 4/week"], 18: ["Remove Disease 5/week"],
+            20: ["Smite Evil 5/day"],
         },
         "description": "Holy warrior: heavy armor, smites evil, heals with a touch, shrugs "
                        "off fear and disease.",
@@ -170,6 +223,9 @@ CLASSES = {
             4: ["Animal Companion", "Spells"], 5: ["2nd Favored Enemy"],
             6: ["Improved Combat Style"], 7: ["Woodland Stride"], 8: ["Swift Tracker"],
             9: ["Evasion"], 10: ["3rd Favored Enemy"],
+            11: ["Combat Style Mastery"], 13: ["Camouflage (flavor)"],
+            15: ["4th Favored Enemy"], 17: ["Hide in Plain Sight (flavor)"],
+            20: ["5th Favored Enemy"],
         },
         "description": "Skilled hunter and tracker. Favored enemies, two-weapon or archery "
                        "style, great at skills.",
@@ -190,7 +246,11 @@ CLASSES = {
             3: ["Sneak Attack +2d6", "Trap Sense +1"], 4: ["Uncanny Dodge"],
             5: ["Sneak Attack +3d6"], 6: ["Trap Sense +2"], 7: ["Sneak Attack +4d6"],
             8: ["Improved Uncanny Dodge"], 9: ["Sneak Attack +5d6", "Trap Sense +3"],
-            10: ["Special Ability: Improved Evasion"],
+            10: ["Special Ability"], 11: ["Sneak Attack +6d6"], 12: ["Trap Sense +4"],
+            13: ["Sneak Attack +7d6", "Special Ability"], 15: ["Sneak Attack +8d6",
+                                                                "Trap Sense +5"],
+            16: ["Special Ability"], 17: ["Sneak Attack +9d6"], 18: ["Trap Sense +6"],
+            19: ["Sneak Attack +10d6", "Special Ability"],
         },
         "description": "Skill expert and backstabber: sneak attack, traps, locks, stealth.",
     },
@@ -215,10 +275,12 @@ CLASSES = {
         "armor_prof": [],
         "caster": "arcane", "cast_ability": "int", "prepared": True,
         "spells_per_day": WIZARD_DAY,
-        "bonus_feat_levels": [5, 10],
+        "bonus_feat_levels": [5, 10, 15, 20],
         "features": {1: ["Scribe Scroll", "Familiar", "Spellbook"],
                      5: ["Bonus Feat (metamagic/item creation)"],
-                     10: ["Bonus Feat (metamagic/item creation)"]},
+                     10: ["Bonus Feat (metamagic/item creation)"],
+                     15: ["Bonus Feat (metamagic/item creation)"],
+                     20: ["Bonus Feat (metamagic/item creation)"]},
         "description": "Scholar of arcane magic. Fragile, but the widest choice of spells.",
     },
 }
@@ -240,6 +302,8 @@ def alignment_allowed(cls: str, alignment: str) -> bool:
         return alignment == "Lawful Good"
     if rule == "neutral":
         return "Neutral" in alignment
+    if rule == "evil":
+        return "Evil" in alignment
     return True
 
 
@@ -380,8 +444,162 @@ STARTING_AGE = {  # base, (simple class dice, moderate, complex)
 AGE_CATEGORY = {"barbarian": 0, "rogue": 0, "sorcerer": 0, "bard": 1, "fighter": 1,
                 "paladin": 1, "ranger": 1, "cleric": 2, "druid": 2, "monk": 2, "wizard": 2}
 
-MONK_UNARMED = {"medium": {1: "1d6", 4: "1d8", 8: "1d10"},
-                "small": {1: "1d4", 4: "1d6", 8: "1d8"}}
+MONK_UNARMED = {"medium": {1: "1d6", 4: "1d8", 8: "1d10", 12: "2d6", 16: "2d8", 20: "2d10"},
+                "small": {1: "1d4", 4: "1d6", 8: "1d8", 12: "1d10", 16: "2d6", 20: "2d8"}}
+
+ROGUE_SPECIALS = {
+    "improved evasion": "Improved evasion: half damage even when you fail a Reflex save.",
+    "crippling strike": "Crippling strike: your sneak attacks also deal 2 Strength damage.",
+    "defensive roll": "Defensive roll: once per day, when a blow would drop you, a Reflex "
+                      "save (DC = damage) halves it.",
+    "slippery mind": "Slippery mind: reroll a failed save against enchantment.",
+    "opportunist": "Opportunist: once per round, an attack of opportunity against a foe an "
+                   "ally just hit.",
+    "skill mastery": "Skill mastery: take 10 on skill checks even under pressure (flavor).",
+}
 METAL_ARMOR = {"chain shirt", "scale mail", "chainmail", "breastplate", "splint mail",
                "banded mail", "half-plate", "full plate", "light steel shield",
                "heavy steel shield"}
+
+# domain spells for levels 6-9 (closest implemented spell where the SRD one isn't here)
+for _d, _sp in {
+    "Good": ["Blade Barrier", "Holy Word", "Holy Aura", "Summon Monster IX"],
+    "Healing": ["Heal", "Mass Cure Serious Wounds", "Mass Cure Critical Wounds", "Mass Heal"],
+    "Strength": ["Stoneskin", "Mass Bull's Strength", "Mass Bear's Endurance",
+                 "Mordenkainen's Sword"],
+    "War": ["Blade Barrier", "Power Word Blind", "Power Word Stun", "Power Word Kill"],
+    "Animal": ["Mass Cat's Grace", "Summon Nature's Ally VII", "Summon Nature's Ally VIII",
+               "Summon Nature's Ally IX"],
+    "Chaos": ["Song of Discord", "Power Word Blind", "Holy Aura", "Summon Monster IX"],
+    "Death": ["Harm", "Destruction", "Horrid Wilting", "Wail of the Banshee"],
+    "Destruction": ["Harm", "Disintegrate", "Horrid Wilting", "Implosion"],
+    "Evil": ["Harm", "Destruction", "Horrid Wilting", "Summon Monster IX"],
+    "Fire": ["Delayed Blast Fireball", "Fire Storm", "Sunburst", "Elemental Swarm"],
+    "Knowledge": ["Greater Dispel Magic", "Power Word Blind", "Mass Hold Monster",
+                  "Power Word Kill"],
+    "Law": ["Greater Dispel Magic", "Holy Word", "Holy Aura", "Summon Monster IX"],
+    "Luck": ["Mass Eagle's Splendor", "Greater Heroism", "Holy Aura", "Mass Heal"],
+    "Magic": ["Greater Dispel Magic", "Mordenkainen's Sword", "Polar Ray", "Meteor Swarm"],
+    "Protection": ["Globe of Invulnerability", "Holy Aura", "Mass Bear's Endurance",
+                   "Mass Heal"],
+    "Sun": ["Delayed Blast Fireball", "Sunbeam", "Sunburst", "Meteor Swarm"],
+    "Travel": ["Greater Dispel Magic", "Greater Heroism", "Mass Cat's Grace",
+               "Mass Hold Monster"],
+    "Trickery": ["Mass Eagle's Splendor", "Song of Discord", "Power Word Stun",
+                 "Mass Hold Monster"],
+}.items():
+    DOMAINS[_d]["spells"].update(dict(zip((6, 7, 8, 9), _sp)))
+
+# ---------------------------------------------------------------- prestige classes (DMG)
+PRESTIGE = {
+    "eldritch knight": {
+        "name": "Eldritch Knight", "hd": 6, "bab": "good", "good_saves": ["fort"],
+        "skill_points": 2, "max_level": 10, "progression": {"arcane": range(2, 11)},
+        "class_skills": ["Climb", "Concentration", "Craft", "Decipher Script", "Jump",
+                         "Knowledge (arcana)", "Knowledge (nobility and royalty)", "Ride",
+                         "Sense Motive", "Spellcraft", "Swim"],
+        "weapon_prof": [], "armor_prof": [],
+        "features": {1: ["Bonus fighter feat"], 2: ["+1 level of arcane spellcasting (2-10)"]},
+        "requires": "Proficiency with all martial weapons; able to cast 3rd-level arcane "
+                    "spells.",
+        "description": "Blade and spell together: fighter's attack bonus, a wizard's spells.",
+    },
+    "mystic theurge": {
+        "name": "Mystic Theurge", "hd": 4, "bab": "poor", "good_saves": ["will"],
+        "skill_points": 2, "max_level": 10,
+        "progression": {"arcane": range(1, 11), "divine": range(1, 11)},
+        "class_skills": ["Concentration", "Craft", "Decipher Script", "Knowledge (arcana)",
+                         "Knowledge (religion)", "Profession", "Sense Motive", "Spellcraft"],
+        "weapon_prof": [], "armor_prof": [],
+        "features": {1: ["+1 level of arcane AND divine spellcasting"]},
+        "requires": "Able to cast 2nd-level arcane and 2nd-level divine spells; Knowledge "
+                    "(arcana) 6 ranks, Knowledge (religion) 6 ranks.",
+        "description": "Advances both an arcane and a divine spellcasting class.",
+    },
+    "arcane trickster": {
+        "name": "Arcane Trickster", "hd": 4, "bab": "poor", "good_saves": ["ref", "will"],
+        "skill_points": 4, "max_level": 10, "progression": {"arcane": range(1, 11)},
+        "class_skills": ["Appraise", "Balance", "Climb", "Concentration", "Craft",
+                         "Decipher Script", "Disable Device", "Escape Artist",
+                         "Gather Information", "Hide", "Jump", "Knowledge (arcana)", "Listen",
+                         "Move Silently", "Open Lock", "Profession", "Search",
+                         "Sleight of Hand", "Spellcraft", "Spot", "Swim", "Tumble", "Use Rope"],
+        "weapon_prof": [], "armor_prof": [],
+        "features": {1: ["+1 level of arcane spellcasting"], 2: ["Sneak attack +1d6"],
+                     4: ["Sneak attack +2d6"], 6: ["Sneak attack +3d6"],
+                     8: ["Sneak attack +4d6"], 10: ["Sneak attack +5d6"]},
+        "requires": "Nonlawful; Disable Device 7, Escape Artist 7, Knowledge (arcana) 4; "
+                    "sneak attack +2d6; able to cast 3rd-level arcane spells.",
+        "description": "Rogue-wizard: arcane spells and ever more sneak attack.",
+        "alignment": "nonlawful",
+    },
+    "dwarven defender": {
+        "name": "Dwarven Defender", "hd": 12, "bab": "good", "good_saves": ["fort", "will"],
+        "skill_points": 2, "max_level": 10,
+        "class_skills": ["Craft", "Listen", "Sense Motive", "Spot"],
+        "weapon_prof": ["simple", "martial"],
+        "armor_prof": ["light", "medium", "heavy", "shields"],
+        "features": {1: ["AC bonus +1", "Defensive stance 1/day"], 2: ["Uncanny dodge"],
+                     3: ["Defensive stance 2/day"], 4: ["AC bonus +2", "Trap sense +1"],
+                     5: ["Defensive stance 3/day"], 6: ["DR 3/-", "Improved uncanny dodge"],
+                     7: ["AC bonus +3", "Defensive stance 4/day"],
+                     8: ["Mobile defense", "Trap sense +2"], 9: ["Defensive stance 5/day"],
+                     10: ["AC bonus +4", "DR 6/-"]},
+        "requires": "Dwarf; lawful; base attack +7; Dodge, Endurance and Toughness.",
+        "description": "An immovable wall: big hit points, dodge AC, a defensive stance.",
+        "alignment": "lawful",
+    },
+    "duelist": {
+        "name": "Duelist", "hd": 10, "bab": "good", "good_saves": ["ref"],
+        "skill_points": 4, "max_level": 10,
+        "class_skills": ["Balance", "Bluff", "Escape Artist", "Jump", "Listen", "Perform",
+                         "Sense Motive", "Spot", "Tumble"],
+        "weapon_prof": ["simple", "martial"], "armor_prof": [],
+        "features": {1: ["Canny defense (Int to AC, unarmored)"],
+                     2: ["Improved reaction +2"], 4: ["Grace (+2 Reflex)"],
+                     5: ["Precise strike +1d6"], 7: ["Elaborate parry"],
+                     8: ["Improved reaction +4"], 9: ["Deflect arrows"],
+                     10: ["Precise strike +2d6"]},
+        "requires": "Base attack +6; Dodge, Mobility, Weapon Finesse; Perform 2, Tumble 5.",
+        "description": "A nimble, unarmored blade: Int to AC and precise, deadly thrusts.",
+    },
+    "arcane archer": {
+        "name": "Arcane Archer", "hd": 8, "bab": "good", "good_saves": ["fort", "ref"],
+        "skill_points": 4, "max_level": 10,
+        "class_skills": ["Craft", "Hide", "Listen", "Move Silently", "Ride", "Spot",
+                         "Survival", "Use Rope"],
+        "weapon_prof": ["simple", "martial"], "armor_prof": ["light", "medium", "shields"],
+        "features": {1: ["Enhance arrow +1"], 3: ["Enhance arrow +2"],
+                     5: ["Enhance arrow +3"], 7: ["Enhance arrow +4"],
+                     8: ["Hail of arrows (1/day)"], 9: ["Enhance arrow +5"],
+                     10: ["Arrow of death (1/day)"]},
+        "requires": "Elf or half-elf; base attack +6; Point Blank Shot, Precise Shot, Weapon "
+                    "Focus (longbow or shortbow); able to cast 1st-level arcane spells.",
+        "description": "Elven archer-mage: every arrow becomes magic, ending in arrows of "
+                       "death.",
+    },
+    "assassin": {
+        "name": "Assassin", "hd": 6, "bab": "average", "good_saves": ["ref"],
+        "skill_points": 4, "max_level": 10,
+        "class_skills": ["Balance", "Bluff", "Climb", "Craft", "Decipher Script", "Diplomacy",
+                         "Disable Device", "Disguise", "Escape Artist", "Forgery",
+                         "Gather Information", "Hide", "Intimidate", "Jump", "Listen",
+                         "Move Silently", "Open Lock", "Search", "Sense Motive",
+                         "Sleight of Hand", "Spot", "Swim", "Tumble", "Use Magic Device",
+                         "Use Rope"],
+        "weapon_prof": ["simple", "hand crossbow", "rapier", "sap", "shortbow", "short sword"],
+        "armor_prof": ["light"],
+        "features": {1: ["Sneak attack +1d6", "Death attack"], 2: ["Uncanny dodge"],
+                     3: ["Sneak attack +2d6"], 5: ["Sneak attack +3d6",
+                                                  "Improved uncanny dodge"],
+                     7: ["Sneak attack +4d6"], 9: ["Sneak attack +5d6"]},
+        "requires": "Evil; Disguise 4, Hide 8, Move Silently 8.",
+        "description": "Killer for hire: sneak attacks and the dreaded death attack. "
+                       "(Assassin spells aren't included.)",
+        "alignment": "evil",
+    },
+}
+for _k, _v in PRESTIGE.items():
+    _v["prestige"] = True
+    _v.setdefault("gold", "0d4")
+CLASSES.update(PRESTIGE)
