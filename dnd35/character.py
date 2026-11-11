@@ -949,4 +949,9 @@ class Character(Creature):
                       for cl, dd in d.get("prepared", {}).items()}
         c.spont_used = {int(k): v for k, v in d.get("spont_used", {}).items()}
         c.effects = [Effect.from_dict(e) for e in d.get("effects", [])]
+        # heroes saved before companions/familiars existed get the default ones
+        if "familiar" not in d and (c.class_level("wizard") or c.class_level("sorcerer")):
+            _comp.choose_familiar(c, None, auto=True)
+        if "companion" not in d and _comp.effective_level(c) >= 1:
+            _comp.choose_companion(c, None, auto=True)
         return c
