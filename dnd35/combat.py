@@ -1,15 +1,17 @@
 """Turn-based D&D 3.5 combat.
 
-Positioning is abstracted as *engagement*: a creature that moves into melee with
-a foe becomes engaged with it. Engagement drives attacks of opportunity,
-flanking (two allies engaged with the same foe), firing into melee, and
-whether a creature can make a full attack (no move needed).
+Everyone stands on a 5-foot battle grid (see grid.py). Distance limits how far a
+creature can move each turn, sets range penalties, and decides who is caught in a
+spell's area. On top of the grid, a creature that moves into melee with a foe
+becomes *engaged* with it. Engagement drives attacks of opportunity, flanking
+(allies on opposite sides of the same foe), firing into melee, and whether a
+creature can make a full attack (no move needed).
 """
 from __future__ import annotations
 
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from . import dice, rules
+from . import dice, grid, rules
 from .creature import Creature
 from .data.items import item_data, item_name
 from .data.spells import SPELLS
@@ -49,6 +51,7 @@ class CState:
         self.delayed = False
         self.readied: Optional[dict] = None
         self.quickened = False
+        self.pos: Tuple[int, int] = (0, 0)
 
     @property
     def single(self) -> bool:
@@ -113,6 +116,8 @@ class Combat:
         self._name_monsters()
         self.order: List[CState] = []
         self.xp_monsters: List[Creature] = []
+        self.fell_short = False
+        self.place_tokens()
 
     def _name_monsters(self):
         counts: Dict[str, int] = {}
@@ -147,14 +152,218 @@ class Combat:
         return [self.st[u].c for u in self.s(a).engaged if u in self.st and self.active(self.st[u].c)]
 
     def engage(self, a: Creature, b: Creature) -> None:
+        if not grid.adjacent(self.s(a).pos, self.s(b).pos):
+            self.s(a).pos = self.melee_square(a, b)
         self.s(a).engaged.add(b.uid)
         self.s(b).engaged.add(a.uid)
 
-    def disengage_all(self, a: Creature) -> None:
+    def disengage_all(self, a: Creature, retreat: int = 0) -> None:
+        """Break off melee. retreat = feet the creature moves away from its foes."""
+        foes = self.engaged_foes(a)
         for u in list(self.s(a).engaged):
             if u in self.st:
                 self.st[u].engaged.discard(a.uid)
         self.s(a).engaged.clear()
+        if retreat and not a.dead and a.uid in self.st:
+            threats = [self.s(f).pos for f in (foes or self.enemies(a))]
+            self.s(a).pos = grid.step_away(self.s(a).pos, threats, self.occupied(a), retreat)
+
+    # ------------------------------------------------------------ the grid
+    def speed_of(self, cr: Creature) -> int:
+        sp = cr.speed() if callable(getattr(cr, "speed", None)) else \
+            getattr(cr, "block", {}).get("speed", 30)
+        fly = getattr(cr, "block", {}).get("fly")
+        if isinstance(fly, int) and fly > sp:
+            sp = fly
+        if cr.has_tag("slowed"):
+            sp //= 2
+        return max(5, sp or 30)
+
+    def occupied(self, but: Optional[Creature] = None) -> List[Tuple[int, int]]:
+        return [x.pos for x in self.st.values()
+                if x.c is not but and not x.c.dead and not x.fled]
+
+    def distance(self, a: Creature, b: Creature) -> int:
+        return grid.dist(self.s(a).pos, self.s(b).pos)
+
+    def place_tokens(self) -> None:
+        """Party on the west edge, foes to the east, 30-45 feet apart (20 in the dark)."""
+        gap = 20 if self.dark else 30 + 5 * (dice.die(4) - 1)
+        rows = [4, 3, 5, 2, 6, 1, 7, 0, 8]
+        pcs = [x for x in self.st.values() if x.side == "pc"]
+        mons = [x for x in self.st.values() if x.side != "pc"]
+        pcs.sort(key=lambda x: (not self.has_melee(x.c), -x.c.ac()))
+        front = 2
+        for i, x in enumerate(pcs):
+            col = front if i < 5 else front - 1 - (i - 5) // 9
+            x.pos = (max(0, col), rows[i % 5 if i < 5 else (i - 5) % 9])
+        mcol = min(grid.W - 2, front + gap // 5)
+        for i, x in enumerate(mons):
+            x.pos = (min(grid.W - 1, mcol + i // 9), rows[i % 9])
+
+    def melee_square(self, a: Creature, b: Creature) -> Tuple[int, int]:
+        """The square next to b that a would step into: closest, but on the far side
+        of b from an ally when that sets up a flank for little extra walking."""
+        bp, ap = self.s(b).pos, self.s(a).pos
+        occ = set(self.occupied(a))
+        cands = [q for q in grid.neighbors(bp) if q not in occ]
+        if not cands:
+            return grid.nearest_free(bp, occ, ap) if bp != ap else ap
+        mates = [self.s(o).pos for o in self.allies(a) if o is not a and self.is_engaged(o, b)]
+
+        def flank(q):
+            return any((q[0] - bp[0]) * (m[0] - bp[0]) + (q[1] - bp[1]) * (m[1] - bp[1]) < 0
+                       for m in mates)
+        near = min(grid.dist(ap, q) for q in cands)
+        return min(cands, key=lambda q: (grid.dist(ap, q) - (15 if flank(q) else 0)
+                                         if grid.dist(ap, q) - near <= 10 else 999,
+                                         grid.dist(ap, q)))
+
+    def feet_to_melee(self, a: Creature, b: Creature) -> int:
+        if self.is_engaged(a, b) or grid.adjacent(self.s(a).pos, self.s(b).pos):
+            return 0
+        return grid.dist(self.s(a).pos, self.melee_square(a, b))
+
+    def advance(self, cr: Creature, tgt: Creature, single: bool = False) -> bool:
+        """AI movement: close in if one move gets there (True: can still attack once),
+        otherwise run (double move) toward the target."""
+        need = self.feet_to_melee(cr, tgt)
+        sp = self.speed_of(cr)
+        if need <= sp:
+            return self.close_in(cr, tgt)
+        self.close_in(cr, tgt, budget=sp if single else 2 * sp)
+        return False
+
+    def range_penalty(self, attacker: Creature, target: Creature, w: dict):
+        """(-penalty, out_of_range) for a ranged weapon at this distance."""
+        inc = w.get("range") or 0
+        if not inc:
+            return 0, False
+        d = self.distance(attacker, target)
+        n = max(0, (d - 1) // inc)
+        limit = 5 if w.get("thrown") else 10
+        return -2 * n, n >= limit
+
+    def area_targets(self, caster: Creature, spell: str, aim,
+                     shape: Optional[Tuple[str, int]] = None) -> List[Creature]:
+        """Everyone inside the template. aim is a creature or a square."""
+        kind, size = shape or grid.AREAS[spell]
+        at = aim if isinstance(aim, tuple) else self.s(aim).pos
+        sq = set(grid.area_squares(kind, size, self.s(caster).pos, at))
+        return [x.c for x in self.st.values()
+                if self.active(x.c) and x.pos in sq and not (kind != "burst" and x.c is caster)]
+
+    def _area_catch(self, p, spell, aim, cap):
+        """(foes, allies) an area spell aimed here would affect."""
+        side = self.s(p).side
+        inside = self.area_targets(p, spell, aim)
+        at = aim if isinstance(aim, tuple) else self.s(aim).pos
+        foes = sorted([c_ for c_ in inside if self.s(c_).side != side],
+                      key=lambda c_: grid.dist(self.s(c_).pos, at))[:cap]
+        friends = [] if spell in grid.SELECTIVE else \
+            [c_ for c_ in inside if self.s(c_).side == side]
+        return foes, friends
+
+    def pick_area(self, p, spell, foes, cap) -> Optional[List[Creature]]:
+        """Aim an area spell on the grid; warns when friends would be caught."""
+        ui = self.ui
+        kind, size = grid.AREAS[spell]
+        shape_txt = {"burst": f"{size}-ft-radius burst", "cone": f"{size}-ft cone",
+                     "line": f"{size}-ft line"}[kind]
+        aims: list = list(foes)
+        if kind == "burst" and spell not in grid.SELECTIVE:
+            best, best_score = None, 0
+            for xx in range(grid.W):
+                for yy in range(grid.H):
+                    fo, fr = self._area_catch(p, spell, (xx, yy), cap)
+                    score = len(fo) - 10 * len(fr)
+                    if fo and score > best_score:
+                        best, best_score = (xx, yy), score
+            if best is not None:
+                aims.insert(0, best)
+        opts, results = [], []
+        for a in aims:
+            fo, fr = self._area_catch(p, spell, a, cap)
+            if not fo:
+                continue
+            where = (f"the best spot (square {a[0]},{a[1]})" if isinstance(a, tuple)
+                     else a.name)
+            lab = f"Aim at {where}: hits {', '.join(f.name for f in fo)}"
+            if fr:
+                lab += c(f"; ALSO {', '.join('YOU' if f is p else f.name for f in fr)}",
+                         "bred")
+            opts.append(lab)
+            results.append((fo, fr))
+        if not opts:
+            ui.bad("No foes can be caught in the area.")
+            return None
+        ui.out(f"{spell}: {shape_txt}.", ("dim",))
+        i = 0 if len(opts) == 1 else ui.choose("Where do you aim it?", opts, allow_cancel=True)
+        if i is None:
+            return None
+        fo, fr = results[i]
+        if fr:
+            ui.warn("WARNING: " + ", ".join("you" if f is p else f.name for f in fr) +
+                    " will be caught too!")
+            if not ui.confirm("Cast anyway?", False):
+                return None
+        return fo + fr
+
+    def battle_tokens(self) -> List[dict]:
+        """Who stands where, for the ASCII and web battle maps."""
+        out, used = [], set()
+        mi = 0
+        for x in self.st.values():
+            cr = x.c
+            if cr.dead or x.fled:
+                continue
+            if x.side == "pc":
+                base = cr.name[:1].upper() if cr.is_pc else cr.name[:1].lower()
+                lab = base
+                n = 2
+                while lab in used:
+                    lab = f"{base}{n}"
+                    n += 1
+                kind = "pc" if cr.is_pc else "ally"
+            else:
+                mi += 1
+                lab = str(mi) if mi < 10 else chr(ord("a") + mi - 10)
+                kind = "foe"
+            used.add(lab)
+            hp = (f"{cr.hp}/{cr.max_hp()}" if x.side == "pc" else wound_word(cr))
+            out.append({"x": x.pos[0], "y": x.pos[1], "label": lab, "name": cr.name,
+                        "side": kind, "hp": hp, "down": not cr.conscious,
+                        "flying": self.airborne(cr) if x.side != "pc" else cr.has_tag("flying"),
+                        "engaged": [self.st[u].c.name for u in x.engaged if u in self.st]})
+        return out
+
+    def battle_state(self) -> dict:
+        return {"w": grid.W, "h": grid.H, "round": self.round, "title": self.title,
+                "dark": self.dark, "tokens": self.battle_tokens()}
+
+    def sync_map(self, inline: bool = False) -> None:
+        """Push token positions to a graphical client (the web page), if any."""
+        if hasattr(self.ui, "battle"):
+            self.ui.battle(self.battle_state(), inline)
+
+    def show_map(self) -> None:
+        if hasattr(self.ui, "battle"):
+            self.sync_map(inline=True)
+            return
+        toks = self.battle_tokens()
+        cells = {}
+        for t in toks:
+            lab = (t["label"] + " ")[:2]
+            colr = {"pc": "bgreen", "ally": "green", "foe": "bred"}[t["side"]]
+            cells[(t["x"], t["y"])] = c(lab, colr) if not t["down"] else c(lab, "dim")
+        legend = []
+        for t in toks:
+            extra = " (down)" if t["down"] else (" (flying)" if t["flying"] else "")
+            legend.append(f"{t['label']}={t['name']}{extra}")
+        lines = grid.render(cells, [])
+        for ln in lines:
+            self.ui.out("  " + ln, ("dim",) if ln is lines[0] else ())
+        self.ui.out("  " + "   ".join(legend) + "   (each square is 5 ft)", ("dim",))
 
     def is_flat_footed(self, cr: Creature) -> bool:
         return self.s(cr).flat and not cr.has_uncanny_dodge()
@@ -191,7 +400,9 @@ class Combat:
             if ally is attacker:
                 continue
             if self.is_engaged(ally, target) and self.threatens(ally):
-                return True
+                tp, ap, mp = self.s(target).pos, self.s(attacker).pos, self.s(ally).pos
+                if (ap[0] - tp[0]) * (mp[0] - tp[0]) + (ap[1] - tp[1]) * (mp[1] - tp[1]) < 0:
+                    return True
         return False
 
     def best_melee(self, cr: Creature) -> Optional[dict]:
@@ -207,6 +418,7 @@ class Combat:
     def show_field(self) -> None:
         ui = self.ui
         ui.sub(f"Round {self.round}")
+        self.show_map()
         for p in self.party:
             st = self.s(p)
             eng = ", ".join(f.name for f in self.engaged_foes(p))
@@ -250,6 +462,7 @@ class Combat:
             if aware and len(aware) < len(self.order):
                 ui.warn("SURPRISE ROUND! Only those who noticed the enemy may act "
                         "(one standard or move action).")
+                self.show_map()
                 self.round = 0
                 for x in aware:
                     if self.check_end():
@@ -301,6 +514,8 @@ class Combat:
 
     def finish(self, result: str) -> str:
         ui = self.ui
+        if hasattr(ui, "battle"):
+            ui.battle(None, False)
         if result == "victory":
             helpless = [m for m in self.monsters if self.active(m) and m.helpless()]
             for m in helpless:
@@ -423,6 +638,7 @@ class Combat:
         return can
 
     def take_turn(self, x: CState, surprise: bool = False) -> None:
+        self.sync_map()
         if x.delayed:
             x.delayed = False   # coming back after delaying: start-of-turn already done
             x.std = x.move = True
@@ -459,6 +675,10 @@ class Combat:
         else:
             if self.shooting_into_melee(attacker, target) and not attacker.has_feat("Precise Shot"):
                 sit.append(("untyped", -4, "firing into melee"))
+            if target.uid in self.st and attacker.uid in self.st:
+                pen, _ = self.range_penalty(attacker, target, w)
+                if pen:
+                    sit.append(("untyped", pen, f"range {self.distance(attacker, target)} ft"))
             if target.helpless():
                 pass
         comps = attacker.attack_components(w, bab=bab, target=target, offhand=offhand, twf=twf,
@@ -873,7 +1093,7 @@ class Combat:
         if ra + ba > rd + bd:
             if tgt.get_effect("Grappling"):
                 self.end_grapple(tgt)
-            self.disengage_all(tgt)
+            self.disengage_all(tgt, retreat=5 * (1 + max(0, (ra + ba - rd - bd) // 5)))
             ui.warn(f"  {tgt.name} is shoved back out of the melee! It will have to come "
                     f"back in.")
         else:
@@ -1095,7 +1315,7 @@ class Combat:
         foe = self.engaged_foes(p)[0]
         x.move = False
         x.stepped = True
-        self.disengage_all(p)
+        self.disengage_all(p, retreat=5)
         self.ui.out(f"{p.name} takes a careful step back from {foe.name}.")
 
     def act_ready(self, x: CState) -> None:
@@ -1235,9 +1455,23 @@ class Combat:
         self.make_attack(foe, mover, w, foe.bab(), situational=sit, aoo=True)
         return mover.damage - before
 
-    def close_in(self, mover: Creature, tgt: Creature) -> bool:
-        """Mover steps into melee with tgt. Reach and readied actions may strike first.
-        Returns False if the mover was dropped on the way in."""
+    def close_in(self, mover: Creature, tgt: Creature, budget: Optional[int] = None) -> bool:
+        """Mover walks toward tgt (up to budget feet, default its speed) and steps into
+        melee if it gets there. Reach and readied actions may strike first.
+        Returns False if the mover fell short or was dropped on the way in."""
+        self.fell_short = False
+        if not self.is_engaged(mover, tgt):
+            budget = self.speed_of(mover) if budget is None else budget
+            dest = self.melee_square(mover, tgt)
+            start = self.s(mover).pos
+            if not grid.adjacent(start, self.s(tgt).pos) and grid.dist(start, dest) > budget:
+                end = grid.step_path(start, self.s(tgt).pos, self.occupied(mover), budget)
+                self.s(mover).pos = end
+                self.fell_short = True
+                moved = grid.dist(start, end)
+                self.ui.out(f"{mover.name} moves {moved} ft toward {tgt.name} "
+                            f"(now {self.distance(mover, tgt)} ft away).")
+                return False
         if self.has_reach(tgt) and not self.has_reach(mover) and not self.is_engaged(mover, tgt):
             w = self.reach_weapon(tgt)
             if w:
@@ -1484,12 +1718,18 @@ class Combat:
                      and not a.dead]
             if x.std and dying:
                 add("Stabilize a dying ally (Heal check DC 15)", self.act_stabilize, x)
+            foes = [f for f in self.enemies(p) if not self.is_engaged(p, f)
+                    and self.reachable(p, f)]
+            if foes and not entangled and not x.move and x.std and not single and \
+                    not disabled and not p.has_tag("prone"):
+                add(f"Move toward a foe again (uses your standard action; up to "
+                    f"{self.speed_of(p)} ft)", self.act_approach, x)
             if x.move:
                 if p.has_tag("prone"):
                     add("Stand up (move action, provokes)", self.act_stand, x)
-                foes = [f for f in self.enemies(p) if not self.is_engaged(p, f) and self.reachable(p, f)]
                 if foes and not entangled:
-                    add("Move into melee with a foe (move action)", self.act_approach, x)
+                    add(f"Move toward a foe (move action; up to {self.speed_of(p)} ft)",
+                        self.act_approach, x)
                 if eng and not entangled:
                     add("Move away from melee (move action, provokes attacks of opportunity)",
                         self.act_move_away, x)
@@ -1560,6 +1800,8 @@ class Combat:
             tag = []
             if self.is_engaged(p, f):
                 tag.append("in melee with you")
+            elif p.uid in self.st and f.uid in self.st:
+                tag.append(f"{self.distance(p, f)} ft")
             if f.helpless():
                 tag.append(f.status_word())
             opts.append(f"{f.name} ({wound_word(f) if not f.is_pc else str(f.hp) + ' hp'}"
@@ -1683,6 +1925,10 @@ class Combat:
             tgt = self._pick_target(p, foes)
             if not tgt:
                 return
+            if self.range_penalty(p, tgt, w)[1]:
+                ui.bad(f"{tgt.name} is {self.distance(p, tgt)} ft away, beyond the "
+                       f"{w['name']}'s maximum range.")
+                return
             if not self._ready_weapon(x, w):
                 return
             if self.engaged_foes(p):
@@ -1693,15 +1939,13 @@ class Combat:
         else:
             if not x.move or x.single or p.has_tag("entangled"):
                 foes = [f for f in foes if self.is_engaged(p, f) or (
-                    w.get("reach") and any(self.is_engaged(a, f) for a in self.allies(p)
-                                           if a is not p))] or foes
+                    w.get("reach") and self.distance(p, f) <= 10)] or foes
             tgt = self._pick_target(p, foes)
             if not tgt:
                 return
             if not self._ready_weapon(x, w):
                 return
-            reach_ok = w.get("reach") and any(self.is_engaged(a, tgt) for a in self.allies(p)
-                                              if a is not p)
+            reach_ok = w.get("reach") and self.distance(p, tgt) <= 10
             if reach_ok and not self.is_engaged(p, tgt):
                 ui.out(f"{p.name} strikes at {tgt.name} from behind the front line with "
                        f"{w['name']} (reach).")
@@ -1722,6 +1966,20 @@ class Combat:
                     return
                 if not x.move:
                     ui.bad("No move action left to close the distance.")
+                    return
+                need, sp = self.feet_to_melee(p, tgt), self.speed_of(p)
+                if need > sp:
+                    ui.warn(f"{tgt.name} is {self.distance(p, tgt)} ft away; you can move "
+                            f"{sp} ft and still attack.")
+                    if (need <= 2 * sp and not x.moved and not p.has_tag("fatigued")
+                            and not mode and not p.has_tag("prone")):
+                        if ui.confirm(f"Charge {tgt.name} instead (+2 attack, -2 AC)?", True):
+                            self.act_charge(x, tgt)
+                        return
+                    if ui.confirm(f"Move {sp} ft toward {tgt.name} instead?", True):
+                        x.move = False
+                        x.moved = True
+                        self.close_in(p, tgt)
                     return
                 x.move = False
                 x.moved = True
@@ -1903,7 +2161,7 @@ class Combat:
             return
         self.make_attack(p, tgt, w, p.bab(), power=p.power_attack)
         if p.conscious:
-            self.disengage_all(p)
+            self.disengage_all(p, retreat=max(5, self.speed_of(p) - 5))
             ui.out("...and springs back out of reach.")
 
     def act_lightning(self, x: CState, e) -> None:
@@ -1953,18 +2211,22 @@ class Combat:
         self.ui.bad(f"{p.name} strains while disabled and takes 1 damage ({p.hp} hp)!")
         self.after_damage(p)
 
-    def act_charge(self, x: CState) -> None:  # noqa: C901
+    def act_charge(self, x: CState, tgt: Optional[Creature] = None) -> None:  # noqa: C901
         p = x.c
         if p.has_tag("entangled"):
             self.ui.bad("You're entangled!")
             return
         foes = [f for f in self.enemies(p) if not self.is_engaged(p, f) and self.reachable(p, f)]
-        tgt = self._pick_target(p, foes, "Charge whom?")
+        tgt = tgt or self._pick_target(p, foes, "Charge whom?")
         if not tgt:
             return
         w = self.best_melee(p)
         if not w or w["ranged"]:
             self.ui.bad("You need a melee weapon in hand to charge.")
+            return
+        if self.feet_to_melee(p, tgt) > 2 * self.speed_of(p):
+            self.ui.bad(f"{tgt.name} is {self.distance(p, tgt)} ft away: too far to charge "
+                        f"(you can charge up to {2 * self.speed_of(p)} ft).")
             return
         x.std = x.move = False
         x.moved = True
@@ -1975,7 +2237,7 @@ class Combat:
             self.disengage_all(p)
         p.add_effect(Effect("Charging", 1, tags=["charging"]))
         self.ui.out(f"{p.name} CHARGES {tgt.name}!")
-        if not self.close_in(p, tgt):
+        if not self.close_in(p, tgt, budget=2 * self.speed_of(p)):
             return
         sit = [("untyped", 2, "charge")]
         self.make_attack(p, tgt, w, p.bab(), sit, power=p.power_attack)
@@ -1983,12 +2245,16 @@ class Combat:
     def act_approach(self, x: CState) -> None:
         p = x.c
         foes = [f for f in self.enemies(p) if not self.is_engaged(p, f) and self.reachable(p, f)]
-        tgt = self._pick_target(p, foes, "Move next to whom?")
+        tgt = self._pick_target(p, foes, "Move toward whom?")
         if not tgt:
             return
-        x.move = False
+        if x.move:
+            x.move = False
+        else:
+            x.std = False   # a second move in place of the standard action
         x.moved = True
-        self.ui.out(f"{p.name} moves into melee with {tgt.name}.")
+        if self.feet_to_melee(p, tgt) <= self.speed_of(p):
+            self.ui.out(f"{p.name} moves into melee with {tgt.name}.")
         self.close_in(p, tgt)
 
     def act_move_away(self, x: CState) -> None:
@@ -1996,14 +2262,14 @@ class Combat:
         x.move = False
         x.moved = True
         self.provoke(p, "moves out of melee", movement=True)
-        self.disengage_all(p)
+        self.disengage_all(p, retreat=self.speed_of(p))
         if p.conscious:
             self.ui.out(f"{p.name} backs away from the fight.")
 
     def act_withdraw(self, x: CState) -> None:
         p = x.c
         x.std = x.move = False
-        self.disengage_all(p)
+        self.disengage_all(p, retreat=2 * self.speed_of(p))
         self.ui.out(f"{p.name} withdraws carefully from melee.")
 
     def act_stand(self, x: CState) -> None:
@@ -2130,7 +2396,7 @@ class Combat:
                 self.disengage_all(m)
             else:
                 m.add_effect(Effect("Turned", ROUNDS_PER_MINUTE, tags=["turned"]))
-                self.disengage_all(m)
+                self.disengage_all(m, retreat=self.speed_of(m))
                 ui.good(f"  {m.name} is TURNED and cowers away from the holy light!")
         if not any_turned:
             ui.out("  The undead resist the turning.")
@@ -2184,7 +2450,7 @@ class Combat:
         if self.engaged_foes(p):
             self.provoke(p, "flees", movement=True)
         if p.conscious:
-            self.disengage_all(p)
+            self.disengage_all(p, retreat=2 * self.speed_of(p))
             self.s(p).fled = True
             self.ui.warn(f"{p.name} flees the battle!")
             # carry any unconscious friends? (no: they stay)
@@ -2347,6 +2613,8 @@ class Combat:
             if not foes:
                 return None
             n = min(sp["max_targets"], len(foes))
+            if spell in grid.AREAS and p.uid in self.st:
+                return self.pick_area(p, spell, foes, sp["max_targets"])
             if n == len(foes) and spell in ("Fireball", "Sleep"):
                 picks = list(range(len(foes)))
                 if not ui.confirm(f"Target all {len(foes)} foes?", True):
@@ -2498,7 +2766,7 @@ class Combat:
                 return
             elif r <= 75:
                 ui.out(f"{m.name} wanders off in a daze (confused).")
-                self.disengage_all(m)
+                self.disengage_all(m, retreat=self.speed_of(m))
                 return
             else:
                 near = [c_ for c_ in self.engaged_foes(m)] + \
@@ -2606,10 +2874,11 @@ class Combat:
                 ui.out(f"{m.name} wheels away into the air.")
             return
         # ranged option
-        use_ranged = ranged and (block.get("prefers_ranged") or not melee or
+        far = all(self.feet_to_melee(m, p) > self.speed_of(m) for p in targets)
+        use_ranged = ranged and (block.get("prefers_ranged") or not melee or far or
                                  (dice.percent() <= 30 and self.round <= 2))
         if use_ranged:
-            tgt = min(targets, key=lambda p: (p.ac(), p.hp))
+            tgt = min(targets, key=lambda p: (p.ac(), p.hp, self.distance(m, p)))
             w = ranged[0]
             ui.out(f"{m.name} {'fires' if not w.get('thrown') else 'hurls'} at {tgt.name}!")
             self.make_attack(m, tgt, w, m.bab())
@@ -2621,15 +2890,28 @@ class Combat:
         # approach a target: prefer one already fighting allies (gang up) or weakest
         def score(p):
             ganged = sum(1 for a in self.allies(m) if self.is_engaged(a, p))
-            return (-(ganged if dice.percent() < 60 else 0), p.hp + dice.die(6))
+            return (-(ganged if dice.percent() < 60 else 0),
+                    self.feet_to_melee(m, p) // 20, p.hp + dice.die(6))
         tgt = min(targets, key=score)
         x.moved = True
-        ui.out(f"{m.name} rushes at {tgt.name}!")
-        if not self.close_in(m, tgt):
-            return
-        if surprise or single:
-            return
-        self.monster_melee(m, tgt, full=False)
+        need, sp = self.feet_to_melee(m, tgt), self.speed_of(m)
+        if need <= sp:
+            ui.out(f"{m.name} rushes at {tgt.name}!")
+            if not self.close_in(m, tgt):
+                return
+            if surprise or single:
+                return
+            self.monster_melee(m, tgt, full=False)
+        elif need <= 2 * sp and not (surprise or single) and not m.has_tag("fatigued"):
+            ui.out(f"{m.name} CHARGES {tgt.name}!")
+            m.add_effect(Effect("Charging", 1, tags=["charging"]))
+            if not self.close_in(m, tgt, budget=2 * sp):
+                return
+            ws = m.melee_attacks()
+            self.make_attack(m, tgt, ws[0], m.bab(), [("untyped", 2, "charge")])
+        else:
+            ui.out(f"{m.name} {'runs' if not single else 'moves'} toward {tgt.name}.")
+            self.close_in(m, tgt, budget=sp if (surprise or single) else 2 * sp)
 
     def add_summon(self, caster: Creature, key: str, rounds: int) -> None:
         from .monster import Monster
@@ -2641,6 +2923,9 @@ class Combat:
                             source=caster.name, hidden=True))
         x = CState(m, self.s(caster).side)
         x.flat = False
+        x.pos = grid.nearest_free(self.s(caster).pos, self.occupied(),
+                                  prefer=self.s(self.enemies(caster)[0]).pos
+                                  if self.enemies(caster) else None)
         self.st[m.uid] = x
         self.companions.append(m)
         idx = self.order.index(self.s(caster)) + 1 if self.s(caster) in self.order else len(
@@ -2686,10 +2971,20 @@ class Combat:
 
     def breathe(self, m: Creature, breath: dict, able: List[Creature]) -> None:
         ui = self.ui
-        eng = [p for p in able if self.is_engaged(m, p)]
-        rest = [p for p in able if p not in eng]
-        dice.shuffle(rest)
-        targets = (eng + rest)[:breath.get("targets", 2)]
+        shape = breath.get("area") or (("cone", 30) if "cone" in breath.get("text", "") else None)
+        if shape and m.uid in self.st:
+            side = self.s(m).side
+
+            def caught(t):
+                return [c_ for c_ in self.area_targets(m, "breath", t, tuple(shape))
+                        if self.s(c_).side != side]
+            aim = max(able, key=lambda t: (len(caught(t)), -self.distance(m, t)))
+            targets = caught(aim) or [aim]
+        else:
+            eng = [p for p in able if self.is_engaged(m, p)]
+            rest = [p for p in able if p not in eng]
+            dice.shuffle(rest)
+            targets = (eng + rest)[:breath.get("targets", 2)]
         ui.out(f"{m.name} {breath.get('text', 'breathes')}!", ("bred",))
         r = dice.roll(breath["dice"])
         ui.roll(r.detail())
@@ -2715,6 +3010,10 @@ class Combat:
         sp = SPELLS[a["spell"]]
         if a.get("self"):
             targets = [m]
+        elif sp["target"] == "enemies" and a["spell"] in grid.AREAS:
+            best = max(able, key=lambda t: len(self._area_catch(m, a["spell"], t,
+                                                                sp["max_targets"])[0]))
+            targets = self._area_catch(m, a["spell"], best, sp["max_targets"])[0] or [best]
         elif sp["target"] == "enemies":
             targets = list(able)
             dice.shuffle(targets)
@@ -2837,7 +3136,7 @@ class Combat:
                 ui.out(f"{comp.name} is stuck in the plants.")
                 return
             ui.out(f"{comp.name} lunges at {t.name}!")
-            if not self.close_in(comp, t):
+            if not self.advance(comp, t, single=surprise or x.single):
                 return
             if surprise:
                 return

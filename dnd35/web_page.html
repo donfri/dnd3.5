@@ -113,6 +113,13 @@ table.sh tr.dim td{color:var(--dim)}
 .froll .tot{color:var(--gold);font-size:20px;font-weight:bold;margin-left:6px}
 #map svg{display:block;margin:0 auto;max-width:100%;height:auto}
 #map .legend{color:var(--dim);font-size:12px;text-align:center;margin-top:8px}
+.bmap{white-space:normal;margin:8px 0}
+.bmap svg{display:block;max-width:100%;height:auto}
+.bmap .bl{font-size:12px;color:var(--dim);margin-top:4px;line-height:1.6}
+.bmap .bl b{display:inline-block;min-width:16px;text-align:center;border-radius:8px;padding:0 4px;color:#111;margin-right:3px}
+#map h3{color:var(--gold);margin:0 0 6px}
+#map .bmap svg{width:min(100%,640px);margin:0 auto}
+#map .bmap .bl{text-align:center}
 @media (max-width:700px){
  body{font-size:14px}
  header{padding:6px 10px;gap:6px}
@@ -219,6 +226,7 @@ table.sh tr.dim td{color:var(--dim)}
 const NEEDPW=__NEEDPW__;
 let me=localStorage.getItem('dndname')||'', table=new URLSearchParams(location.search).get('table')||localStorage.getItem('dndtable')||'main', pw=localStorage.getItem('dndpw')||'';
 let hereNow=[];
+let primedBattle=false;
 let next=0, polling=false, tab='story', unreadChat=0, lastState=null, stateTimer=null, primed=false;
 const $=id=>document.getElementById(id), inp=$('inp');
 const blocks={};
@@ -233,7 +241,7 @@ function showTab(t){tab=t;document.querySelectorAll('nav button').forEach(b=>b.c
  if(t=='story')$('b-story').style.display='none';
  if(t=='party'||t=='journal'||t=='map')refreshState();
  $('bottom').style.display=(t=='chat')?'none':'block';
- const p=$(t);p.scrollTop=p.scrollHeight}
+ const p=$(t);p.scrollTop=(t=='map')?0:p.scrollHeight}
 function toggleSettings(){const s=$('settings');s.style.display=s.style.display=='block'?'none':'block'}
 
 // ---------------------------------------------------------------- text helpers
@@ -257,6 +265,9 @@ function join(){if(N.mode!='off')audioKeepAlive(true);me=$('jname').value.trim()
  history.replaceState(null,'','?table='+encodeURIComponent(table));poll();inp.focus()}
 function handle(ev){
  narrateEvent(ev);
+ if(ev.t=='battle'){lastBattle=ev.b;
+  if(ev.inline&&ev.b)add('story',battleHtml(ev.b,true),'bmap');
+  if(tab=='map'&&lastState)renderMap(lastState);return}
  if(ev.t=='line'){const t=ev.text;add('full',ansi(t));
   if(isRoll(t)){add('dicelog',ansi(t));if($('showrolls').checked)add('story',ansi(t));return}
   if(isMenu(t))return;
@@ -354,7 +365,7 @@ async function freeRoll(expr){if(!expr.trim())return;
 // ---------------------------------------------------------------- party & journal
 function scheduleState(){clearTimeout(stateTimer);stateTimer=setTimeout(refreshState,700)}
 async function refreshState(){try{const r=await fetch('/api/state?table='+encodeURIComponent(table),{headers:{'X-Password':pw}});
- const s=await r.json();if(s.busy)return;lastState=s;renderParty(s);renderJournal(s);renderMap(s);
+ const s=await r.json();if(s.busy)return;lastState=s;if(s.battle!==undefined&&!primedBattle){lastBattle=s.battle;primedBattle=true}renderParty(s);renderJournal(s);renderMap(s);
  $('where').textContent=s.active?('📍 '+s.location+' • '+s.time):''}catch(e){}}
 function renderParty(s){const el=$('party');if(!s.active){el.innerHTML='<div class="empty">Start or load a game to see your party.</div>';return}
  el.innerHTML='<div class="cards">'+s.party.map((p,i)=>{
@@ -374,7 +385,28 @@ async function claimHero(i){const r=await fetch('/api/claim',{method:'POST',head
 function wrapName(name,max){const words=name.split(' ');const lines=[];let cur='';
  for(const w of words){if((cur+' '+w).trim().length>max&&cur){lines.push(cur);cur=w}else cur=(cur+' '+w).trim()}
  if(cur)lines.push(cur);return lines.slice(0,3)}
+let lastBattle=null;
+const TOKC={pc:'#7ed957',ally:'#5fd3c4',foe:'#ff6b6b'};
+function battleHtml(b,crop){const S=26,W=b.w*S,H=b.h*S;
+ const ys=b.tokens.map(t=>t.y);let y0=0,y1=b.h-1;
+ if(crop&&ys.length){y0=Math.max(0,Math.min(...ys)-1);y1=Math.min(b.h-1,Math.max(...ys)+1)}
+ let svg=`<svg viewBox="0 ${y0*S} ${W+2} ${(y1-y0+1)*S+2}" width="${W+2}" xmlns="http://www.w3.org/2000/svg" font-family="system-ui,sans-serif">`;
+ svg+=`<rect x="1" y="1" width="${W}" height="${H}" fill="${b.dark?'#0b0a09':'#1b1714'}" stroke="#4a4038"/>`;
+ for(let x=1;x<b.w;x++)svg+=`<line x1="${x*S+1}" y1="1" x2="${x*S+1}" y2="${H+1}" stroke="#2c2621"/>`;
+ for(let y=1;y<b.h;y++)svg+=`<line x1="1" y1="${y*S+1}" x2="${W+1}" y2="${y*S+1}" stroke="#2c2621"/>`;
+ const at={};b.tokens.forEach(t=>at[t.name]=t);const cx=t=>t.x*S+S/2+1,cy=t=>t.y*S+S/2+1;
+ const drawn=new Set();
+ for(const t of b.tokens)for(const n of t.engaged){const o=at[n];if(!o)continue;const k=[t.name,n].sort().join('|');if(drawn.has(k))continue;drawn.add(k);
+  svg+=`<line x1="${cx(t)}" y1="${cy(t)}" x2="${cx(o)}" y2="${cy(o)}" stroke="#e0b44c" stroke-width="2" opacity=".55"/>`}
+ for(const t of b.tokens){const col=t.down?'#6b5d50':TOKC[t.side];
+  svg+=`<circle cx="${cx(t)}" cy="${cy(t)}" r="${S/2-2}" fill="${col}" stroke="${t.flying?'#fff':'#111'}" stroke-width="${t.flying?2:1}"${t.flying?' stroke-dasharray="3 2"':''}><title>${esc(t.name)} (${esc(t.hp)})</title></circle>`;
+  svg+=`<text x="${cx(t)}" y="${cy(t)+4}" text-anchor="middle" font-size="12" font-weight="bold" fill="#111">${esc(t.label)}</text>`}
+ svg+='</svg>';
+ const leg=b.tokens.map(t=>`<span style="white-space:nowrap"><b style="background:${t.down?'#6b5d50':TOKC[t.side]}">${esc(t.label)}</b>${esc(t.name)} <span style="opacity:.8">${esc(t.hp)}${t.down?', down':''}${t.flying?', flying':''}</span></span>`).join(' &nbsp; ');
+ return svg+`<div class="bl">${leg}<br>Each square is 5 ft. Gold lines join foes locked in melee.</div>`}
 function renderMap(s){const el=$('map');if(!s.active||!s.map){el.innerHTML='<div class="empty">Start or load a game to see the map.</div>';return}
+ const bt=(lastBattle!==undefined&&lastBattle!==null)?lastBattle:null;
+ const top=bt?`<div class="bmap"><h3>Battle${bt.round?' &mdash; round '+bt.round:''}</h3>${battleHtml(bt)}</div><h3>Area map</h3>`:'';
  const m=s.map,W=150,H=74,BW=124,BH=50;
  const xs=m.nodes.map(n=>n.x),ys=m.nodes.map(n=>n.y),minx=Math.min(...xs),miny=Math.min(...ys);
  const cx=n=>(n.x-minx)*W+W/2+10,cy=n=>(n.y-miny)*H+H/2+10;
@@ -396,7 +428,7 @@ function renderMap(s){const el=$('map');if(!s.active||!s.map){el.innerHTML='<div
   lines.forEach((ln,i)=>{svg+=`<text x="${cx(n)}" y="${cy(n)-((lines.length-1)*7)+i*14+4}" text-anchor="middle" font-size="12" fill="${n.visited?(n.current?'#e0b44c':'#e8e0d4'):'#6b5d50'}">${esc(ln)}</text>`});
   if(n.current)svg+=`<text x="${x+BW-6}" y="${y+13}" text-anchor="end" font-size="11">&#11088;</text>`}
  svg+='</svg>';
- el.innerHTML=svg+'<div class="legend">&#11088; you are here &middot; dashed = not explored yet &middot; &#128274; locked &middot; &#9888;&#65039; known trap &middot; '+esc(s.location)+'</div>'}
+ el.innerHTML=top+svg+'<div class="legend">&#11088; you are here &middot; dashed = not explored yet &middot; &#128274; locked &middot; &#9888;&#65039; known trap &middot; '+esc(s.location)+'</div>'}
 function renderJournal(s){const el=$('journal');if(!s.active){el.innerHTML='<div class="empty">No journal yet.</div>';return}
  el.innerHTML=`<div class="jsec"><h3>${esc(s.adventure)}</h3><div>📍 ${esc(s.location)} • ${esc(s.time)}${s.heroic?' • heroic mode':''}</div></div>
  <div class="jsec"><h3>Quest log &amp; notes</h3>${s.journal.length?'<ul>'+s.journal.slice().reverse().map(j=>'<li>'+esc(j)+'</li>').join('')+'</ul>':'<div class="empty">Nothing yet. Talk to people!</div>'}</div>

@@ -15,6 +15,9 @@ def setup(*monsters, hero="thorgar", level=8):
     p = build_pregen(hero, "a", level=level)
     ms = [Monster(k) for k in monsters]
     cb = Combat(ui, [p], ms)
+    for x in cb.st.values():   # start at close quarters (10 ft apart)
+        if x.side == "mon":
+            x.pos = (4, x.pos[1])
     cb.order = list(cb.st.values())
     cb.acted = set()
     for x in cb.st.values():

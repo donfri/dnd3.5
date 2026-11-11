@@ -224,6 +224,17 @@ Command-line options:
   day with save DCs, active effects, gear and load.
 
 **Combat**
+- A **battle grid** of 5-foot squares (70 by 45 feet). Foes start 30 to 45 feet
+  away (closer in the dark). Speed limits how far you move each turn: slow heroes
+  may need two moves or a charge to reach a foe, and monsters run, charge, or
+  throw javelins as they come. Distance uses the 3.5 diagonal rule (5, 10, 5...).
+  Ranged attacks take -2 per range increment. Flanking needs an ally on the far
+  side of the foe (heroes step round to flank when they can). Spells like
+  Fireball, Burning Hands, Lightning Bolt and Cone of Cold are real bursts,
+  cones and lines: you pick where to aim, and you're warned if a friend (or you)
+  would be caught. Breath weapons hit everyone in their cone.
+- The terminal prints an ASCII battle map each round; the web page draws it in
+  the story, and the **Map** tab shows it live during a fight.
 - Initiative, surprise rounds, and flat-footed characters.
 - Standard, move, and full-round actions: attack, full attack, charge, withdraw,
   total defense, fighting defensively, drawing weapons, standing up.
@@ -307,6 +318,7 @@ dnd35/
   levelup.py creation.py   character creation, leveling, pregens, recommended builds
   sheet.py                 character sheet rendering
   magic.py combat.py       spells and the combat engine
+  grid.py                  battle grid: distances, movement, areas, ASCII map
   abilities.py             lay on hands, wild shape, wholeness of body, bardic music
   companions.py            animal companions and familiars
   shop.py                  shopping & inventory
@@ -342,9 +354,9 @@ python3 -m unittest discover -s tests
 
 ## Simplifications (deliberate)
 
-- There is no battle grid. Positioning is abstracted as being "in melee with" a
-  foe, which still drives attacks of opportunity, flanking, charging, full
-  attacks, and firing into melee.
+- The battle grid is open ground: no walls, cover or difficult terrain. You
+  choose who to move toward, and the game picks the exact square (stepping round
+  to flank when it can). Moving past a foe you aren't fighting doesn't provoke.
 - Levels go to 20 (no epic levels), and the adventures cover levels 1 to 8.
   Higher-level heroes can still start any adventure, but it won't be a challenge.
 - *Raise dead* costs the hero half a level of experience instead of a whole

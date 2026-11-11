@@ -88,6 +88,7 @@ class WebUI(UI):
         self._owners: List[str] = []
         self.last_who = ""
         self._explore = False
+        self.battle_now: Optional[dict] = None
 
     # ownership: only the hero's player may answer prompts inside acting()
     @contextmanager
@@ -116,6 +117,11 @@ class WebUI(UI):
             self.table.emit({"t": "block", "title": title, "text": line})
             return
         self.table.emit({"t": "line", "text": line})
+
+    def battle(self, state: Optional[dict], inline: bool = False) -> None:
+        """Battle grid for the page's map (inline = also drop a snapshot in the story)."""
+        self.battle_now = state
+        self.table.emit({"t": "battle", "b": state, "inline": bool(inline and state)})
 
     # narration (read aloud by browsers that turn the narrator on)
     def para(self, text: str, style: Sequence[str] = (), indent: str = "") -> None:
@@ -432,6 +438,7 @@ class Table:
         return {"active": True, "location": rooms.get(gs.room, {}).get("name", gs.room),
                 "can_manage": bool(self.waiting and self.explore_idle),
                 "map": map_data(gs),
+                "battle": getattr(self.ui, "battle_now", None),
                 "time": gs.time_str(), "party": party, "journal": list(gs.journal),
                 "visited": visited, "adventure": gs.adv.TITLE,
                 "heroic": gs.settings.get("heroic", False)}
