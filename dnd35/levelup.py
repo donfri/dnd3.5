@@ -197,6 +197,8 @@ def feat_param_options(ch: Character, feat: str) -> List[str]:
         return SKILL_ORDER
     if p == "school":
         return SPELL_SCHOOLS
+    if p == "exotic_weapon":
+        return [k for k, w in WEAPONS.items() if w["category"] == "exotic"]
     if p == "martial_weapon":
         return [k for k, w in WEAPONS.items() if w["category"] == "martial"
                 and k != "greatclub (large)"]

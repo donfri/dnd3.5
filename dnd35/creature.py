@@ -30,6 +30,7 @@ class Creature:
         self.stable = False
         self.dead = False
         self.afflictions: List[dict] = []   # diseases
+        self.nonlethal = 0
         self.daily: Dict[str, int] = {}     # uses spent today (rage, turning...)
 
     # ------------------------------------------------------------ hooks
@@ -119,6 +120,9 @@ class Creature:
     def has_tag(self, tag: str) -> bool:
         if tag == "unconscious" and self.is_pc and self.hp < 0 and not self.dead:
             return True
+        if tag == "unconscious" and self.nonlethal and not self.dead \
+                and self.nonlethal > max(0, self.hp):
+            return True
         return any(tag in e.tags for e in self.effects)
 
     def _effect_tags(self) -> set:
@@ -133,7 +137,19 @@ class Creature:
             out |= e.tags
         if self.is_pc and self.hp < 0 and not self.dead:
             out.add("unconscious")
+        if self.nonlethal and not self.dead and self.nonlethal > max(0, self.hp):
+            out.add("unconscious")
         return out
+
+    @property
+    def incorporeal(self) -> bool:
+        return bool(getattr(self, "block", {}).get("incorporeal"))
+
+    def take_nonlethal(self, amount: int) -> int:
+        if not self.is_living() or "nonlethal" in self.immunities():
+            return 0
+        self.nonlethal += amount
+        return amount
 
     def bonuses(self, stat: str) -> List[Tuple[str, int, str]]:
         out = list(self.static_bonuses(stat))
@@ -208,6 +224,8 @@ class Creature:
         if hp == 0:
             return "disabled"
         t = self.tags()
+        if self.nonlethal and self.nonlethal > max(0, hp):
+            return "knocked out"
         for word in ("paralyzed", "asleep", "stunned", "dazed", "turned", "prone", "shaken",
                      "fatigued"):
             if word in t:
@@ -272,6 +290,7 @@ class Creature:
     def heal(self, amount: int) -> int:
         if self.dead or amount <= 0:
             return 0
+        self.nonlethal = max(0, self.nonlethal - amount)
         healed = min(amount, self.damage)
         self.damage -= healed
         if self.hp >= 0:
@@ -406,6 +425,8 @@ class Creature:
         comps: List[Tuple[str, int, str]] = [("base", bab, "base attack")]
         ranged = w.get("ranged", False)
         if ranged:
+            comps.append(("ability", self.mod("dex"), "Dex"))
+        elif self.ability("str") is None:
             comps.append(("ability", self.mod("dex"), "Dex"))
         else:
             strm = self.mod("str")

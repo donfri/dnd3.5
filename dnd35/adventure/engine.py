@@ -899,6 +899,7 @@ class GM:
                     del p.ability_damage[ab]
             p.daily = {}
             p.temp_hp = 0
+            p.nonlethal = 0
             p.effects = [e for e in p.effects if e.duration is None and "fatigued" not in e.tags
                          and "prone" not in e.tags]
             ui.out(f"{p.name} recovers {healed} hp ({p.hp}/{p.max_hp()})."

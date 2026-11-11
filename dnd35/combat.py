@@ -41,6 +41,8 @@ class CState:
         self.fled = False
         self.spent_ammo: Dict[str, int] = {}
         self.burst_cd = 0
+        self.breath_cd = 0
+        self.sla_used: Dict[str, int] = {}
         self.surprise = False
         self.deflect_used = False
         self.stepped = False
@@ -218,6 +220,8 @@ class Combat:
             cond = wound_word(m)
             sw = m.status_word()
             extra = f" [{sw}]" if sw not in ("ok",) else ""
+            if self.airborne(m):
+                extra += " [flying]"
             eng = ", ".join(f.name for f in self.engaged_foes(m))
             ui.out(f"  {c(m.name, 'bred')}: {cond}{extra}" + (f"  | melee: {eng}" if eng else ""))
 
@@ -228,6 +232,7 @@ class Combat:
         for m in self.monsters:
             ui.out(f"  {m.name}: {m.block.get('desc', '')}", ("red",))
         self.roll_initiative()
+        self.start_auras()
         if self.surprised:
             aware = [x for x in self.order if id(x.c) not in self.surprised]
             if aware and len(aware) < len(self.order):
@@ -287,6 +292,11 @@ class Combat:
         if result == "victory":
             helpless = [m for m in self.monsters if self.active(m) and m.helpless()]
             for m in helpless:
+                if m.nonlethal and m.nonlethal > max(0, m.hp) and m.hp > 0:
+                    ui.out(f"{m.name} is out cold. The heroes tie it up and leave it.")
+                    m.fled = True
+                    self.s(m).fled = True
+                    continue
                 if m.get_effect("Regenerating"):
                     ui.out(f"{m.name} twitches, already healing. The heroes hack it apart "
                            f"and burn the pieces with torch and oil.")
@@ -314,7 +324,8 @@ class Combat:
                              "_spiritual_weapon", "_sphere", "_stun_primed", "_smite",
                              "stunned", "dazed", "entangled", "frightened", "grappled",
                              "pinned"} \
-                        or e.name in ("Dazed", "Turned"):
+                        or e.name in ("Dazed", "Turned", "Aura of Courage") \
+                        or e.name.startswith("Terror ("):
                     p.effects.remove(e)
             st = self.s(p)
             for ammo, n in st.spent_ammo.items():
@@ -422,6 +433,10 @@ class Combat:
             w = dict(w, _offhand_light=w.get("light"))
         sit = list(situational)
         ranged = w.get("ranged", False)
+        if attacker.get_effect("Subduing") and not w.get("nonlethal") and not w.get("natural") \
+                and not (w.get("wid") == "unarmed strike"
+                         and attacker.has_feat("Improved Unarmed Strike")):
+            sit.append(("untyped", -4, "subduing"))
         if not ranged:
             if self.flanked(attacker, target):
                 sit.append(("untyped", 2, "flanking"))
@@ -436,14 +451,26 @@ class Combat:
                                            power=power, situational=sit)
         consume_one_shot(attacker, "attack")
         bonus = sum(v for _, v, _ in comps)
-        flat = self.is_flat_footed(target) or target.helpless() or (
+        feint = target.get_effect("Feinted")
+        feinted = bool(feint and feint.data.get("by") == attacker.uid and not ranged)
+        if feinted:
+            target.effects.remove(feint)
+        flat = self.is_flat_footed(target) or target.helpless() or feinted or (
             target.has_tag("grappled") and self.grapple_partner(target) is not attacker)
         ac = target.ac("flat" if flat else "normal", attacker=attacker, ranged=ranged)
+        if w.get("touch"):   # incorporeal touch ignores armor
+            ac = target.ac("touch", attacker=attacker, ranged=ranged)
+            if flat:
+                ac -= max(0, target.mod("dex"))
         roll = dice.d20()
         total = roll + bonus
         hit = roll == 20 or (roll != 1 and total >= ac)
         label = "AoO! " if aoo else ""
-        sitnote = ", ".join(s for _, v, s in sit if v)
+        if feinted:
+            sit.append(("untyped", 0, "feinted: no Dex to AC"))
+        sitnote = ", ".join(s for _, v, s in sit if v or "feint" in s)
+        if attacker.remove_effect("Invisibility"):
+            ui.out(f"{attacker.name} flickers into view as they strike!")
         ui.out(f"{label}{attacker.name} attacks {target.name} with {w['name']}: "
                f"d20={roll} {bonus:+d} = {total} vs AC {ac}"
                + (f" ({sitnote})" if sitnote else "") + " -> "
@@ -458,6 +485,20 @@ class Combat:
             self.s(target).deflect_used = True
             ui.good(f"  {target.name} snatches the missile out of the air (Deflect Arrows)!")
             return False
+        # incorporeal targets
+        if target.incorporeal and not w.get("touch"):
+            magical = attacker.weapon_enhancement(w) > 0 or w.get("magic_force") or (
+                w.get("wid") == "unarmed strike" and
+                getattr(attacker, "class_level", lambda c_: 0)("monk") >= 4)
+            if not magical:
+                ui.out(f"  ...the {w['name'].lower()} passes straight through "
+                       f"{target.name}! (Only magic weapons can hurt it.)")
+                attacker.remove_effect("Stunning Fist")
+                return False
+            if dice.percent() <= 50:
+                ui.out("  ...the blow catches only shadow (50% incorporeal miss chance).")
+                attacker.remove_effect("Stunning Fist")
+                return False
         # concealment
         conc = target.bonus("concealment")
         if conc:
@@ -510,12 +551,29 @@ class Combat:
                 r = dice.roll(f"{sa}d6")
                 ui.roll(f"Sneak attack! {r.detail()}")
                 total += r.total
+        special = w.get("special") or {}
+        nonlethal = (w.get("nonlethal") and not attacker.has_feat("Improved Unarmed Strike")) \
+            or attacker.get_effect("Subduing") is not None
+        if nonlethal and not w.get("natural"):
+            if not target.is_living():
+                ui.out(f"  {target.name} doesn't feel nonlethal blows.")
+                return
+            target.take_nonlethal(total)
+            ui.out(f"  {target.name} takes {total} nonlethal damage.")
+            if target.has_tag("unconscious") and not target.dead:
+                ui.warn(f"  {target.name} is knocked out cold!")
+                if target.get_effect("Grappling"):
+                    self.end_grapple(target)
+            return
+        if special.get("no_damage"):
+            total = 0
         dmg_type = "" if w.get("magic_force") else w.get("dtype", "B")
         if dmg_type and (attacker.weapon_enhancement(w) > 0 or (
                 w.get("wid") == "unarmed strike" and
                 getattr(attacker, "class_level", lambda c: 0)("monk") >= 4)):
             dmg_type += "*"   # magic weapon: overcomes DR x/magic
-        deal_damage(ui, target, total, dmg_type, self, magic=False)
+        if total:
+            deal_damage(ui, target, total, dmg_type, self, magic=False)
         if attacker.remove_effect("Stunning Fist") and not target.dead:
             if "stun" in target.immunities() or not target.is_living():
                 ui.out(f"  {target.name} can't be stunned.")
@@ -525,7 +583,6 @@ class Combat:
                 if not saving_throw(ui, target, "fort", dc, ["stun"], "Stunning Fist"):
                     target.add_effect(Effect("Stunned", 1, tags=["stunned"]))
                     ui.warn(f"  {target.name} is STUNNED!")
-        special = w.get("special") or {}
         extra = special.get("extra_damage")
         if extra and not target.dead:
             r = dice.roll(extra[0])
@@ -550,7 +607,8 @@ class Combat:
                     ui.bad(f"  {target.name} takes {amt} {ab.upper()} damage from {pz['name']}!")
             ad = special.get("ability_damage")
             if ad and target.conscious:
-                if not saving_throw(ui, target, "fort", ad["dc"], [], ad["name"]):
+                if ad.get("nosave") or not saving_throw(ui, target, "fort", ad["dc"], [],
+                                                         ad["name"]):
                     amt = dice.roll(ad["damage"]).total
                     target.ability_damage[ad["ability"]] = \
                         target.ability_damage.get(ad["ability"], 0) + amt
@@ -769,6 +827,162 @@ class Combat:
         else:
             ui.out(f"  {tgt.name} doesn't budge.")
 
+    def act_sunder(self, x: CState) -> None:
+        p = x.c
+        ui = self.ui
+        tgt = self._maneuver_target(p, [f for f in self.engaged_foes(p) if self.disarmable(f)],
+                                    "Whose weapon?")
+        if not tgt:
+            return
+        x.std = False
+        w = self.best_melee(p)
+        tw = self.best_melee(tgt)
+        if not p.has_feat("Improved Sunder"):
+            self.aoo_from(tgt, p, "swings at their weapon")
+            if not p.conscious:
+                return
+        ba = sum(v for _, v, _ in p.attack_components(w)) + rules.SIZE_GRAPPLE[p.size] + (
+            4 if p.has_feat("Improved Sunder") else 0) + (4 if w.get("two_handed") else 0)
+        bd = sum(v for _, v, _ in tgt.attack_components(tw)) + rules.SIZE_GRAPPLE[tgt.size] + (
+            4 if tw.get("two_handed") else 0)
+        need = 10 * tw.get("enhancement", 0)   # magic weapons are much tougher
+        ra, rd = dice.d20(), dice.d20()
+        ui.roll(f"Sunder: {p.name} d20={ra}{ba:+d} = {ra + ba} vs {tgt.name} "
+                f"d20={rd}{bd:+d} = {rd + bd}" + (f" (needs to win by {need})" if need else ""))
+        if ra + ba - (rd + bd) <= need:
+            ui.out(f"  {tgt.name}'s {tw['name'].lower()} holds.")
+            return
+        if tgt.is_pc:
+            e = tgt.equipped("main")
+            tgt.inventory.remove(e)
+        else:
+            e = next(e for e in tgt.weapons if not item_data(e).get("ranged"))
+            tgt.weapons.remove(e)
+        ui.warn(f"  CRACK! {tgt.name}'s {tw['name'].lower()} shatters!")
+
+    def act_feint(self, x: CState, move: bool = False) -> None:
+        p = x.c
+        ui = self.ui
+        tgt = self._maneuver_target(p, [f for f in self.engaged_foes(p) if not f.helpless()],
+                                    "Feint against whom?")
+        if not tgt:
+            return
+        if move:
+            x.move = False
+        else:
+            x.std = False
+        r = dice.d20()
+        bluff = r + p.skill_total("Bluff")
+        rd = dice.d20()
+        sense = rd + tgt.skill_total("Sense Motive") + tgt.bab()
+        if tgt.ctype in ("animal",):
+            sense += 8   # hard to fool an animal
+        if (tgt.ability("int") or 0) < 3 or getattr(tgt, "block", {}).get("mindless"):
+            ui.out(f"  {tgt.name} is too mindless to be fooled.")
+            return
+        ui.roll(f"Feint: {p.name} Bluff {bluff} vs {tgt.name} Sense Motive {sense}")
+        if bluff > sense:
+            tgt.add_effect(Effect("Feinted", 2, tags=[], data={"by": p.uid}, hidden=True))
+            ui.good(f"  {tgt.name} falls for it: {p.name}'s next attack catches it off guard!")
+        else:
+            ui.out(f"  {tgt.name} doesn't bite.")
+
+    def act_overrun(self, x: CState) -> None:
+        p = x.c
+        ui = self.ui
+        tgt = self._maneuver_target(p, [f for f in self.engaged_foes(p) if not f.incorporeal],
+                                    "Overrun whom?")
+        if not tgt:
+            return
+        x.std = False
+        imp = p.has_feat("Improved Overrun")
+        ra, rd = dice.d20(), dice.d20()
+        ba = p.mod("str") + rules.SIZE_GRAPPLE[p.size] + (4 if imp else 0)
+        bd = max(tgt.mod("str"), tgt.mod("dex")) + rules.SIZE_GRAPPLE[tgt.size] + \
+            getattr(tgt, "race_data", {}).get("stability", 0)
+        if tgt.ctype in ("animal", "magical beast", "vermin") and not tgt.is_pc:
+            bd += 4
+        ui.roll(f"Overrun: {p.name} d20={ra}{ba:+d} = {ra + ba} vs {tgt.name} "
+                f"d20={rd}{bd:+d} = {rd + bd}")
+        if ra + ba > rd + bd:
+            tgt.add_effect(Effect("Prone", None, tags=["prone"]))
+            self.s(p).engaged.discard(tgt.uid)
+            self.s(tgt).engaged.discard(p.uid)
+            ui.warn(f"  {p.name} bowls {tgt.name} over and charges past!")
+            others = [f for f in self.enemies(p) if f is not tgt and not self.is_engaged(p, f)
+                      and self.reachable(p, f)]
+            if others:
+                nxt = others[0] if len(others) == 1 else others[ui.choose(
+                    "Keep going: engage whom?", [f.name for f in others], default=0)]
+                self.close_in(p, nxt)
+        else:
+            ui.out(f"  {tgt.name} stands firm.")
+
+    def act_aid(self, x: CState) -> None:
+        p = x.c
+        ui = self.ui
+        pairs = [(a, f) for f in self.engaged_foes(p) for a in self.allies(p)
+                 if a is not p and self.is_engaged(a, f)]
+        labels = [f"Help {a.name} hit {f.name} (+2 attack)" for a, f in pairs] + \
+                 [f"Distract {f.name} to protect {a.name} (+2 AC)" for a, f in pairs]
+        i = ui.choose("Aid another", labels, allow_cancel=True)
+        if i is None:
+            return
+        x.std = False
+        a, f = pairs[i % len(pairs)]
+        r = dice.d20()
+        bonus = p.bab() + p.mod("str")
+        ui.roll(f"Aid another: d20={r}{bonus:+d} = {r + bonus} vs AC 10")
+        if r + bonus < 10:
+            ui.out("  The distraction doesn't work.")
+            return
+        if i < len(pairs):
+            a.add_effect(Effect(f"Aided by {p.name}", 2, [("attack", "circumstance", 2)],
+                                tags=["consume_attack"]))
+            ui.good(f"  {a.name} gets +2 on their next attack.")
+        else:
+            a.add_effect(Effect(f"Covered by {p.name}", 2, [("ac", "circumstance", 2)]))
+            ui.good(f"  {a.name} gets +2 AC.")
+
+    def act_coup(self, x: CState) -> None:
+        p = x.c
+        ui = self.ui
+        tgt = self._maneuver_target(p, [f for f in self.engaged_foes(p) if f.helpless()
+                                        and not f.dead], "Finish whom?")
+        if not tgt:
+            return
+        x.std = x.move = False
+        w = self.best_melee(p)
+        self.provoke(p, "takes careful aim at a helpless foe")
+        if not p.conscious or not w:
+            return
+        ui.out(f"{p.name} delivers a coup de grace to {tgt.name}!")
+        before = tgt.damage
+        if tgt.crit_immune():
+            self.apply_hit(p, tgt, w, False, False, p.power_attack, True)
+        else:
+            self.apply_hit(p, tgt, w, True, False, p.power_attack, True)
+        dealt = tgt.damage - before
+        if not tgt.dead and tgt.is_living() and not tgt.crit_immune() and dealt > 0:
+            if not saving_throw(ui, tgt, "fort", 10 + dealt, [], "coup de grace"):
+                tgt.dead = True
+                ui.bad(f"  {tgt.name} is slain!")
+                self.after_damage(tgt)
+
+    def act_ready_counter(self, x: CState) -> None:
+        x.std = False
+        x.move = False
+        x.readied = {"counter": True, "w": None}
+        self.ui.out(f"{x.c.name} watches the enemy's hands, ready to counter the next spell.")
+
+    def act_subdue(self, x: CState) -> None:
+        p = x.c
+        if p.remove_effect("Subduing"):
+            self.ui.out(f"{p.name} fights to kill again.")
+        else:
+            p.add_effect(Effect("Subduing", None, hidden=True))
+            self.ui.out(f"{p.name} pulls their blows, fighting to subdue (nonlethal).")
+
     def act_step(self, x: CState) -> None:
         p = x.c
         foe = self.engaged_foes(p)[0]
@@ -931,7 +1145,8 @@ class Combat:
     def trigger_readied(self, mover: Creature, tgt: Creature) -> None:
         for x in list(self.st.values()):
             r = x.readied
-            if not r or x.side == self.s(mover).side or not self.active(x.c) \
+            if not r or r.get("counter") or x.side == self.s(mover).side \
+                    or not self.active(x.c) \
                     or not x.c.can_act() or mover.dead:
                 continue
             w = r["w"]
@@ -1077,11 +1292,27 @@ class Combat:
                 add("Grapple: break free (opposed grapple check)", self.act_grapple_escape, x,
                     partner)
             elif x.std and eng and not p.wild_form():
-                add("Trip a foe (knock them prone)", self.act_trip, x)
+                solid = [f for f in eng if not f.incorporeal]
+                if solid:
+                    add("Trip a foe (knock them prone)", self.act_trip, x)
                 if any(self.disarmable(f) for f in eng):
                     add("Disarm a foe (knock their weapon away)", self.act_disarm, x)
-                add("Grapple a foe (wrestle them; they can't move away)", self.act_grapple, x)
-                add("Bull rush a foe (shove them out of melee)", self.act_bull_rush, x)
+                    add("Sunder a foe's weapon (smash it)", self.act_sunder, x)
+                if solid:
+                    add("Grapple a foe (wrestle them; they can't move away)", self.act_grapple,
+                        x)
+                    add("Bull rush a foe (shove them out of melee)", self.act_bull_rush, x)
+                    add("Overrun a foe (knock it down and push past)", self.act_overrun, x)
+                add("Feint (Bluff: your next attack catches them off guard)", self.act_feint,
+                    x)
+                if any(self.is_engaged(a, f) for f in eng for a in self.allies(p)
+                       if a is not p):
+                    add("Aid another (+2 to an ally's next attack, or +2 AC)", self.act_aid, x)
+            if full_ok and x.move and [f for f in eng if f.helpless() and not f.dead]:
+                add("Coup de grace (finish a helpless foe: automatic critical)",
+                    self.act_coup, x)
+            if x.move and p.has_feat("Improved Feint") and eng and x.std is False:
+                add("Feint as a move action (Improved Feint)", self.act_feint, x, True)
             elif x.std and eng:
                 add("Trip a foe (knock them prone)", self.act_trip, x)
                 add("Bull rush a foe (shove them out of melee)", self.act_bull_rush, x)
@@ -1125,7 +1356,7 @@ class Combat:
             if x.move:
                 if p.has_tag("prone"):
                     add("Stand up (move action, provokes)", self.act_stand, x)
-                foes = [f for f in self.enemies(p) if not self.is_engaged(p, f)]
+                foes = [f for f in self.enemies(p) if not self.is_engaged(p, f) and self.reachable(p, f)]
                 if foes and not entangled:
                     add("Move into melee with a foe (move action)", self.act_approach, x)
                 if eng and not entangled:
@@ -1143,6 +1374,12 @@ class Combat:
                 add("Total defense (+4 dodge AC until your next turn)", self.act_total_defense, x)
             if x.std and not single:
                 add("Ready an attack (strike the first foe who comes at you)", self.act_ready, x)
+                if p.available_casts() and p.can_use_skill("Spellcraft"):
+                    add("Ready a counterspell (stop the next spell a foe casts)",
+                        self.act_ready_counter, x)
+            add(("Stop fighting to subdue" if p.get_effect("Subduing") else
+                 "Fight to subdue (deal nonlethal damage, -4 attack with lethal weapons)"),
+                self.act_subdue, x)
             later = self.later_this_round(x)
             if x.std and x.move and not x.moved and not x.stepped and not single and later:
                 add("Delay (take your turn later this round)", self.act_delay, x, later)
@@ -1161,7 +1398,8 @@ class Combat:
                                    "Turn undead", "Rage", "Feat of Strength", "Smite",
                                    "Stunning", "Manyshot", "Spring", "Call down", "Bardic",
                                    "Lay on", "Wholeness", "Wild shape", "Return to",
-                                   "Trip", "Disarm", "Grapple", "Bull rush")):
+                                   "Trip", "Disarm", "Grapple", "Bull rush", "Sunder",
+                                   "Overrun", "Feint", "Aid another", "Coup de grace")):
                     groups.append("Fight")
                 elif lab.startswith(("Move", "Stand", "Draw", "Withdraw", "Flee", "5-foot")):
                     groups.append("Move")
@@ -1336,6 +1574,10 @@ class Combat:
                 if full:
                     ui.bad("You must already be in melee with that foe to full attack.")
                     return
+                if not self.reachable(p, tgt):
+                    ui.bad(f"{tgt.name} is up in the air, out of reach. Use a ranged attack, "
+                           f"ready an attack for when it swoops, or get magic to fly.")
+                    return
                 if p.has_tag("entangled"):
                     ui.bad("You're entangled and can't move to reach that foe.")
                     return
@@ -1476,7 +1718,7 @@ class Combat:
     def act_spring(self, x: CState) -> None:
         p = x.c
         ui = self.ui
-        foes = [f for f in self.enemies(p) if not self.is_engaged(p, f)]
+        foes = [f for f in self.enemies(p) if not self.is_engaged(p, f) and self.reachable(p, f)]
         tgt = self._pick_target(p, foes, "Spring at whom?")
         if not tgt:
             return
@@ -1544,7 +1786,7 @@ class Combat:
         if p.has_tag("entangled"):
             self.ui.bad("You're entangled!")
             return
-        foes = [f for f in self.enemies(p) if not self.is_engaged(p, f)]
+        foes = [f for f in self.enemies(p) if not self.is_engaged(p, f) and self.reachable(p, f)]
         tgt = self._pick_target(p, foes, "Charge whom?")
         if not tgt:
             return
@@ -1568,7 +1810,7 @@ class Combat:
 
     def act_approach(self, x: CState) -> None:
         p = x.c
-        foes = [f for f in self.enemies(p) if not self.is_engaged(p, f)]
+        foes = [f for f in self.enemies(p) if not self.is_engaged(p, f) and self.reachable(p, f)]
         tgt = self._pick_target(p, foes, "Move next to whom?")
         if not tgt:
             return
@@ -2033,6 +2275,17 @@ class Combat:
                     deal_damage(ui, p, amt, "fire", self)
                 return
             x.burst_cd -= 1
+        # breath weapon
+        breath = block.get("breath")
+        if breath and not surprise and able:
+            if x.breath_cd <= 0 and (self.round <= 1 or dice.percent() <= 60):
+                self.breathe(m, breath, able)
+                x.breath_cd = dice.roll(breath["recharge"]).total
+                return
+            x.breath_cd -= 1
+        # spell-like abilities
+        if block.get("slas") and able and not surprise and self.monster_sla(m, able):
+            return
         targets = able or ([p for p in pcs] if block.get("savage") else [])
         if not targets:
             return
@@ -2088,7 +2341,10 @@ class Combat:
 
         if engaged and melee:
             tgt = min(engaged, key=lambda p: (p.hp, p.ac()))
-            self.monster_melee(m, tgt, full=not surprise and not single)
+            self.monster_melee(m, tgt, full=not (surprise or single or block.get("flyby")))
+            if block.get("flyby") and self.active(m):
+                self.disengage_all(m)
+                ui.out(f"{m.name} wheels away into the air.")
             return
         # ranged option
         use_ranged = ranged and (block.get("prefers_ranged") or not melee or
@@ -2135,6 +2391,122 @@ class Combat:
             self.acted.add(id(x))   # it acts from next round
         self.ui.good(f"  A {MONSTERS[key]['name'].lower()} appears beside {caster.name}, "
                      f"ready to fight for {rounds} rounds.")
+
+    # ------------------------------------------------------------ monster powers
+    def airborne(self, cr: Creature) -> bool:
+        return bool(getattr(cr, "block", {}).get("fly")) and not self.s(cr).engaged \
+            and not cr.helpless() and not cr.has_tag("prone") and not cr.has_tag("grappled")
+
+    def reachable(self, p: Creature, f: Creature) -> bool:
+        """Can p walk up to f? Flying foes in the air need flight (or reach/ranged)."""
+        return not self.airborne(f) or p.has_tag("flying") or self.airborne(p)
+
+    def start_auras(self) -> None:
+        ui = self.ui
+        side_pc = [x.c for x in self.st.values() if x.side == "pc" and self.active(x.c)]
+        if any(getattr(p, "class_level", lambda c_: 0)("paladin") >= 3 and p.conscious
+               for p in self.party):
+            for a in side_pc:
+                a.add_effect(Effect("Aura of Courage", None, [("saves_vs_fear", "morale", 4)],
+                                    hidden=True))
+        for m in self.monsters:
+            aura = m.block.get("fear_aura")
+            if not aura:
+                continue
+            ui.warn(f"{aura['text']}!")
+            for p in side_pc:
+                if "fear" in p.immunities() or p.dead:
+                    if "fear" in p.immunities():
+                        ui.good(f"  {p.name} is unafraid.")
+                    continue
+                if not saving_throw(ui, p, "will", aura["dc"], ["fear"], "fear"):
+                    d = dice.roll(aura["duration"]).total
+                    tag = aura.get("effect", "shaken")
+                    p.add_effect(Effect(f"Terror ({m.name})", d, tags=[tag, "fear_effect"]))
+                    ui.bad(f"  {p.name} is {tag} with terror for {d} rounds!")
+
+    def breathe(self, m: Creature, breath: dict, able: List[Creature]) -> None:
+        ui = self.ui
+        eng = [p for p in able if self.is_engaged(m, p)]
+        rest = [p for p in able if p not in eng]
+        dice.shuffle(rest)
+        targets = (eng + rest)[:breath.get("targets", 2)]
+        ui.out(f"{m.name} {breath.get('text', 'breathes')}!", ("bred",))
+        r = dice.roll(breath["dice"])
+        ui.roll(r.detail())
+        from .magic import _area_damage
+        for t in targets:
+            _area_damage(ui, t, r.total, breath["dtype"], breath["dc"], ["breath"], self)
+
+    def monster_sla(self, m: Creature, able: List[Creature]) -> bool:
+        """Maybe use a spell-like ability. Returns True if the turn was used."""
+        x = self.s(m)
+        ready = [a for a in m.block["slas"] if x.sla_used.get(a["spell"], 0) < a.get("uses", 99)]
+        if not ready:
+            return False
+        selfies = [a for a in ready if a.get("self") and not m.get_effect(a["spell"])]
+        if selfies and self.round <= 1:
+            a = selfies[0]
+        else:
+            offense = [a for a in ready if not a.get("self")]
+            if not offense or dice.percent() > 45:
+                return False
+            a = dice.choice(offense)
+        x.sla_used[a["spell"]] = x.sla_used.get(a["spell"], 0) + 1
+        sp = SPELLS[a["spell"]]
+        if a.get("self"):
+            targets = [m]
+        elif sp["target"] == "enemies":
+            targets = list(able)
+            dice.shuffle(targets)
+            targets = targets[:sp["max_targets"]]
+        else:
+            targets = [dice.choice(able)]
+        self.ui.warn(f"{m.name} begins to weave {a['spell'].lower()}...")
+        if self.try_counterspell(m, a):
+            return True
+        cast_spell(self.ui, m, a["spell"], targets, a["cl"], a.get("dc", 10), self,
+                   allies=self.allies(m), enemies=self.enemies(m))
+        return True
+
+    def try_counterspell(self, m: Creature, sla: dict) -> bool:
+        ui = self.ui
+        lvl = min(SPELLS[sla["spell"]]["levels"].values())
+        for x in self.st.values():
+            r = x.readied
+            if not r or not r.get("counter") or x.side == self.s(m).side \
+                    or not self.active(x.c) or not x.c.can_act():
+                continue
+            p = x.c
+            x.readied = None
+            roll = dice.d20()
+            tot = roll + p.skill_total("Spellcraft") if p.can_use_skill("Spellcraft") else -99
+            ui.roll(f"{p.name} identifies the spell (Spellcraft): {tot} vs DC {15 + lvl}")
+            if tot < 15 + lvl:
+                ui.out(f"  {p.name} can't make out the spell in time.")
+                continue
+            casts = p.available_casts()
+            same = next((c_ for c_ in casts if c_["spell"] == sla["spell"]), None)
+            disp = next((c_ for c_ in casts if c_["spell"] == "Dispel Magic"), None)
+            if same:
+                p.expend(same)
+                ui.good(f"  {p.name} counters with {sla['spell'].lower()} of their own! The "
+                         f"spell unravels.")
+                return True
+            if disp:
+                p.expend(disp)
+                r2 = dice.d20()
+                cl = min(10, p.caster_level(disp["class"]))
+                ok = r2 + cl >= 11 + sla["cl"]
+                ui.roll(f"  Counter with dispel magic: d20={r2}+{cl} = {r2 + cl} vs DC "
+                        f"{11 + sla['cl']}")
+                if ok:
+                    ui.good(f"  {p.name}'s dispel snuffs out the spell!")
+                    return True
+                ui.out("  The counter fails.")
+            else:
+                ui.out(f"  {p.name} knows the spell but has nothing to counter it with.")
+        return False
 
     # ------------------------------------------------------------ animal companions
     def companion_turn(self, x: CState, surprise: bool) -> None:
@@ -2198,6 +2570,9 @@ class Combat:
             if not self.active(comp):
                 return
             surprise = True
+        if not self.is_engaged(comp, t) and not self.reachable(comp, t):
+            ui.out(f"{comp.name} snarls up at {t.name}, which is out of reach in the air.")
+            return
         if not self.is_engaged(comp, t):
             if comp.has_tag("entangled"):
                 ui.out(f"{comp.name} is stuck in the plants.")

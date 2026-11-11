@@ -218,9 +218,21 @@ Command-line options:
 - Critical threats and confirmation rolls, damage reduction, energy immunity and
   vulnerability, concealment, and two-weapon fighting.
 - The 3.5 bonus-type stacking rules (morale, luck, deflection, dodge...).
+- More combat options: **sunder**, **feint** (Bluff vs Sense Motive), **overrun**,
+  **aid another**, **coup de grace**, fighting to **subdue** (nonlethal damage, with
+  knocked-out foes tied up), and **readying a counterspell**.
+- Exotic weapons (bastard sword, dwarven waraxe, spiked chain, whip, kama,
+  nunchaku, siangham), Exotic Weapon Proficiency, and dwarven weapon familiarity.
 - Disabled, dying, and stabilizing at 0 to -9 HP, and death at -10.
-- Monster tactics: they gang up, throw javelins, flee when broken, and ghouls
-  paralyze. The boss has a recharge attack.
+- Monster tactics: they gang up, throw javelins, and flee when broken. Ghouls
+  paralyze and the boss has a recharge attack.
+- Monster powers: **flying** (out of reach unless you fly, shoot, or ready an
+  attack), **incorporeal** undead (only magic weapons hurt them, with a 50% miss
+  chance), **breath weapons**, **fear auras** (resisted by a paladin's aura of
+  courage), **spell-like abilities** (which you can counterspell), regeneration,
+  energy drain, ability drain, improved grab, and rend. New monsters include
+  hell hounds, shadows, wraiths, mummies, wyverns, an ogre mage and a juvenile
+  white dragon.
 
 **The computer GM**
 - An original adventure of 17 areas: a village hub, wilderness, an upper and

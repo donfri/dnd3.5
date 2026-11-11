@@ -57,6 +57,10 @@ def touch_attack(ui, caster: Creature, target: Creature, ranged: bool, combat=No
 
 def deal_damage(ui, target: Creature, amount: int, dtype: str, combat=None,
                 source: str = "", magic: bool = True) -> int:
+    if magic and target.incorporeal and dtype not in ("force", "positive", "negative",
+                                                      "holy") and dice.percent() <= 50:
+        ui.out(f"  The magic passes harmlessly through {target.name}'s ghostly form.")
+        return 0
     dealt, note = target.take_damage(amount, dtype, magic=magic)
     extra = f" ({note})" if note else ""
     shown = dtype.replace("*", "")
@@ -115,6 +119,7 @@ def duration(spell: str, cl: int) -> int:
         "Divine Power": cl, "Spell Immunity": 10 * ROUNDS_PER_MINUTE * cl,
         "Greater Invisibility": cl, "Stoneskin": 10 * ROUNDS_PER_MINUTE * cl,
         "Righteous Might": cl, "Dispel Evil": cl,
+        "Invisibility": ROUNDS_PER_MINUTE * cl, "Fly": ROUNDS_PER_MINUTE * cl,
     }
     return per_level.get(spell, ROUNDS_PER_MINUTE)
 
@@ -825,6 +830,11 @@ def _cast_spell(ui, caster, spell_name, targets, cl, dc, combat, allies, enemies
             deal_damage(ui, t, amt // 2, "fire", combat)
             if not t.dead:
                 deal_damage(ui, t, amt - amt // 2, "holy", combat)
+    elif n == "Invisibility":
+        buff(t0, "Invisibility", [("concealment", "concealment", 50), ("attack", "untyped", 2)],
+             tags=["invisible"])
+    elif n == "Fly":
+        buff(t0, "Fly", [("speed", "enhancement", 30)], tags=["flying"])
     elif n == "Dispel Magic":
         dispel(ui, caster, t0, cl, allies or [caster])
     elif n.startswith(("Summon Monster", "Summon Nature's Ally")):

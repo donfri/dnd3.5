@@ -104,6 +104,8 @@ class Monster(Creature):
         out = []
         if stat == "ac" and "Dodge" in self.feats:
             out.append(("dodge", 1, "Dodge"))
+        if stat == "ac" and self.block.get("deflection"):
+            out.append(("deflection", self.block["deflection"], "deflection"))
         return out
 
     def armor_data(self):

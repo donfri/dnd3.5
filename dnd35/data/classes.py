@@ -118,7 +118,8 @@ CLASSES = {
                          "Knowledge (religion)", "Listen", "Move Silently", "Perform",
                          "Profession", "Sense Motive", "Spot", "Swim", "Tumble"],
         "weapon_prof": ["club", "light crossbow", "heavy crossbow", "dagger", "handaxe",
-                        "javelin", "quarterstaff", "sling", "unarmed strike"],
+                        "javelin", "kama", "nunchaku", "quarterstaff", "siangham", "sling",
+                        "unarmed strike"],
         "armor_prof": [], "alignment": "lawful",
         "bonus_feat_levels": [1, 2, 6],
         "features": {

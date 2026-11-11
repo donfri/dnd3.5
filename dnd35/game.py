@@ -81,6 +81,7 @@ def ready_party(party) -> list:
             continue
         p.damage = 0
         p.temp_hp = 0
+        p.nonlethal = 0
         p.stable = False
         p.effects = []
         p.daily = {}

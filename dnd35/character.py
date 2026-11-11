@@ -456,9 +456,11 @@ class Character(Creature):
         for c in self.classes():
             profs.update(CLASSES[c]["weapon_prof"])
         profs.update(self.race_data.get("auto_proficiency", []))
+        if "martial" in profs:
+            profs.update(self.race_data.get("weapon_familiarity", []))
         for f in self.feat_list():
-            if f.startswith("Martial Weapon Proficiency ("):
-                profs.add(f[len("Martial Weapon Proficiency ("):-1])
+            if f.startswith(("Martial Weapon Proficiency (", "Exotic Weapon Proficiency (")):
+                profs.add(f[f.index("(") + 1:-1])
             if f == "Simple Weapon Proficiency":
                 profs.add("simple")
         if "War" in self.domains and self.deity in DEITIES:
@@ -946,6 +948,7 @@ class Character(Creature):
             "effects": [e.to_dict() for e in self.effects], "afflictions": self.afflictions,
             "daily": self.daily, "power_attack": self.power_attack,
             "bonus_hp": self.bonus_hp, "companion": self.companion,
+            "nonlethal": self.nonlethal,
             "familiar": self.familiar,
         }
 
@@ -957,7 +960,7 @@ class Character(Creature):
                   "height", "weight", "languages", "favored_enemies", "combat_style",
                   "spellbook", "inventory", "cp", "xp", "notes", "damage", "temp_hp",
                   "ability_damage", "stable", "dead", "afflictions", "daily",
-                  "power_attack", "bonus_hp", "companion", "familiar"):
+                  "power_attack", "bonus_hp", "companion", "familiar", "nonlethal"):
             if k in d:
                 setattr(c, k, d[k])
         c.spells_known = {int(k): v for k, v in d.get("spells_known", {}).items()}

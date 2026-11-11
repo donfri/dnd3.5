@@ -292,6 +292,12 @@ SPELLS = {s["name"]: s for s in [
                        "paladin": 3}, "abjuration", "creature",
       "Dispel check (d20 + caster level, max +10) vs 11 + caster level ends spells on one "
       "creature: an enemy's buffs or summons, or a hostile spell on a friend.", sr=False),
+    S("Invisibility", {"wizard": 2, "sorcerer": 2, "bard": 2}, "illusion", "ally",
+      "Subject turns invisible: +2 on its next attack, foes miss it 50% of the time. Ends "
+      "when it attacks (1 min/level)."),
+    S("Fly", {"wizard": 3, "sorcerer": 3}, "transmutation", "ally",
+      "Subject flies for 1 min/level: it can reach flying foes and doesn't need to touch "
+      "the ground."),
 ]}
 
 for _n, _r in enumerate(["I", "II", "III", "IV", "V"], 1):
