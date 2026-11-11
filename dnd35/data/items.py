@@ -64,6 +64,13 @@ WEAPONS = {
                   ranged=True, ammo="arrows", bow=True),
     "shortbow": _w("Shortbow", "martial", "martial", "1d6", 20, 3, 30, 2, "P", "ranged", 60,
                    ranged=True, ammo="arrows", bow=True),
+    # reach weapons (strike foes 10 ft. away)
+    "longspear": _w("Longspear", "simple", "simple", "1d8", 20, 3, 5, 9, "P", "two", reach=True),
+    "glaive": _w("Glaive", "martial", "martial", "1d10", 20, 3, 8, 10, "S", "two", reach=True),
+    "guisarme": _w("Guisarme", "martial", "martial", "2d4", 20, 3, 9, 12, "S", "two",
+                   reach=True, trip_bonus=2),
+    "ranseur": _w("Ranseur", "martial", "martial", "2d4", 20, 3, 10, 12, "P", "two",
+                  reach=True, disarm_bonus=2),
     # monster / special weapons
     "greatclub (large)": _w("Greatclub", "martial", "martial", "2d8", 20, 2, 5, 16, "B", "two"),
 }

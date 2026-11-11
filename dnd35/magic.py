@@ -848,6 +848,10 @@ def _cast_for(ui, who, party) -> None:
     cast = casts[i]
     sp = SPELLS[cast["spell"]]
     living = [p for p in party if not p.dead]
+    for p in list(living):
+        comp = p.companion_creature() if hasattr(p, "companion_creature") else None
+        if comp is not None and not comp.dead:
+            living.append(comp)
     target = who
     if cast["spell"] == "Raise Dead":
         dead = [p for p in party if p.dead]

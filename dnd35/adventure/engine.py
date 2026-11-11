@@ -16,6 +16,7 @@ from ..data.items import item_data, item_name, make_item
 from ..effects import Effect, ROUNDS_PER_MINUTE
 from ..levelup import level_up_interactive, prepare_spells
 from ..abilities import ability_menu, has_usable
+from ..companions import rest_companion
 from ..magic import cast_out_of_combat, heal, saving_throw
 from ..monster import Monster
 from ..sheet import render, short_status
@@ -898,6 +899,7 @@ class GM:
                    + ("  (A soft bed doubles natural healing.)" if cost_sp else ""))
             self.disease_check(p)
             p.reset_spells()
+            rest_companion(ui, p)
         for p in gs.living():
             if p.caster_classes():
                 with ui.acting(p.player):

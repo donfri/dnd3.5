@@ -10,6 +10,7 @@ from typing import List, Optional
 
 from . import dice, rules
 from .character import Character
+from .companions import choose_companion, choose_familiar
 from .data.classes import (CLASSES, CLASS_ORDER, DEITIES, DOMAINS, FAVORED_ENEMIES,
                            alignment_allowed)
 from .data.feats import FEATS, SPELL_SCHOOLS
@@ -578,6 +579,11 @@ def gain_level(ch: Character, cls: str, ui=None, auto: bool = False,
         choose_favored_enemy(ch, ui, auto)
     if cls == "ranger" and clvl == 2:
         choose_combat_style(ch, ui, auto)
+    if ((cls == "druid" and clvl == 1) or (cls == "ranger" and clvl == 4)) \
+            and not ch.companion:
+        choose_companion(ch, ui, auto)
+    if cls in ("wizard", "sorcerer") and first_in_class and not ch.familiar:
+        choose_familiar(ch, ui, auto)
     # skills
     pts = ch.skill_points_for_level(cls, first)
     allocate_skills(ch, pts, ui, auto)

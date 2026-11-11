@@ -194,8 +194,18 @@ Command-line options:
 - Initiative, surprise rounds, and flat-footed characters.
 - Standard, move, and full-round actions: attack, full attack, charge, withdraw,
   total defense, fighting defensively, drawing weapons, standing up.
-- Attacks of opportunity, flanking, firing into melee, and casting defensively
-  (Concentration).
+- Attacks of opportunity (and Combat Reflexes), flanking, firing into melee, and
+  casting defensively (Concentration).
+- Combat maneuvers: **trip, disarm, grapple** (hurt, pin, break free), and **bull
+  rush**, with their Improved feats. You also get the **5-foot step**, **ready**
+  (strike the first foe who comes at you), and **delay**.
+- **Reach**: Large monsters and reach weapons (longspear, glaive, guisarme,
+  ranseur) get a free swing at anyone closing in, and reach wielders can strike
+  past the front line.
+- **Animal companions** for druids (and rangers from 4th level) fight beside you,
+  and your player commands them. They grow stronger as you level, and a new one
+  comes if yours falls. Wizards and sorcerers get a **familiar** with its master
+  bonus (a toad's +3 hp, a cat's +3 Move Silently...) plus Alertness.
 - Critical threats and confirmation rolls, damage reduction, energy immunity and
   vulnerability, concealment, and two-weapon fighting.
 - The 3.5 bonus-type stacking rules (morale, luck, deflection, dodge...).
@@ -241,6 +251,7 @@ dnd35/
   sheet.py                 character sheet rendering
   magic.py combat.py       spells and the combat engine
   abilities.py             lay on hands, wild shape, wholeness of body, bardic music
+  companions.py            animal companions and familiars
   shop.py                  shopping & inventory
   adventure/engine.py      the GM: rooms, checks, traps, encounters, rest, town
   adventure/ember_barrow.py   the adventure itself (pure data + a few scripts)
@@ -281,6 +292,7 @@ python3 -m unittest discover -s tests
   are written for levels 1 to 5.
 - *Raise dead* costs the hero half a level of experience instead of a whole
   level (or 2 Constitution at 1st level). The temple can cast it for 5,450 gp.
-- Familiars and the ranger's animal companion are flavor only. Grapple, trip
-  (other than wolves), bull rush, and metamagic aren't implemented.
+- Familiars stay safely with their master; they don't scout or deliver spells.
+  Grappling has no pins-to-tie-up or grapple-only spells. Metamagic isn't
+  implemented.
 - Monsters die at 0 HP. PCs use the full dying rules.

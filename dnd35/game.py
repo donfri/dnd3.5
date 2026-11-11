@@ -85,6 +85,9 @@ def ready_party(party) -> list:
         p.ability_damage = {}
         p.afflictions = []
         p.reset_spells()
+        if getattr(p, "companion", None):
+            p.companion.update(damage=0, dead=False)
+            p._companion_inst = None
         out.append(p)
     return out
 

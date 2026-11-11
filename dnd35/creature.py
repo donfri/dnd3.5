@@ -597,7 +597,8 @@ def weapon_info_from_entry(entry: dict, size: str) -> dict:
         "enhancement": d.get("enhancement", 0), "masterwork": d.get("masterwork", False),
         "range": d.get("range", 0), "ammo": d.get("ammo"), "bow": d.get("bow", False),
         "sling": d.get("sling", False), "category": d["category"], "entry": entry,
-        "nonlethal": d.get("nonlethal", False),
+        "nonlethal": d.get("nonlethal", False), "reach": d.get("reach", False),
+        "trip_bonus": d.get("trip_bonus", 0), "disarm_bonus": d.get("disarm_bonus", 0),
     }
 
 

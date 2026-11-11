@@ -290,6 +290,55 @@ MONSTERS.update({
     },
 })
 
+MONSTERS.update({
+    "riding dog": {
+        # MM: AC 16, bite +3 (1d6+3), trip
+        "name": "Riding Dog", "type": "animal", "size": "medium",
+        "hd": 2, "hit_die": 8, "bab": 1, "base_saves": (5, 5, 1), "cr": 1,
+        "abilities": {"str": 15, "dex": 15, "con": 15, "int": 2, "wis": 12, "cha": 6},
+        "natural": 4, "speed": 40,
+        "natural_attacks": [{"name": "bite", "damage": "1d6", "dtype": "P", "primary": True,
+                             "str_mult": 1.5, "trip": True}],
+        "skills": {"Jump": 8, "Listen": 5, "Spot": 5, "Swim": 3, "Survival": 1},
+        "feats": ["Alertness", "Track"], "vision": "low-light, scent",
+        "desc": "A big, loyal war dog in a studded collar.",
+    },
+    "eagle": {
+        # MM: Small, AC 14, talons +3 (1d4) x2, bite -2 (1d4)
+        "name": "Eagle", "type": "animal", "size": "small",
+        "hd": 1, "hit_die": 8, "bab": 0, "base_saves": (3, 4, 2), "cr": 1 / 2,
+        "abilities": {"str": 10, "dex": 15, "con": 12, "int": 2, "wis": 14, "cha": 6},
+        "natural": 1, "speed": 80,
+        "natural_attacks": [{"name": "talon", "damage": "1d4", "dtype": "S", "primary": True},
+                            {"name": "talon", "damage": "1d4", "dtype": "S", "primary": True},
+                            {"name": "bite", "damage": "1d4", "dtype": "P",
+                             "primary": False}],
+        "skills": {"Listen": 2, "Spot": 14}, "feats": ["Alertness", "Weapon Finesse"],
+        "vision": "low-light",
+        "desc": "A keen-eyed eagle with a wingspan wider than a man is tall.",
+    },
+})
+
+# Animal companions: key -> (minimum effective druid level, levels subtracted)
+COMPANIONS = {
+    "wolf": (1, 0), "riding dog": (1, 0), "eagle": (1, 0),
+    "black bear": (4, 3), "leopard": (4, 3),
+}
+
+# Familiars: what the master gains (plus Alertness while it's near)
+FAMILIARS = {
+    "bat": ("skill:Listen", 3, "+3 on Listen checks"),
+    "cat": ("skill:Move Silently", 3, "+3 on Move Silently checks"),
+    "hawk": ("skill:Spot", 3, "+3 on Spot checks in bright light"),
+    "lizard": ("skill:Climb", 3, "+3 on Climb checks"),
+    "owl": ("skill:Spot", 3, "+3 on Spot checks in shadows"),
+    "rat": ("save_fort", 2, "+2 on Fortitude saves"),
+    "raven": ("skill:Appraise", 3, "+3 on Appraise checks (and it can talk)"),
+    "snake": ("skill:Bluff", 3, "+3 on Bluff checks"),
+    "toad": ("hp", 3, "+3 hit points"),
+    "weasel": ("save_ref", 2, "+2 on Reflex saves"),
+}
+
 WILD_SHAPES = {  # key: minimum druid level
     "wolf": 5, "black bear": 5, "leopard": 5, "brown bear": 8, "dire wolf": 8,
 }

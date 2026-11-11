@@ -5,6 +5,7 @@ from collections import Counter
 from typing import Dict, List, Optional, Tuple
 
 from . import rules
+from . import companions as _comp
 from .creature import Creature, weapon_info_from_entry, thrown_variant
 from .data.classes import CLASSES, DEITIES, DOMAINS, METAL_ARMOR, MONK_UNARMED
 from .data.feats import FEATS
@@ -61,6 +62,8 @@ class Character(Creature):
         self.power_attack = 0       # current Power Attack setting
         self.expertise = 0          # current Combat Expertise setting
         self.bonus_hp = 0           # heroic mode vigor
+        self.companion: Optional[dict] = None   # animal companion {"kind", "name", ...}
+        self.familiar: Optional[dict] = None    # {"kind", "name"}
 
     # ------------------------------------------------------------ basics
     @property
@@ -129,7 +132,12 @@ class Character(Creature):
         total = sum(max(1, r + conm) for r in self.hp_rolls) + self.bonus_hp
         if self.has_feat("Toughness"):
             total += 3 * self.feat_list().count("Toughness")
+        if self.familiar and self.familiar.get("kind") == "toad":
+            total += 3
         return max(1, total)
+
+    def companion_creature(self):
+        return _comp.companion_creature(self)
 
     def feat_list(self) -> List[str]:
         out = list(self.feats)
@@ -149,6 +157,8 @@ class Character(Creature):
                        else "Improved Two-Weapon Fighting")
         if self.class_level("monk") >= 1 and "Improved Unarmed Strike" not in out:
             out.append("Improved Unarmed Strike")
+        if self.familiar and "Alertness" not in out:
+            out.append("Alertness")
         if "War" in self.domains and self.deity in DEITIES:
             w = DEITIES[self.deity]["weapon"]
             out.append(f"Weapon Focus ({w})")
@@ -498,6 +508,7 @@ class Character(Creature):
             val = max(0, self.mod("wis")) + self.class_level("monk") // 5
             if val:
                 out.append(("monk", val, "monk AC bonus"))
+        out += _comp.familiar_bonus(self, stat)
         if stat == "saves" and self.class_level("paladin") >= 2:
             cha = self.mod("cha")
             if cha > 0:
@@ -885,6 +896,9 @@ class Character(Creature):
             out.append(f"Favored enemy ({fe['type']}) +{fe['bonus']}")
         if self.combat_style:
             out.append(f"Combat style: {self.combat_style}")
+        for line in (_comp.companion_line(self), _comp.familiar_line(self)):
+            if line:
+                out.append(line)
         return out
 
     # ------------------------------------------------------------ xp
@@ -896,6 +910,7 @@ class Character(Creature):
 
     # ------------------------------------------------------------ persistence
     def to_dict(self) -> dict:
+        _comp.sync_companion(self)
         return {
             "name": self.name, "player": self.player, "race": self.race,
             "class_levels": self.class_levels, "base_abilities": self.base_abilities,
@@ -914,7 +929,8 @@ class Character(Creature):
             "ability_damage": self.ability_damage, "stable": self.stable, "dead": self.dead,
             "effects": [e.to_dict() for e in self.effects], "afflictions": self.afflictions,
             "daily": self.daily, "power_attack": self.power_attack,
-            "bonus_hp": self.bonus_hp,
+            "bonus_hp": self.bonus_hp, "companion": self.companion,
+            "familiar": self.familiar,
         }
 
     @classmethod
@@ -925,7 +941,7 @@ class Character(Creature):
                   "height", "weight", "languages", "favored_enemies", "combat_style",
                   "spellbook", "inventory", "cp", "xp", "notes", "damage", "temp_hp",
                   "ability_damage", "stable", "dead", "afflictions", "daily",
-                  "power_attack", "bonus_hp"):
+                  "power_attack", "bonus_hp", "companion", "familiar"):
             if k in d:
                 setattr(c, k, d[k])
         c.spells_known = {int(k): v for k, v in d.get("spells_known", {}).items()}
