@@ -87,6 +87,9 @@ class Creature:
     def immunities(self) -> List[str]:
         return []
 
+    def spell_resistance(self) -> int:
+        return 0
+
     def vulnerabilities(self) -> List[str]:
         return []
 

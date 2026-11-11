@@ -115,6 +115,9 @@ class Monster(Creature):
     def natural_armor(self):
         return self.block.get("natural", 0)
 
+    def spell_resistance(self):
+        return self.block.get("sr", 0)
+
     def dr(self):
         return list(self.block.get("dr", []))
 

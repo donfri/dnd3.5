@@ -183,6 +183,14 @@ Command-line options:
   *barkskin*, *call lightning*, *slow*, *stoneskin*, *flame strike*, *cone of
   cold*, *raise dead*, and more. Casters can be prepared or spontaneous, bonus
   spells come from high ability scores, and arcane spell failure applies.
+- **Wands** (50 charges, spell trigger or Use Magic Device), **staffs** (several
+  spells, using your caster level if it's higher), and **metamagic rods**.
+- **Metamagic**: Empower, Extend, Maximize, Quicken (a free-action spell each
+  round), Still and Silent. You choose it when you cast, and it uses a higher slot.
+- **Spell resistance** (caster level checks, Spell Penetration), **dispel magic**,
+  and **summoning** (Summon Monster I-V, Summon Nature's Ally I-V). Summoned
+  creatures fight for whoever cast the spell, and druids can swap any prepared
+  spell for a summon.
 - Weapons, armor, shields, masterwork, +1 and +2 gear, rings, cloaks, amulets,
   bracers, belts, gauntlets and headbands, potions, scrolls (with Use Magic
   Device), alchemist's fire, holy water, encumbrance, and ammunition (you
@@ -294,6 +302,6 @@ python3 -m unittest discover -s tests
 - *Raise dead* costs the hero half a level of experience instead of a whole
   level (or 2 Constitution at 1st level). The temple can cast it for 5,450 gp.
 - Familiars stay safely with their master; they don't scout or deliver spells.
-  Grappling has no pins-to-tie-up or grapple-only spells. Metamagic isn't
-  implemented.
+  Metamagic is chosen at casting time (spending the higher slot then) rather
+  than at preparation.
 - Monsters die at 0 HP. PCs use the full dying rules.

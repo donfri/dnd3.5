@@ -133,8 +133,18 @@ FEATS = {
                       "prereq": {"caster": 1}},
     "Brew Potion": {"desc": "Create potions of spells you know (downtime, flavor).",
                     "prereq": {"caster": 3}},
-    "Empower Spell": {"desc": "Metamagic (flavor in this version).", "prereq": {"caster": 1},
-                      "metamagic": True},
+    "Empower Spell": {"desc": "Metamagic: spell dice x1.5. Uses a slot 2 levels higher.",
+                      "prereq": {"caster": 1}, "metamagic": True},
+    "Extend Spell": {"desc": "Metamagic: double duration. Uses a slot 1 level higher.",
+                     "prereq": {"caster": 1}, "metamagic": True},
+    "Maximize Spell": {"desc": "Metamagic: spell dice roll maximum. Uses a slot 3 levels "
+                               "higher.", "prereq": {"caster": 1}, "metamagic": True},
+    "Quicken Spell": {"desc": "Metamagic: cast as a free action (once per round). Uses a slot "
+                              "4 levels higher.", "prereq": {"caster": 1}, "metamagic": True},
+    "Still Spell": {"desc": "Metamagic: no gestures (cast while bound). Uses a slot 1 level "
+                            "higher.", "prereq": {"caster": 1}, "metamagic": True},
+    "Silent Spell": {"desc": "Metamagic: no words (cast in silence). Uses a slot 1 level "
+                             "higher.", "prereq": {"caster": 1}, "metamagic": True},
     "Craft Wondrous Item": {"desc": "Create wondrous items (downtime, flavor).",
                             "prereq": {"caster": 3}},
     "Craft Magic Arms and Armor": {"desc": "Create magic weapons and armor (downtime, "

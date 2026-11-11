@@ -371,7 +371,8 @@ def sheet_data(ch: Character) -> dict:
         equipment.append({"idx": idx, "name": item_name(e), "qty": e.get("qty", 1),
                           "slot": slot, "weight": weight, "desc": desc,
                           "kind": d["kind"], "equipped": bool(e.get("slot")),
-                          "hands": d.get("hands"), "use": d.get("use"),
+                          "hands": d.get("hands"),
+                          "use": d.get("use") or ("spell" if d["kind"] == "wand" else None),
                           "spell": d.get("spell"),
                           "target": SPELLS[d["spell"]]["target"] if d.get("spell") in SPELLS
                           else None})

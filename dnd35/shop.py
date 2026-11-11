@@ -169,6 +169,8 @@ def _inventory_loop(ui, party, who) -> None:
             acts.append("Use / drink")
         if d["kind"] == "consumable" and d.get("use") == "scroll":
             acts.append("Read scroll")
+        if d["kind"] in ("wand", "staff"):
+            acts.append("Use / drink")
         acts += ["Give to another hero", "Drop"]
         j = ui.choose(f"{item_name(e)}", acts, allow_cancel=True)
         if j is None:

@@ -287,7 +287,23 @@ SPELLS = {s["name"]: s for s in [
     S("Call Lightning Storm", {"druid": 5}, "evocation", "enemy",
       "As call lightning, but 5d6 per bolt and up to 15 bolts.", save=("ref", "half"),
       desc_tags=["electricity"]),
+    # ---------------------------------------------------------------- added in v3
+    S("Dispel Magic", {"wizard": 3, "sorcerer": 3, "cleric": 3, "bard": 3, "druid": 4,
+                       "paladin": 3}, "abjuration", "creature",
+      "Dispel check (d20 + caster level, max +10) vs 11 + caster level ends spells on one "
+      "creature: an enemy's buffs or summons, or a hostile spell on a friend.", sr=False),
 ]}
+
+for _n, _r in enumerate(["I", "II", "III", "IV", "V"], 1):
+    SPELLS[f"Summon Monster {_r}"] = S(
+        f"Summon Monster {_r}", {"wizard": _n, "sorcerer": _n, "cleric": _n, "bard": _n},
+        "conjuration", "summon",
+        f"Call a creature from another plane to fight for you for 1 round/level "
+        f"(level {_n} list).", sr=False)
+    SPELLS[f"Summon Nature's Ally {_r}"] = S(
+        f"Summon Nature's Ally {_r}", {"druid": _n, "ranger": _n}, "conjuration", "summon",
+        f"Call a wild animal to fight for you for 1 round/level (level {_n} list). Druids "
+        f"can swap any prepared spell for this.", sr=False)
 
 
 def spells_for(cls: str, level: int):

@@ -24,6 +24,9 @@ CURE_BY_LEVEL = {0: "Cure Minor Wounds", 1: "Cure Light Wounds", 2: "Cure Modera
                  3: "Cure Serious Wounds", 4: "Cure Critical Wounds",
                  5: "Mass Cure Light Wounds"}
 
+SNA_BY_LEVEL = {i: f"Summon Nature's Ally {r}" for i, r in
+                enumerate(["I", "II", "III", "IV", "V"], 1)}
+
 SKILL_FEATS = {k: v["skills"] for k, v in FEATS.items() if "skills" in v}
 
 
@@ -331,7 +334,8 @@ class Character(Creature):
                     if (not m.get("slot") and m["id"] == e["id"]
                             and m.get("masterwork") == e.get("masterwork")
                             and m.get("enhancement") == e.get("enhancement")
-                            and m.get("custom_name") == e.get("custom_name")):
+                            and m.get("custom_name") == e.get("custom_name")
+                            and m.get("charges") == e.get("charges")):
                         m["qty"] += e.get("qty", 1)
                         break
                 else:
@@ -782,6 +786,13 @@ class Character(Creature):
                                   and s["spell"] != cure]
                         if donors:
                             out.append({"class": cls, "spell": cure, "level": int(sl),
+                                        "slot": donors[0], "spontaneous": True})
+                if cls == "druid":
+                    for sl, slots in sorted(self.prepared.get(cls, {}).items()):
+                        sna = SNA_BY_LEVEL.get(int(sl))
+                        donors = [s for s in slots if not s["used"] and s["spell"] != sna]
+                        if sna and donors:
+                            out.append({"class": cls, "spell": sna, "level": int(sl),
                                         "slot": donors[0], "spontaneous": True})
             else:
                 per = self.spells_per_day(cls)

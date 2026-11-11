@@ -16,8 +16,11 @@ from .data.spells import SPELLS
 from .effects import Effect, ROUNDS_PER_MINUTE
 from .abilities import (inspire_courage, lay_on_hands, revert_shape, wholeness_of_body,
                         wild_shape)
+from .data.classes import CLASSES
+from .data.monsters import MONSTERS
 from .magic import (call_bolt, cast_spell, caster_cl, caster_dc, consume_one_shot, deal_damage,
-                    drain_level, saving_throw, scroll_usable, touch_attack, use_scroll_check)
+                    device_spells, drain_level, pay_metamagic, pick_metamagic, saving_throw,
+                    use_device_check, scroll_usable, touch_attack, use_scroll_check)
 from .sheet import render, short_status
 from .ui import c
 
@@ -43,6 +46,7 @@ class CState:
         self.stepped = False
         self.delayed = False
         self.readied: Optional[dict] = None
+        self.quickened = False
 
     @property
     def single(self) -> bool:
@@ -196,10 +200,12 @@ class Combat:
             ui.out(f"  {c(short_status(p), 'bgreen' if p.conscious else 'bred')}{fl}"
                    + (f"  | melee: {eng}" if eng else ""))
         for comp in self.companions:
-            if comp.dead:
+            if comp.dead or self.s(comp).fled:
                 continue
             eng = ", ".join(f.name for f in self.engaged_foes(comp))
-            ui.out(f"  {c(comp.name, 'green')} ({comp.owner.name}'s companion): HP {comp.hp}/"
+            role = "summoned" if getattr(comp, "summoned", False) else \
+                f"{comp.owner.name}'s companion"
+            ui.out(f"  {c(comp.name, 'green')} ({role}): HP {comp.hp}/"
                    f"{comp.max_hp()}  AC {comp.ac()}"
                    + (f" [{comp.status_word()}]" if comp.status_word() != "ok" else "")
                    + (f"  | melee: {eng}" if eng else ""))
@@ -299,7 +305,7 @@ class Combat:
         for comp in self.companions:
             comp.effects = [e for e in comp.effects if not (
                 e.tags & {"prone", "grappled", "pinned", "stunned", "dazed", "entangled"})]
-            if hasattr(comp, "owner"):
+            if hasattr(comp, "owner") and not getattr(comp, "summoned", False):
                 from .companions import sync_companion
                 sync_companion(comp.owner)
         for p in self.party:
@@ -331,6 +337,11 @@ class Combat:
         x.cleave_used = False
         x.deflect_used = False
         x.stepped = False
+        x.quickened = False
+        if getattr(cr, "summoned", False) and not cr.get_effect("Summoned"):
+            x.fled = True
+            ui.out(f"{cr.name} fades away as the summoning ends.", ("dim",))
+            return False
         if x.readied:
             x.readied = None
             ui.out(f"{cr.name}'s readied action lapses.", ("dim",))
@@ -1078,9 +1089,11 @@ class Combat:
             if x.std and lightning and lightning.data.get("bolts", 0) > 0:
                 add(f"Call down lightning ({lightning.data['bolts']} bolts left)",
                     self.act_lightning, x, lightning)
-            if x.std and getattr(p, "available_casts", None) and p.available_casts() \
+            if (x.std or (p.has_feat("Quicken Spell") and not x.quickened)) and \
+                    getattr(p, "available_casts", None) and p.available_casts() \
                     and p.can_cast_now():
-                add("Cast a spell", self.act_cast, x)
+                add("Cast a spell" if x.std else "Cast a quickened spell (free action)",
+                    self.act_cast, x)
             if x.std and self.usable_items(p):
                 add("Use an item (potion, scroll, alchemist's fire...)", self.act_item, x)
             if x.std and p.uses_left("turn") and any(m.ctype == "undead" for m in self.enemies(p)):
@@ -1750,6 +1763,9 @@ class Combat:
         out = []
         for e in p.inventory:
             d = item_data(e)
+            if d["kind"] in ("wand", "staff"):
+                out.append(e)
+                continue
             if d["kind"] == "consumable" and d.get("use") in ("spell", "scroll", "splash"):
                 if d.get("use") == "scroll" and not scroll_usable(p, d)[0]:
                     continue
@@ -1767,6 +1783,23 @@ class Combat:
             return
         e = items[i]
         d = item_data(e)
+        if d["kind"] in ("wand", "staff"):
+            spells = [s_ for s_, _ in device_spells(d)]
+            spell = spells[0] if len(spells) == 1 else spells[ui.choose(
+                "Cast which spell?", spells, allow_cancel=True) or 0]
+            targets = self._spell_targets(p, spell, SPELLS[spell]["target"])
+            if targets is None:
+                return
+            x.std = False
+            if self.engaged_foes(p):
+                self.provoke(p, f"uses {item_name(e).split(' (')[0].lower()} in melee")
+                if not p.conscious:
+                    return
+            if use_device_check(ui, p, d, spell):
+                from .magic import device_cast
+                device_cast(ui, p, e, spell, targets, self, allies=self.allies(p),
+                            enemies=self.enemies(p))
+            return
         if d["use"] == "splash":
             tgt = self._pick_target(p, self.enemies(p), "Throw at whom?")
             if not tgt:
@@ -1826,6 +1859,12 @@ class Combat:
     def _spell_targets(self, p, spell, kind) -> Optional[List[Creature]]:
         ui = self.ui
         sp = SPELLS[spell]
+        if kind == "summon":
+            return [p]
+        if kind == "creature":
+            pool = [c_ for c_ in self.allies(p) + self.enemies(p) if not c_.dead]
+            t = self._pick_target(p, pool, "Target (friend or foe)")
+            return [t] if t else None
         if kind == "enemy":
             t = self._pick_target(p, self.enemies(p))
             return [t] if t else None
@@ -1880,12 +1919,29 @@ class Combat:
             return
         cast = casts[i]
         spell = cast["spell"]
+        meta = pick_metamagic(ui, p, cast)
+        if meta is None:
+            return
+        if not x.std and "Quicken Spell" not in meta.get("feats", ()):
+            ui.bad("You've used your standard action; only a quickened spell is possible now.")
+            return
+        if "Quicken Spell" in meta.get("feats", ()) and x.quickened:
+            ui.bad("You can cast only one quickened spell per round.")
+            return
         targets = self._spell_targets(p, spell, SPELLS[spell]["target"])
         if targets is None:
             return
-        x.std = False
+        if "Quicken Spell" in meta.get("feats", ()):
+            x.quickened = True
+        else:
+            x.std = False
+            if meta and not CLASSES[cast["class"]].get("prepared") and not meta.get("rod"):
+                x.move = False   # spontaneous metamagic takes a full round
         lvl = cast["level"]
-        p.expend(cast)
+        if meta:
+            pay_metamagic(p, cast, meta)
+        else:
+            p.expend(cast)
         # touch spells on enemies require being in melee
         if spell in ("Inflict Light Wounds", "Inflict Moderate Wounds", "Bestow Curse",
                      "Poison", "Slay Living") or (
@@ -1939,7 +1995,8 @@ class Combat:
                 ui.bad(f"Arcane spell failure! (d% {r} <= {asf}%) The armor fouls the gestures.")
                 return
         cast_spell(ui, p, spell, targets, caster_cl(p, cast), caster_dc(p, cast), self,
-                   allies=self.allies(p), enemies=self.enemies(p))
+                   allies=self.allies(p), enemies=self.enemies(p),
+                   meta=meta.get("feats", ()))
         if p.hp == 0 and not p.dead:
             self._strain(p)
 
@@ -2058,6 +2115,26 @@ class Combat:
         if surprise or single:
             return
         self.monster_melee(m, tgt, full=False)
+
+    def add_summon(self, caster: Creature, key: str, rounds: int) -> None:
+        from .monster import Monster
+        m = Monster(key, f"{caster.name}'s {MONSTERS[key]['name'].lower()}", roll_hp=False,
+                    overrides={"morale": False, "evil": False})
+        m.owner = caster
+        m.summoned = True
+        m.add_effect(Effect("Summoned", rounds, data={"cl": rounds, "summoned": True},
+                            source=caster.name, hidden=True))
+        x = CState(m, self.s(caster).side)
+        x.flat = False
+        self.st[m.uid] = x
+        self.companions.append(m)
+        idx = self.order.index(self.s(caster)) + 1 if self.s(caster) in self.order else len(
+            self.order)
+        self.order.insert(idx, x)
+        if hasattr(self, "acted"):
+            self.acted.add(id(x))   # it acts from next round
+        self.ui.good(f"  A {MONSTERS[key]['name'].lower()} appears beside {caster.name}, "
+                     f"ready to fight for {rounds} rounds.")
 
     # ------------------------------------------------------------ animal companions
     def companion_turn(self, x: CState, surprise: bool) -> None:

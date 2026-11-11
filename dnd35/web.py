@@ -349,6 +349,16 @@ class Table:
                     ch.inventory.remove(e)
                 tgt.add_item(given)
                 say(f"{ch.name} gives {name} to {tgt.name}.")
+            elif action == "use" and d["kind"] == "wand":
+                from .data.spells import SPELLS
+                from .magic import device_cast, use_device_check
+                sp = SPELLS[d["spell"]]
+                if sp["target"] in ("enemy", "enemies"):
+                    return False, "Save that for a fight."
+                if use_device_check(self.ui, ch, d, d["spell"]):
+                    say(f"{ch.name} uses {name}.")
+                    device_cast(self.ui, ch, e, d["spell"],
+                                [tgt if sp["target"] == "ally" else ch], allies=others)
             elif action == "use":
                 use = d.get("use")
                 if use == "antitoxin":

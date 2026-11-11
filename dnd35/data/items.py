@@ -286,6 +286,54 @@ MAGIC.update({
                                      "natural weapons."),
 })
 
+# wands, staffs and metamagic rods
+def _wand(spell, cl, gp, lvl_note=""):
+    return {"kind": "wand", "name": f"Wand of {spell.lower()}" + lvl_note, "cost": gp * GP,
+            "weight": 0, "spell": spell, "cl": cl, "charges": 50,
+            "desc": f"Spell trigger: casts {spell} (caster level {cl}). 50 charges. Needs the "
+                    f"spell on your class list, or Use Magic Device DC 20."}
+
+
+MAGIC.update({
+    "wand of cure light wounds": _wand("Cure Light Wounds", 1, 750),
+    "wand of magic missile": _wand("Magic Missile", 1, 750),
+    "wand of magic missile (cl 5)": _wand("Magic Missile", 5, 3750, " (3 missiles)"),
+    "wand of cure moderate wounds": _wand("Cure Moderate Wounds", 3, 4500),
+    "wand of scorching ray": _wand("Scorching Ray", 3, 4500),
+    "wand of hold person": _wand("Hold Person", 3, 4500),
+    "wand of bull's strength": _wand("Bull's Strength", 3, 4500),
+    "wand of barkskin": _wand("Barkskin", 3, 4500),
+    "wand of fireball": _wand("Fireball", 5, 11250),
+    "wand of lightning bolt": _wand("Lightning Bolt", 5, 11250),
+    "wand of cure serious wounds": _wand("Cure Serious Wounds", 5, 11250),
+    "staff of fire": {"kind": "staff", "name": "Staff of fire", "cost": 17750 * GP,
+                      "weight": 5, "cl": 8, "charges": 50,
+                      "spells": [["Burning Hands", 1], ["Fireball", 1], ["Flaming Sphere", 1]],
+                      "desc": "Casts burning hands, flaming sphere or fireball (1 charge "
+                              "each). Uses your caster level if it's higher than 8."},
+    "staff of healing": {"kind": "staff", "name": "Staff of healing", "cost": 27750 * GP,
+                         "weight": 5, "cl": 8, "charges": 50,
+                         "spells": [["Lesser Restoration", 1], ["Cure Serious Wounds", 1],
+                                    ["Remove Disease", 1], ["Remove Fear", 1]],
+                         "desc": "Casts lesser restoration, cure serious wounds, remove "
+                                 "disease or remove fear (1 charge each)."},
+    "lesser rod of extend spell": {"kind": "rod", "name": "Lesser rod of extend spell",
+                                   "cost": 3000 * GP, "weight": 5, "metamagic": "Extend Spell",
+                                   "max_level": 3,
+                                   "desc": "3/day: extend a spell of 3rd level or lower "
+                                           "without using a higher slot."},
+    "lesser rod of empower spell": {"kind": "rod", "name": "Lesser rod of empower spell",
+                                    "cost": 9000 * GP, "weight": 5,
+                                    "metamagic": "Empower Spell", "max_level": 3,
+                                    "desc": "3/day: empower a spell of 3rd level or lower "
+                                            "without using a higher slot."},
+    "lesser rod of maximize spell": {"kind": "rod", "name": "Lesser rod of maximize spell",
+                                     "cost": 14000 * GP, "weight": 5,
+                                     "metamagic": "Maximize Spell", "max_level": 3,
+                                     "desc": "3/day: maximize a spell of 3rd level or lower "
+                                             "without using a higher slot."},
+})
+
 # where each kind of worn item goes
 WORN_SLOTS = {"ring": ["ring", "ring2"], "cloak": ["cloak"], "amulet": ["amulet"],
               "bracers": ["wrists"], "gloves": ["hands"], "head": ["head"], "belt": ["belt"]}
@@ -352,7 +400,14 @@ def item_name(entry: dict) -> str:
         name = f"Masterwork {name[0].lower()}{name[1:]}"
     if entry.get("custom_name"):
         name = entry["custom_name"]
+    if d["kind"] in ("wand", "staff"):
+        name += f" ({charges_left(entry)} charges)"
     return name
+
+
+def charges_left(entry: dict) -> int:
+    d = item_data(entry)
+    return entry.get("charges", d.get("charges", 0))
 
 
 SHOP_STOCK = {
@@ -369,7 +424,13 @@ SHOP_STOCK = {
                "scroll of bless", "scroll of cure serious wounds", "scroll of remove disease",
                "silver holy symbol"],
     "magic": ["scroll of magic missile", "scroll of sleep", "scroll of fireball",
-              "potion of bull's strength"],
+              "potion of bull's strength", "wand of cure light wounds",
+              "wand of magic missile", "wand of magic missile (cl 5)",
+              "wand of cure moderate wounds", "wand of scorching ray", "wand of hold person",
+              "wand of bull's strength", "wand of barkskin", "wand of fireball",
+              "wand of lightning bolt", "wand of cure serious wounds", "staff of fire",
+              "staff of healing", "lesser rod of extend spell", "lesser rod of empower spell",
+              "lesser rod of maximize spell"],
     "fine": ["masterwork longsword", "masterwork rapier", "masterwork greataxe",
              "masterwork longbow", "+1 longsword", "+1 rapier", "+1 greataxe",
              "+1 greatsword", "+1 battleaxe", "+1 warhammer", "+1 heavy mace",

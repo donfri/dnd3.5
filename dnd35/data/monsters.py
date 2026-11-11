@@ -416,6 +416,7 @@ MONSTERS.update({
                                                 "name": "weakness"}},
                             {"name": "claw", "damage": "1d4", "dtype": "S",
                              "primary": True}],
+        "sr": 18,
         "skills": {"Concentration": 7, "Hide": 9, "Listen": 11, "Spot": 11, "Swim": 12},
         "feats": ["Alertness", "Blind-Fight", "Combat Casting", "Great Fortitude"],
         "vision": "darkvision 90 ft.", "evil": True,

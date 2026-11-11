@@ -173,8 +173,9 @@ PREP_PRIORITY = {
 MONK_BONUS_FEATS = {1: ["Stunning Fist", "Improved Grapple"],
                     2: ["Deflect Arrows", "Combat Reflexes"],
                     6: ["Improved Trip", "Improved Disarm"]}
-CASTER_BONUS_FEATS = ["Brew Potion", "Craft Wondrous Item", "Craft Magic Arms and Armor",
-                      "Empower Spell", "Spell Penetration"]
+CASTER_BONUS_FEATS = ["Extend Spell", "Empower Spell", "Brew Potion", "Craft Wondrous Item",
+                      "Craft Magic Arms and Armor", "Maximize Spell", "Quicken Spell",
+                      "Spell Penetration"]
 
 ABILITY_INCREASE_LEVELS = (4, 8, 12, 16, 20)
 FEAT_LEVELS = (1, 3, 6, 9, 12, 15, 18)

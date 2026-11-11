@@ -122,7 +122,8 @@ class TestNewSpells(unittest.TestCase):
             if n == "Raise Dead":
                 f.dead = True
             tg = {"enemy": ms[:1], "enemies": ms[:sp["max_targets"]], "ally": [f],
-                  "allies": [c, f], "self": [c], "none": [c]}[sp["target"]]
+                  "allies": [c, f], "self": [c], "none": [c], "creature": ms[:1],
+                  "summon": [c]}[sp["target"]]
             cast_spell(ui, c, n, tg, 9, 17, cb, allies=[c, f], enemies=ms)
             self.assertNotIn("no mechanical effect", "\n".join(ui.transcript), n)
 
