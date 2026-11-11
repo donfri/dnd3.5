@@ -60,6 +60,7 @@ WEAPONS = {
     "greatclub": _w("Greatclub", "martial", "martial", "1d10", 20, 2, 5, 8, "B", "two"),
     "greatsword": _w("Greatsword", "martial", "martial", "2d6", 19, 2, 50, 8, "S", "two"),
     "halberd": _w("Halberd", "martial", "martial", "1d10", 20, 3, 10, 12, "PS", "two"),
+    "scythe": _w("Scythe", "martial", "martial", "2d4", 20, 4, 18, 10, "PS", "two"),
     "longbow": _w("Longbow", "martial", "martial", "1d8", 20, 3, 75, 3, "P", "ranged", 100,
                   ranged=True, ammo="arrows", bow=True),
     "shortbow": _w("Shortbow", "martial", "martial", "1d6", 20, 3, 30, 2, "P", "ranged", 60,

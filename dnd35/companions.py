@@ -64,6 +64,50 @@ class Companion(Monster):
         return list(super().immunities())
 
 
+MOUNT_ADVANCE = [(15, 8, 10, 4), (11, 6, 8, 3), (8, 4, 6, 2), (5, 2, 4, 1)]
+
+
+class Mount(Monster):
+    """A paladin's celestial warhorse."""
+
+    def __init__(self, name: str, plevel: int):
+        bonus_hd, nat, strb = next((b, n, st) for th, b, n, st in MOUNT_ADVANCE
+                                   if plevel >= th)
+        base = MONSTERS["heavy warhorse"]
+        hd = base["hd"] + bonus_hd
+        ab = dict(base["abilities"])
+        ab["str"] += strb
+        good = 2 + hd // 2
+        super().__init__("heavy warhorse", name=name, roll_hp=False, overrides={
+            "hd": hd, "bab": hd * 3 // 4, "abilities": ab,
+            "natural": base["natural"] + nat, "base_saves": (good, good, hd // 3),
+            "evil": False, "morale": False})
+        self.kind = "heavy warhorse"
+        self.block["desc"] = f"{name}, a paladin's celestial warhorse."
+
+    def has_evasion(self) -> bool:
+        return True
+
+    def has_improved_evasion(self) -> bool:
+        return True
+
+
+def mount_creature(ch) -> Optional[Mount]:
+    data = getattr(ch, "mount", None)
+    if not data or ch.class_level("paladin") < 5 or getattr(ch, "fallen", False):
+        return None
+    key = (ch.class_level("paladin"), data["name"])
+    inst = getattr(ch, "_mount_inst", None)
+    if inst is None or getattr(ch, "_mount_key", None) != key:
+        inst = Mount(data["name"], ch.class_level("paladin"))
+        inst.damage = data.get("damage", 0)
+        inst.dead = data.get("dead", False)
+        inst.owner = ch
+        ch._mount_inst = inst
+        ch._mount_key = key
+    return inst
+
+
 def companion_creature(ch) -> Optional[Companion]:
     """The (cached) companion creature for this character, or None."""
     data = getattr(ch, "companion", None)
@@ -89,6 +133,18 @@ def sync_companion(ch) -> None:
     if inst is not None and ch.companion:
         ch.companion["damage"] = inst.damage
         ch.companion["dead"] = inst.dead
+    m = getattr(ch, "_mount_inst", None)
+    if m is not None and getattr(ch, "mount", None):
+        ch.mount["damage"] = m.damage
+        ch.mount["dead"] = m.dead
+
+
+def all_companions(ch):
+    out = []
+    for c in (companion_creature(ch), mount_creature(ch)):
+        if c is not None:
+            out.append(c)
+    return out
 
 
 def choose_companion(ch, ui, auto: bool) -> None:
@@ -138,6 +194,17 @@ def familiar_bonus(ch, stat: str):
 
 
 def rest_companion(ui, ch) -> None:
+    m = mount_creature(ch)
+    if m is not None:
+        if m.dead:
+            ui.out(f"{ch.name} prays at dawn, and {m.name} returns from the celestial "
+                   f"realms, whole again.")
+            ch.mount.update(damage=0, dead=False)
+            ch._mount_inst = None
+        else:
+            m.damage = 0
+            m.effects = []
+            sync_companion(ch)
     inst = companion_creature(ch)
     if inst is None:
         return
@@ -165,6 +232,16 @@ def companion_line(ch) -> Optional[str]:
             f"({inst.hit_dice()} HD) - {inst.statline().split(': ', 1)[1]}")
 
 
+def mount_line(ch) -> Optional[str]:
+    m = mount_creature(ch)
+    if m is None:
+        return None
+    if m.dead:
+        return f"Special mount: {m.name} (fallen; returns after a night's rest)"
+    return (f"Special mount: {m.name}, celestial heavy warhorse ({m.hit_dice()} HD) - "
+            f"{m.statline().split(': ', 1)[1]}")
+
+
 def familiar_line(ch) -> Optional[str]:
     fam = getattr(ch, "familiar", None)
     if not fam:
@@ -175,4 +252,5 @@ def familiar_line(ch) -> Optional[str]:
 
 __all__ = ["Companion", "companion_creature", "choose_companion", "choose_familiar",
            "familiar_bonus", "rest_companion", "companion_line", "familiar_line",
-           "effective_level", "sync_companion"]
+           "effective_level", "sync_companion", "mount_creature", "all_companions",
+           "mount_line"]

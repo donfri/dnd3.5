@@ -176,8 +176,23 @@ Command-line options:
     brown bear and dire wolf at 8th), no metal armor, venom immunity.
   - **Monk:** Wisdom to AC, flurry of blows, monk unarmed damage, fast movement,
     stunning fist, still mind, purity of body, wholeness of body.
-  - **Paladin:** smite evil, divine grace, lay on hands, aura of courage, divine
-    health, turn undead, and paladin spells.
+  - **Paladin:** smite evil, divine grace, lay on hands, aura of courage (+4 vs
+    fear for the party), divine health, turn undead, paladin spells, and a
+    celestial warhorse at 5th level that fights beside you. Break the code (for
+    example, murdering a helpless creature that isn't evil) and you fall until a
+    temple performs atonement.
+  - **Cleric:** 19 deities from the Player's Handbook and 18 domains with their
+    powers (death touch, destruction smite, good fortune, protective ward,
+    greater turning...). Evil clerics, and neutral ones who choose to, channel
+    negative energy: they rebuke undead, command weak undead to fight for them,
+    and convert spells into inflict spells. Domain spells use this game's
+    closest spell where the official one isn't implemented.
+  - **Bard music:** inspire courage, fascinate, countersong, inspire
+    competence, suggestion, and inspire greatness.
+  - **Wizard:** optional school specialization, with an extra spell per level
+    and prohibited schools.
+  - **Familiars:** deliver touch spells from 3rd level and scout the next area
+    for you.
 - About 100 spells, cantrips through 5th level, with real effects: *magic
   missile*, *sleep*, *bless*, *hold person*, *fireball*, *haste*, *entangle*,
   *barkskin*, *call lightning*, *slow*, *stoneskin*, *flame strike*, *cone of
@@ -313,7 +328,7 @@ python3 -m unittest discover -s tests
   levels 1 to 8.
 - *Raise dead* costs the hero half a level of experience instead of a whole
   level (or 2 Constitution at 1st level). The temple can cast it for 5,450 gp.
-- Familiars stay safely with their master; they don't scout or deliver spells.
+- Familiars don't fight.
   Metamagic is chosen at casting time (spending the higher slot then) rather
   than at preparation.
 - Monsters die at 0 HP. PCs use the full dying rules.

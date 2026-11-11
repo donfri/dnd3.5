@@ -548,6 +548,20 @@ MONSTERS.update({
     },
 })
 
+MONSTERS["heavy warhorse"] = {
+    # MM: Large animal, AC 14, hoof +6 (1d6+4) x2, bite +1 (1d4+2)
+    "name": "Heavy Warhorse", "type": "animal", "size": "large", "hd": 4, "hit_die": 8,
+    "bab": 3, "base_saves": (4, 4, 1), "cr": 2,
+    "abilities": {"str": 18, "dex": 13, "con": 17, "int": 6, "wis": 13, "cha": 6},
+    "natural": 4, "speed": 50,
+    "natural_attacks": [{"name": "hoof", "damage": "1d6", "dtype": "B", "primary": True},
+                        {"name": "hoof", "damage": "1d6", "dtype": "B", "primary": True},
+                        {"name": "bite", "damage": "1d4", "dtype": "P", "primary": False}],
+    "skills": {"Listen": 5, "Spot": 4}, "feats": ["Endurance", "Run"],
+    "vision": "low-light, scent",
+    "desc": "A great white warhorse with intelligent eyes and a coat that seems to glow.",
+}
+
 # Animal companions: key -> (minimum effective druid level, levels subtracted)
 COMPANIONS = {
     "wolf": (1, 0), "riding dog": (1, 0), "eagle": (1, 0),

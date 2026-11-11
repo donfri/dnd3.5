@@ -298,6 +298,37 @@ SPELLS = {s["name"]: s for s in [
     S("Fly", {"wizard": 3, "sorcerer": 3}, "transmutation", "ally",
       "Subject flies for 1 min/level: it can reach flying foes and doesn't need to touch "
       "the ground."),
+    S("Cause Fear", {"wizard": 1, "sorcerer": 1, "bard": 1, "cleric": 1}, "necromancy",
+      "enemy", "A foe of 5 HD or less flees in fear for 1d4 rounds (Will: shaken 1 round).",
+      save=("will", "partial"), desc_tags=["fear", "mind-affecting"]),
+    S("Endure Elements", {"cleric": 1, "druid": 1, "paladin": 1, "ranger": 1, "wizard": 1,
+                          "sorcerer": 1}, "abjuration", "none",
+      "Comfortable in any heat or cold for 24 hours.", combat=False, utility=True),
+    S("Entropic Shield", {"cleric": 1}, "abjuration", "self",
+      "Ranged attacks against you miss 20% of the time (1 min/level)."),
+    S("Shatter", {"cleric": 2, "wizard": 2, "sorcerer": 2, "bard": 2}, "evocation", "enemy",
+      "Shatters a foe's nonmagical weapon (Will negates for the wielder).",
+      save=("will", "negates"), desc_tags=["sonic"]),
+    S("Inflict Serious Wounds", {"cleric": 3}, "necromancy", "enemy",
+      "Melee touch: 3d8 +1/level (max +15) damage (Will half).", save=("will", "half")),
+    S("Inflict Critical Wounds", {"cleric": 4}, "necromancy", "enemy",
+      "Melee touch: 4d8 +1/level (max +20) damage (Will half).", save=("will", "half")),
+    S("Protection from Energy", {"cleric": 3, "druid": 3, "ranger": 2, "wizard": 3,
+                                 "sorcerer": 3}, "abjuration", "ally",
+      "Absorbs up to 12 points of fire damage per level (max 120), 10 min/level."),
+    S("Contagion", {"cleric": 3, "druid": 3, "wizard": 4, "sorcerer": 4}, "necromancy",
+      "enemy", "Melee touch: a wasting disease deals 1d6 Constitution damage now and more each "
+               "day (Fort negates).", save=("fort", "negates"), desc_tags=["disease"]),
+    S("Animate Dead", {"cleric": 3, "wizard": 4, "sorcerer": 4}, "necromancy", "summon",
+      "Raise a skeleton or zombie (one per 2 levels, up to 4) to fight for you this battle.",
+      sr=False, desc_tags=["evil"]),
+    S("Fire Shield", {"wizard": 4, "sorcerer": 4}, "evocation", "self",
+      "Flames wreathe you: anyone who hits you in melee takes 1d6 +1/level (max +15) fire "
+      "(1 round/level)."),
+    S("Confusion", {"wizard": 4, "sorcerer": 4, "bard": 3}, "enchantment", "enemies",
+      "Up to 4 foes become confused for 1 round/level: each turn they may babble, wander off, "
+      "or attack whoever is nearest (Will negates).", save=("will", "negates"),
+      desc_tags=["mind-affecting", "compulsion"], max_targets=4),
 ]}
 
 for _n, _r in enumerate(["I", "II", "III", "IV", "V"], 1):

@@ -20,6 +20,8 @@ EQUIP_SLOTS = ["main", "off", "armor", "shield", "ring", "ring2", "cloak", "amul
                "hands", "head", "belt"]
 WORN = [sl for slots in WORN_SLOTS.values() for sl in slots]
 
+INFLICT_BY_LEVEL = {1: "Inflict Light Wounds", 2: "Inflict Moderate Wounds",
+                    3: "Inflict Serious Wounds", 4: "Inflict Critical Wounds"}
 CURE_BY_LEVEL = {0: "Cure Minor Wounds", 1: "Cure Light Wounds", 2: "Cure Moderate Wounds",
                  3: "Cure Serious Wounds", 4: "Cure Critical Wounds",
                  5: "Mass Cure Light Wounds"}
@@ -67,6 +69,11 @@ class Character(Creature):
         self.bonus_hp = 0           # heroic mode vigor
         self.companion: Optional[dict] = None   # animal companion {"kind", "name", ...}
         self.familiar: Optional[dict] = None    # {"kind", "name"}
+        self.energy = "positive"     # clerics: channel positive (turn/cure) or negative
+        self.specialty: Optional[str] = None    # wizard school specialization
+        self.prohibited: List[str] = []
+        self.mount: Optional[dict] = None       # paladin's special mount
+        self.fallen = False                     # paladin who broke the code
 
     # ------------------------------------------------------------ basics
     @property
@@ -146,6 +153,9 @@ class Character(Creature):
 
     def companion_creature(self):
         return _comp.companion_creature(self)
+
+    def companions_all(self):
+        return _comp.all_companions(self)
 
     def feat_list(self) -> List[str]:
         out = list(self.feats)
@@ -520,7 +530,7 @@ class Character(Creature):
             if val:
                 out.append(("monk", val, "monk AC bonus"))
         out += _comp.familiar_bonus(self, stat)
-        if stat == "saves" and self.class_level("paladin") >= 2:
+        if stat == "saves" and self.class_level("paladin") >= 2 and not self.fallen:
             cha = self.mod("cha")
             if cha > 0:
                 out.append(("divine_grace", cha, "divine grace"))
@@ -546,7 +556,7 @@ class Character(Creature):
 
     def immunities(self):
         out = []
-        if self.class_level("paladin") >= 3:
+        if self.class_level("paladin") >= 3 and not self.fallen:
             out += ["fear", "disease"]
         if self.class_level("monk") >= 5:
             out.append("disease")
@@ -631,6 +641,8 @@ class Character(Creature):
         out = set()
         for c in self.classes():
             out.update(CLASSES[c]["class_skills"])
+        for d in self.domains:
+            out.update(DOMAINS.get(d, {}).get("skills", []))
         return out
 
     def is_class_skill(self, skill: str) -> bool:
@@ -713,6 +725,8 @@ class Character(Creature):
 
     def spells_per_day(self, cls: str) -> Dict[int, int]:
         info = CLASSES[cls]
+        if cls == "paladin" and self.fallen:
+            return {}
         table = info.get("spells_per_day", {})
         lvl = min(self.class_level(cls), rules.MAX_LEVEL)
         row = table.get(lvl)
@@ -727,6 +741,8 @@ class Character(Creature):
             if score < 10 + sl:
                 continue
             n = base + rules.bonus_spells(amod, sl)
+            if cls == "wizard" and self.specialty:
+                n += 1   # specialist's extra slot (for a spell of the specialty school)
             if n > 0:
                 out[sl] = n
         return out
@@ -737,8 +753,9 @@ class Character(Creature):
         per = self.spells_per_day("cleric")
         return {sl: 1 for sl in per if sl >= 1}
 
-    def spell_dc(self, cls: str, spell: str) -> int:
-        sl = SPELLS[spell]["levels"].get(cls, SPELLS[spell]["levels"].get("cleric_domain", 1))
+    def spell_dc(self, cls: str, spell: str, level: Optional[int] = None) -> int:
+        sl = level if level is not None else SPELLS[spell]["levels"].get(
+            cls, SPELLS[spell]["levels"].get("cleric_domain", 1))
         dc = 10 + sl + self.mod(self.cast_ability(cls))
         if self.has_feat(f"Spell Focus ({SPELLS[spell]['school']})"):
             dc += 1
@@ -779,9 +796,10 @@ class Character(Creature):
                         seen.add(key)
                         out.append({"class": cls, "spell": s["spell"], "level": int(sl),
                                     "slot": s, "domain": s.get("domain", False)})
-                if cls == "cleric" and not self.evil:
+                if cls == "cleric":
+                    conv = INFLICT_BY_LEVEL if self.energy == "negative" else CURE_BY_LEVEL
                     for sl, slots in sorted(self.prepared.get(cls, {}).items()):
-                        cure = CURE_BY_LEVEL.get(int(sl))
+                        cure = conv.get(int(sl))
                         if not cure:
                             continue
                         donors = [s for s in slots if not s["used"] and not s.get("domain")
@@ -837,7 +855,7 @@ class Character(Creature):
 
     def turn_level(self) -> int:
         lvl = self.class_level("cleric")
-        if self.class_level("paladin") >= 4:
+        if self.class_level("paladin") >= 4 and not self.fallen:
             lvl += self.class_level("paladin") - 3
         return lvl
 
@@ -850,12 +868,12 @@ class Character(Creature):
 
     def smite_per_day(self) -> int:
         p = self.class_level("paladin")
-        if not p:
+        if not p or self.fallen:
             return 0
         return 1 + p // 5 + 2 * self.feat_list().count("Extra Smiting")
 
     def lay_on_hands_pool(self) -> int:
-        p = self.class_level("paladin")
+        p = self.class_level("paladin") if not self.fallen else 0
         return p * self.mod("cha") if p >= 2 and self.mod("cha") > 0 else 0
 
     def music_per_day(self) -> int:
@@ -884,7 +902,9 @@ class Character(Creature):
                 "smite": self.smite_per_day(), "lay_on_hands": self.lay_on_hands_pool(),
                 "music": self.music_per_day(), "wild_shape": self.wild_shape_per_day(),
                 "stunning_fist": self.stunning_fist_per_day(),
-                "wholeness": self.wholeness_pool()}.get(key, 0)
+                "wholeness": self.wholeness_pool(),
+                **{DOMAINS[d]["use"]: 1 for d in self.domains if DOMAINS.get(d, {}).get("use")},
+                "inspire_competence": 0}.get(key, 0)
 
     def uses_left(self, key: str) -> int:
         return max(0, self.uses_total(key) - self.daily.get(key, 0))
@@ -896,7 +916,10 @@ class Character(Creature):
                     ("feat_of_strength", "Feat of strength"), ("smite", "Smite evil"),
                     ("lay_on_hands", "Lay on hands (hp)"), ("music", "Bardic music"),
                     ("wild_shape", "Wild shape"), ("stunning_fist", "Stunning fist"),
-                    ("wholeness", "Wholeness of body (hp)")]
+                    ("wholeness", "Wholeness of body (hp)"), ("death_touch", "Death touch"),
+                    ("dsmite", "Destruction smite"), ("good_fortune", "Good fortune"),
+                    ("protective_ward", "Protective ward"),
+                    ("greater_turning", "Greater turning")]
 
     def daily_list(self) -> List[str]:
         return [f"{label} {self.uses_left(k)}/{self.uses_total(k)}"
@@ -910,11 +933,21 @@ class Character(Creature):
                     out.append(f"{CLASSES[cls]['name']} {lvl}: {f}")
         for d in self.domains:
             out.append(f"{d} domain: {DOMAINS[d]['power']}")
+        if self.class_level("cleric"):
+            out.append("Channels negative energy: rebukes/commands undead, spontaneous "
+                       "inflict spells" if self.energy == "negative" else
+                       "Channels positive energy: turns undead, spontaneous cure spells")
+        if self.specialty:
+            out.append(f"Specialist wizard: {self.specialty} (+1 spell per level of that "
+                       f"school); prohibited: {', '.join(self.prohibited)}")
+        if self.fallen:
+            out.append("FALLEN PALADIN: no paladin powers until atonement")
         for fe in self.favored_enemies:
             out.append(f"Favored enemy ({fe['type']}) +{fe['bonus']}")
         if self.combat_style:
             out.append(f"Combat style: {self.combat_style}")
-        for line in (_comp.companion_line(self), _comp.familiar_line(self)):
+        for line in (_comp.companion_line(self), _comp.mount_line(self),
+                     _comp.familiar_line(self)):
             if line:
                 out.append(line)
         return out
@@ -948,7 +981,8 @@ class Character(Creature):
             "effects": [e.to_dict() for e in self.effects], "afflictions": self.afflictions,
             "daily": self.daily, "power_attack": self.power_attack,
             "bonus_hp": self.bonus_hp, "companion": self.companion,
-            "nonlethal": self.nonlethal,
+            "nonlethal": self.nonlethal, "energy": self.energy, "specialty": self.specialty,
+            "prohibited": self.prohibited, "mount": self.mount, "fallen": self.fallen,
             "familiar": self.familiar,
         }
 
@@ -960,7 +994,8 @@ class Character(Creature):
                   "height", "weight", "languages", "favored_enemies", "combat_style",
                   "spellbook", "inventory", "cp", "xp", "notes", "damage", "temp_hp",
                   "ability_damage", "stable", "dead", "afflictions", "daily",
-                  "power_attack", "bonus_hp", "companion", "familiar", "nonlethal"):
+                  "power_attack", "bonus_hp", "companion", "familiar", "nonlethal", "energy", "specialty",
+                  "prohibited", "mount", "fallen"):
             if k in d:
                 setattr(c, k, d[k])
         c.spells_known = {int(k): v for k, v in d.get("spells_known", {}).items()}

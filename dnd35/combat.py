@@ -14,8 +14,8 @@ from .creature import Creature
 from .data.items import item_data, item_name
 from .data.spells import SPELLS
 from .effects import Effect, ROUNDS_PER_MINUTE
-from .abilities import (inspire_courage, lay_on_hands, revert_shape, wholeness_of_body,
-                        wild_shape)
+from .abilities import (bardic_music, lay_on_hands, protective_ward,
+                        revert_shape, wholeness_of_body, wild_shape)
 from .data.classes import CLASSES
 from .data.monsters import MONSTERS
 from .magic import (call_bolt, cast_spell, caster_cl, caster_dc, consume_one_shot, deal_damage,
@@ -88,8 +88,9 @@ class Combat:
         # animal companions fight alongside their masters
         self.companions: List[Creature] = []
         for p in self.party:
-            comp = p.companion_creature() if hasattr(p, "companion_creature") else None
-            if comp is not None and not comp.dead and not p.dead:
+            for comp in (p.companions_all() if hasattr(p, "companions_all") else []):
+                if comp.dead or p.dead:
+                    continue
                 comp.effects = [e for e in comp.effects if e.duration is None
                                 and not (e.tags & {"prone", "grappled"})]
                 self.companions.append(comp)
@@ -501,6 +502,8 @@ class Combat:
                 return False
         # concealment
         conc = target.bonus("concealment")
+        if ranged:
+            conc = max(conc, target.bonus("concealment_ranged"))
         if conc:
             r = dice.percent()
             if r <= conc:
@@ -574,6 +577,11 @@ class Combat:
             dmg_type += "*"   # magic weapon: overcomes DR x/magic
         if total:
             deal_damage(ui, target, total, dmg_type, self, magic=False)
+        fs = target.get_effect("Fire Shield")
+        if fs and not w.get("ranged") and not attacker.dead and not w.get("reach"):
+            r = dice.roll(fs.data["dmg"])
+            ui.out(f"  {target.name}'s fire shield scorches {attacker.name}!")
+            deal_damage(ui, attacker, r.total, "fire", self)
         if attacker.remove_effect("Stunning Fist") and not target.dead:
             if "stun" in target.immunities() or not target.is_living():
                 ui.out(f"  {target.name} can't be stunned.")
@@ -957,6 +965,12 @@ class Combat:
         if not p.conscious or not w:
             return
         ui.out(f"{p.name} delivers a coup de grace to {tgt.name}!")
+        if getattr(p, "class_level", lambda c_: 0)("paladin") and not tgt.evil \
+                and not getattr(p, "fallen", False) and (tgt.ability("int") or 0) >= 3:
+            p.fallen = True
+            ui.bad(f"  Murdering a helpless creature that isn't evil breaks {p.name}'s oath. "
+                   f"{p.name} has FALLEN and loses their paladin powers until they seek "
+                   f"atonement at a temple.")
         before = tgt.damage
         if tgt.crit_immune():
             self.apply_hit(p, tgt, w, False, False, p.power_attack, True)
@@ -1276,6 +1290,13 @@ class Combat:
                 add(f"Smite evil ({p.uses_left('smite')} left): attack +Cha, +"
                     f"{p.class_level('paladin')} damage vs evil", self.act_attack, x, False,
                     "smite")
+            if x.std and p.uses_left("dsmite"):
+                add(f"Destruction smite: +4 attack, +{p.class_level('cleric')} damage (1/day)",
+                    self.act_attack, x, False, "dsmite")
+            if x.std and p.uses_left("death_touch") and eng:
+                add("Death touch (Death domain, 1/day)", self.act_death_touch, x)
+            if x.std and p.uses_left("protective_ward"):
+                add("Protective ward on an ally (Protection domain, 1/day)", self.act_ward, x)
             if x.std and p.uses_left("stunning_fist") and not p.wild_form():
                 add(f"Stunning Fist ({p.uses_left('stunning_fist')} left): unarmed attack that "
                     f"can stun", self.act_attack, x, False, "stun")
@@ -1331,7 +1352,7 @@ class Combat:
                 add(f"Turn undead ({p.uses_left('turn')} left)", self.act_turn, x)
             if x.std and p.uses_left("music") and p.skill_ranks.get("Perform", 0) >= 3 \
                     and not p.wild_form():
-                add(f"Bardic music: inspire courage ({p.uses_left('music')} left)",
+                add(f"Bardic music ({p.uses_left('music')} left)",
                     self.act_music, x)
             hurt = [a for a in self.allies(p) if a.damage > 0 and not a.dead]
             if x.std and p.uses_left("lay_on_hands") and hurt:
@@ -1399,7 +1420,8 @@ class Combat:
                                    "Stunning", "Manyshot", "Spring", "Call down", "Bardic",
                                    "Lay on", "Wholeness", "Wild shape", "Return to",
                                    "Trip", "Disarm", "Grapple", "Bull rush", "Sunder",
-                                   "Overrun", "Feint", "Aid another", "Coup de grace")):
+                                   "Overrun", "Feint", "Aid another", "Coup de grace",
+                                   "Destruction", "Death touch", "Protective")):
                     groups.append("Fight")
                 elif lab.startswith(("Move", "Stand", "Draw", "Withdraw", "Flee", "5-foot")):
                     groups.append("Move")
@@ -1614,6 +1636,11 @@ class Combat:
                 else:
                     ui.out(f"{p.name} attempts to smite, but {tgt.name} is not evil: the "
                            f"smite is wasted.")
+            elif mode == "dsmite":
+                p.spend("dsmite")
+                sit.append(("untyped", 4, "destruction smite"))
+                extra = p.class_level("cleric")
+                ui.out(f"{p.name} calls down destruction on {tgt.name}!", ("byellow",))
             elif mode == "stun":
                 p.spend("stunning_fist")
                 p.add_effect(Effect("Stunning Fist", 1, tags=["_stun_primed"], hidden=True))
@@ -1750,8 +1777,15 @@ class Combat:
         call_bolt(self.ui, p, e, tgt, self)
 
     def act_music(self, x: CState) -> None:
+        from .abilities import music_options
+        p = x.c
+        opts = music_options(p, True)
+        i = self.ui.choose("Which song?", [o[1] for o in opts], allow_cancel=True)
+        if i is None:
+            return
         x.std = False
-        inspire_courage(self.ui, x.c, self.allies(x.c))
+        bardic_music(self.ui, p, [a for a in self.allies(p) if not a.dead],
+                     self.enemies(p), opts[i][0])
 
     def act_lay_on_hands(self, x: CState) -> None:
         p = x.c
@@ -1912,8 +1946,12 @@ class Combat:
         x.std = False
         p.spend("turn")
         lvl = p.turn_level()
-        if "Sun" in getattr(p, "domains", []):
-            pass
+        negative = getattr(p, "energy", "positive") == "negative"
+        greater = False
+        if not negative and p.uses_left("greater_turning") and ui.confirm(
+                "Use your Sun domain's greater turning (destroy instead of turn)?", True):
+            p.spend("greater_turning")
+            greater = True
         r = dice.d20()
         check = r + p.mod("cha")
         if p.skill_ranks.get("Knowledge (religion)", 0) >= 5:
@@ -1921,8 +1959,9 @@ class Combat:
         max_hd = rules.turning_max_hd(check, lvl)
         dmg_roll = dice.roll("2d6")
         pool = dmg_roll.total + lvl + p.mod("cha")
-        ui.out(f"{p.name} presents a holy symbol and calls upon {p.deity or 'the divine'}!",
-               ("byellow",))
+        how = ("thrusts out an unholy symbol and commands the dead in the name of"
+               if negative else "presents a holy symbol and calls upon")
+        ui.out(f"{p.name} {how} {p.deity or 'the divine'}!", ("byellow",))
         ui.roll(f"Turning check: d20={r} {p.mod('cha'):+d} = {check} -> affects undead up to "
                 f"{max_hd} HD; turning damage {dmg_roll.detail()} + {lvl + p.mod('cha')} = "
                 f"{pool} HD")
@@ -1935,7 +1974,14 @@ class Combat:
                 continue
             pool -= hd
             any_turned = True
-            if lvl >= 2 * hd:
+            if negative:
+                if lvl >= 2 * hd:
+                    self.command_undead(p, m)
+                else:
+                    m.add_effect(Effect("Rebuked", ROUNDS_PER_MINUTE, tags=["turned"]))
+                    ui.good(f"  {m.name} is REBUKED and cowers in awe!")
+                continue
+            if lvl >= 2 * hd or greater:
                 ui.good(f"  {m.name} crumbles to dust!")
                 m.dead = True
                 self.disengage_all(m)
@@ -1945,6 +1991,49 @@ class Combat:
                 ui.good(f"  {m.name} is TURNED and cowers away from the holy light!")
         if not any_turned:
             ui.out("  The undead resist the turning.")
+
+    def command_undead(self, p, m) -> None:
+        """An evil cleric takes control of a weak undead: it fights on their side."""
+        self.disengage_all(m)
+        self.monsters.remove(m)
+        self.xp_monsters.append(m)
+        m.owner = p
+        m.summoned = False
+        self.s(m).side = self.s(p).side
+        self.companions.append(m)
+        m.block = dict(m.block, morale=False)
+        self.ui.good(f"  {m.name} bows its head: it is COMMANDED and now serves {p.name}!")
+
+    def act_death_touch(self, x: CState) -> None:
+        p = x.c
+        ui = self.ui
+        tgt = self._maneuver_target(p, [f for f in self.engaged_foes(p) if f.is_living()],
+                                    "Touch whom?")
+        if not tgt:
+            return
+        x.std = False
+        p.spend("death_touch")
+        if not touch_attack(ui, p, tgt, False, self):
+            return
+        r = dice.roll(f"{p.class_level('cleric')}d6")
+        ui.roll(f"Death touch: {r.detail()} vs {tgt.name}'s {tgt.hp} hp")
+        if "death" in tgt.immunities():
+            ui.out(f"  {tgt.name} is warded against death.")
+        elif r.total >= tgt.hp:
+            ui.bad(f"  {tgt.name}'s heart stops. It falls dead!")
+            tgt.damage = tgt.max_hp() + 10
+            tgt.dead = True
+            self.after_damage(tgt)
+        else:
+            ui.out(f"  {tgt.name} shudders but lives.")
+
+    def act_ward(self, x: CState) -> None:
+        p = x.c
+        allies = [a for a in self.allies(p) if not a.dead]
+        tgt = allies[0] if len(allies) == 1 else allies[self.ui.choose(
+            "Ward whom?", [a.name for a in allies])]
+        x.std = False
+        protective_ward(self.ui, p, tgt)
 
     def act_flee(self, x: CState) -> None:
         p = x.c
@@ -2185,11 +2274,17 @@ class Combat:
         else:
             p.expend(cast)
         # touch spells on enemies require being in melee
-        if spell in ("Inflict Light Wounds", "Inflict Moderate Wounds", "Bestow Curse",
-                     "Poison", "Slay Living") or (
+        if spell.startswith("Inflict") or spell in ("Bestow Curse", "Poison", "Slay Living",
+                                                     "Contagion") or (
                 spell.startswith("Cure") and targets and targets[0].ctype == "undead"):
             t = targets[0]
-            if not self.is_engaged(p, t):
+            fam = getattr(p, "familiar", None)
+            if (fam and not self.is_engaged(p, t) and
+                    p.class_level("wizard") + p.class_level("sorcerer") >= 3 and
+                    ui.confirm(f"Send {fam['name']} the {fam['kind']} to deliver the touch?",
+                               True)):
+                ui.out(f"{fam['name']} darts across the fight, carrying the spell to {t.name}!")
+            elif not self.is_engaged(p, t):
                 if x.move:
                     x.move = False
                     x.moved = True
@@ -2251,6 +2346,27 @@ class Combat:
         if not pcs:
             return
         block = getattr(m, "block", {})
+        if m.has_tag("confused"):
+            r = dice.percent()
+            if r <= 25:
+                ui.out(f"{m.name} shakes off its confusion for a moment.")
+            elif r <= 50:
+                ui.out(f"{m.name} babbles incoherently (confused).")
+                return
+            elif r <= 75:
+                ui.out(f"{m.name} wanders off in a daze (confused).")
+                self.disengage_all(m)
+                return
+            else:
+                near = [c_ for c_ in self.engaged_foes(m)] + \
+                    [a for a in self.allies(m) if a is not m]
+                if near:
+                    t = dice.choice(near)
+                    ui.out(f"{m.name} lashes out wildly at {t.name} (confused)!")
+                    w = (m.melee_attacks() or [None])[0]
+                    if w:
+                        self.make_attack(m, t, w, m.bab())
+                    return
         # morale / magical fear
         frightened = m.has_tag("frightened")
         if frightened or (block.get("morale") and m.hp <= m.max_hp() / 3 and dice.die(2) == 1):

@@ -243,36 +243,130 @@ def alignment_allowed(cls: str, alignment: str) -> bool:
     return True
 
 
+def _deity(align, domains, weapon, portfolio):
+    return {"alignment": align, "domains": domains, "weapon": weapon, "portfolio": portfolio}
+
+
 DEITIES = {
-    "Pelor": {"alignment": "Neutral Good", "domains": ["Good", "Healing", "Strength"],
-              "weapon": "heavy mace", "portfolio": "the sun, light, strength, healing"},
-    "Heironeous": {"alignment": "Lawful Good", "domains": ["Good", "War"],
-                   "weapon": "longsword", "portfolio": "valor, chivalry, justice"},
-    "Kord": {"alignment": "Chaotic Good", "domains": ["Good", "Strength"],
-             "weapon": "greatsword", "portfolio": "athletics, sport, brawling, courage"},
-    "St. Cuthbert": {"alignment": "Lawful Neutral", "domains": ["Strength", "War"],
-                     "weapon": "heavy mace", "portfolio": "retribution, common sense"},
-    "Obad-Hai": {"alignment": "True Neutral", "domains": ["Healing", "Strength"],
-                 "weapon": "quarterstaff", "portfolio": "nature, woodlands, hunting"},
+    "Boccob": _deity("True Neutral", ["Knowledge", "Magic", "Trickery"], "quarterstaff",
+                     "magic, arcane knowledge, foresight"),
+    "Corellon Larethian": _deity("Chaotic Good", ["Chaos", "Good", "Protection", "War"],
+                                 "longsword", "elves, magic, music, arts"),
+    "Ehlonna": _deity("Neutral Good", ["Animal", "Good", "Plant", "Sun"], "longsword",
+                      "woodlands, forest creatures, fertility"),
+    "Erythnul": _deity("Chaotic Evil", ["Chaos", "Evil", "Trickery", "War"], "morningstar",
+                       "hate, envy, malice, panic, slaughter"),
+    "Fharlanghn": _deity("True Neutral", ["Luck", "Protection", "Travel"], "quarterstaff",
+                         "horizons, distance, travel, roads"),
+    "Garl Glittergold": _deity("Neutral Good", ["Good", "Protection", "Trickery"],
+                               "battleaxe", "gnomes, protection, humor, gemcutting"),
+    "Gruumsh": _deity("Chaotic Evil", ["Chaos", "Evil", "Strength", "War"], "spear",
+                      "orcs, conquest, survival, territory"),
+    "Heironeous": _deity("Lawful Good", ["Good", "Law", "War"], "longsword",
+                         "valor, chivalry, justice, honor"),
+    "Hextor": _deity("Lawful Evil", ["Destruction", "Evil", "Law", "War"], "flail",
+                     "tyranny, war, discord, massacres"),
+    "Kord": _deity("Chaotic Good", ["Chaos", "Good", "Luck", "Strength"], "greatsword",
+                   "athletics, sport, brawling, courage"),
+    "Moradin": _deity("Lawful Good", ["Earth", "Good", "Law", "Protection"], "warhammer",
+                      "dwarves, creation, smithing, protection"),
+    "Nerull": _deity("Neutral Evil", ["Death", "Evil", "Trickery"], "scythe",
+                     "death, darkness, murder, the underworld"),
+    "Obad-Hai": _deity("True Neutral", ["Air", "Animal", "Earth", "Fire", "Plant", "Water"],
+                       "quarterstaff", "nature, woodlands, freedom, hunting, beasts"),
+    "Olidammara": _deity("Chaotic Neutral", ["Chaos", "Luck", "Trickery"], "rapier",
+                         "music, revels, wine, rogues, humor, tricks"),
+    "Pelor": _deity("Neutral Good", ["Good", "Healing", "Strength", "Sun"], "heavy mace",
+                    "the sun, light, strength, healing"),
+    "St. Cuthbert": _deity("Lawful Neutral", ["Destruction", "Law", "Protection", "Strength"],
+                           "heavy mace", "retribution, common sense, wisdom, zeal"),
+    "Vecna": _deity("Neutral Evil", ["Evil", "Knowledge", "Magic"], "dagger",
+                    "destructive and evil secrets"),
+    "Wee Jas": _deity("Lawful Neutral", ["Death", "Law", "Magic"], "dagger",
+                      "death, magic, vanity, law"),
+    "Yondalla": _deity("Lawful Good", ["Good", "Law", "Protection"], "short sword",
+                       "halflings, protection, fertility"),
 }
 
+
+def _dom(power, spells, **kw):
+    d = {"power": power, "spells": dict(enumerate(spells, 1))}
+    d.update(kw)
+    return d
+
+
+# Domain spells use this game's closest spell where the SRD one isn't implemented.
 DOMAINS = {
-    "Good": {"power": "Cast good spells at +1 caster level.",
-             "spells": {1: "Protection from Evil", 2: "Aid", 3: "Magic Circle against Evil",
-                        4: "Holy Smite", 5: "Dispel Evil"}},
-    "Healing": {"power": "Cast healing (conjuration) spells at +1 caster level.",
-                "spells": {1: "Cure Light Wounds", 2: "Cure Moderate Wounds",
-                           3: "Cure Serious Wounds", 4: "Cure Critical Wounds",
-                           5: "Mass Cure Light Wounds"}},
-    "Strength": {"power": "Feat of Strength: once per day, gain an enhancement bonus to "
-                          "Strength equal to your cleric level for 1 round.",
-                 "spells": {1: "Enlarge Person", 2: "Bull's Strength", 3: "Magic Vestment",
-                            4: "Spell Immunity", 5: "Righteous Might"}},
-    "War": {"power": "Free Martial Weapon Proficiency and Weapon Focus with your deity's "
-                     "favored weapon.",
-            "spells": {1: "Magic Weapon", 2: "Spiritual Weapon", 3: "Magic Vestment",
-                       4: "Divine Power", 5: "Flame Strike"}},
+    "Good": _dom("Cast good spells at +1 caster level.",
+                 ["Protection from Evil", "Aid", "Magic Circle against Evil", "Holy Smite",
+                  "Dispel Evil"], forbid="Evil", cl_tag="good"),
+    "Healing": _dom("Cast healing (conjuration) spells at +1 caster level.",
+                    ["Cure Light Wounds", "Cure Moderate Wounds", "Cure Serious Wounds",
+                     "Cure Critical Wounds", "Mass Cure Light Wounds"]),
+    "Strength": _dom("Feat of Strength: once per day, gain an enhancement bonus to Strength "
+                     "equal to your cleric level for 1 round.",
+                     ["Enlarge Person", "Bull's Strength", "Magic Vestment", "Spell Immunity",
+                      "Righteous Might"]),
+    "War": _dom("Free Martial Weapon Proficiency and Weapon Focus with your deity's favored "
+                "weapon.", ["Magic Weapon", "Spiritual Weapon", "Magic Vestment",
+                            "Divine Power", "Flame Strike"]),
+    "Animal": _dom("Knowledge (nature) is a class skill; you can speak with animals.",
+                   ["Magic Fang", "Hold Animal", "Greater Magic Fang",
+                    "Summon Nature's Ally IV", "Summon Nature's Ally V"],
+                   skills=["Knowledge (nature)"]),
+    "Chaos": _dom("Cast chaos spells at +1 caster level.",
+                  ["Protection from Evil", "Shatter", "Magic Circle against Evil", "Confusion",
+                   "Dispel Magic"], forbid="Law"),
+    "Death": _dom("Death touch, once per day: touch a living foe and roll 1d6 per cleric "
+                  "level. If the total is at least its current hit points, it dies.",
+                  ["Cause Fear", "Inflict Moderate Wounds", "Animate Dead", "Death Ward",
+                   "Slay Living"], use="death_touch"),
+    "Destruction": _dom("Smite, once per day: +4 on one melee attack and + cleric level "
+                        "damage.", ["Inflict Light Wounds", "Shatter", "Contagion",
+                                    "Inflict Critical Wounds", "Shout"], use="dsmite"),
+    "Evil": _dom("Cast evil spells at +1 caster level.",
+                 ["Cause Fear", "Hold Person", "Bestow Curse", "Poison", "Slay Living"],
+                 forbid="Good", cl_tag="evil"),
+    "Fire": _dom("Turn or destroy water creatures; rebuke fire creatures (flavor).",
+                 ["Burning Hands", "Produce Flame", "Protection from Energy", "Fire Shield",
+                  "Flame Strike"]),
+    "Knowledge": _dom("All Knowledge skills are class skills.",
+                      ["True Strike", "Fox's Cunning", "Dispel Magic", "Spell Immunity",
+                       "Hold Monster"], skills=["Knowledge (arcana)", "Knowledge (history)",
+                                                "Knowledge (local)", "Knowledge (nature)",
+                                                "Knowledge (dungeoneering)",
+                                                "Knowledge (geography)",
+                                                "Knowledge (nobility and royalty)",
+                                                "Knowledge (the planes)"]),
+    "Law": _dom("Cast law spells at +1 caster level.",
+                ["Protection from Evil", "Hold Person", "Magic Circle against Evil",
+                 "Hold Monster", "Dispel Evil"], forbid="Chaos"),
+    "Luck": _dom("Good fortune, once per day: reroll a failed saving throw.",
+                 ["Entropic Shield", "Aid", "Protection from Energy", "Freedom of Movement",
+                  "Spell Immunity"], use="good_fortune"),
+    "Magic": _dom("Use arcane scrolls, wands and staffs as if they were on your list.",
+                  ["Magic Missile", "Scorching Ray", "Dispel Magic", "Spell Immunity",
+                   "Cone of Cold"]),
+    "Protection": _dom("Protective ward, once per day: touch an ally to give a resistance "
+                       "bonus equal to your cleric level on their next save.",
+                       ["Shield of Faith", "Resist Energy", "Protection from Energy",
+                        "Spell Immunity", "Stoneskin"], use="protective_ward"),
+    "Sun": _dom("Greater turning, once per day: a turning that destroys every undead it "
+                "would turn.", ["Endure Elements", "Flaming Sphere", "Searing Light",
+                                "Fire Shield", "Flame Strike"], use="greater_turning"),
+    "Travel": _dom("Survival is a class skill.",
+                   ["Longstrider", "Cat's Grace", "Fly", "Freedom of Movement",
+                    "Greater Invisibility"], skills=["Survival"]),
+    "Trickery": _dom("Bluff, Disguise and Hide are class skills.",
+                     ["Grease", "Invisibility", "Displacement", "Confusion",
+                      "Greater Invisibility"], skills=["Bluff", "Disguise", "Hide"]),
 }
+
+
+def domain_allowed(domain: str, alignment: str) -> bool:
+    forbid = DOMAINS.get(domain, {}).get("forbid")
+    return domain in DOMAINS and not (forbid and forbid in alignment)
+
 
 FAVORED_ENEMIES = ["goblinoid", "undead", "animal", "orc", "giant", "kobold", "vermin",
                    "gnoll", "magical beast", "human", "aberration", "monstrous humanoid"]

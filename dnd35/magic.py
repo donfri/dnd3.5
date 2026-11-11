@@ -22,6 +22,13 @@ def saving_throw(ui, target: Creature, kind: str, dc: int, tags: Sequence[str] =
     total = roll + bonus
     ok = (roll == 20) or (roll != 1 and total >= dc)
     names = {"fort": "Fortitude", "ref": "Reflex", "will": "Will"}
+    if not ok and getattr(target, "is_pc", False) and target.uses_left("good_fortune"):
+        target.spend("good_fortune")
+        ui.roll(f"{target.name} {names[kind]} save: d20={roll} {bonus:+d} = {total} vs DC {dc} "
+                f"-> failed... but good fortune! Rerolling.")
+        roll = dice.d20()
+        total = roll + bonus
+        ok = (roll == 20) or (roll != 1 and total >= dc)
     ui.roll(f"{target.name} {names[kind]} save{(' vs ' + label) if label else ''}: "
             f"d20={roll} {bonus:+d} = {total} vs DC {dc} -> {'SAVED' if ok else 'failed'}")
     return ok
@@ -120,6 +127,8 @@ def duration(spell: str, cl: int) -> int:
         "Greater Invisibility": cl, "Stoneskin": 10 * ROUNDS_PER_MINUTE * cl,
         "Righteous Might": cl, "Dispel Evil": cl,
         "Invisibility": ROUNDS_PER_MINUTE * cl, "Fly": ROUNDS_PER_MINUTE * cl,
+        "Entropic Shield": ROUNDS_PER_MINUTE * cl, "Fire Shield": cl, "Confusion": cl,
+        "Protection from Energy": 10 * ROUNDS_PER_MINUTE * cl,
     }
     return per_level.get(spell, ROUNDS_PER_MINUTE)
 
@@ -406,7 +415,8 @@ def _cast_spell(ui, caster, spell_name, targets, cl, dc, combat, allies, enemies
             buff(t0, "Dazed", tags=["dazed"], dur=1)
     elif n == "Resistance":
         buff(t0, "Resistance", [("saves", "resistance", 1)])
-    elif n in ("Detect Magic", "Light", "Mage Hand", "Prestidigitation", "Know Direction"):
+    elif n in ("Detect Magic", "Light", "Mage Hand", "Prestidigitation", "Know Direction",
+               "Endure Elements"):
         ui.out(f"  {sp['desc']}")
     # ------------------------------------------------------------ arcane 1
     elif n == "Magic Missile":
@@ -523,8 +533,9 @@ def _cast_spell(ui, caster, spell_name, targets, cl, dc, combat, allies, enemies
     elif n in ("Cure Minor Wounds", "Cure Light Wounds", "Cure Moderate Wounds",
                "Cure Serious Wounds", "Cure Critical Wounds"):
         _cure(ui, caster, t0, n, cl, dc, stags, combat)
-    elif n in ("Inflict Light Wounds", "Inflict Moderate Wounds"):
-        nd, cap = (1, 5) if "Light" in n else (2, 10)
+    elif n.startswith("Inflict"):
+        nd, cap = {"Light": (1, 5), "Moderate": (2, 10), "Serious": (3, 15),
+                   "Critical": (4, 20)}[n.split()[1]]
         if touch_attack(ui, caster, t0, False, combat):
             amt = _sroll(f"{nd}d8").total + min(cap, cl)
             if t0.ctype == "undead":
@@ -830,6 +841,62 @@ def _cast_spell(ui, caster, spell_name, targets, cl, dc, combat, allies, enemies
             deal_damage(ui, t, amt // 2, "fire", combat)
             if not t.dead:
                 deal_damage(ui, t, amt - amt // 2, "holy", combat)
+    elif n == "Cause Fear":
+        if _mind_immune(t0, sp["tags"]) or "fear" in t0.immunities() or t0.hit_dice() > 5:
+            ui.out(f"  {t0.name} is unaffected.")
+        elif saving_throw(ui, t0, "will", dc, stags):
+            buff(t0, "Shaken (fear)", tags=["shaken"], dur=1)
+        else:
+            buff(t0, "Frightened", tags=["frightened", "shaken"], dur=_sroll("1d4").total)
+    elif n == "Entropic Shield":
+        buff(caster, "Entropic Shield", [("concealment_ranged", "concealment", 20)])
+    elif n == "Shatter":
+        ws = [e for e in getattr(t0, "weapons", []) if not item_data(e).get("enhancement")]
+        main = t0.equipped("main") if t0.is_pc else None
+        if main and item_data(main).get("enhancement"):
+            main = None
+        if not ws and not main:
+            ui.out(f"  {t0.name} has no ordinary weapon to shatter.")
+        elif not saving_throw(ui, t0, "will", dc, stags):
+            if main:
+                t0.inventory.remove(main)
+            else:
+                t0.weapons.remove(ws[0])
+            ui.warn(f"  A piercing note: {t0.name}'s weapon shatters into pieces!")
+    elif n == "Protection from Energy":
+        buff(t0, "Protection from Energy", data={"left": min(120, 12 * cl), "dtype": "fire"})
+    elif n == "Contagion":
+        if touch_attack(ui, caster, t0, False, combat):
+            if not t0.is_living() or "disease" in t0.immunities():
+                ui.out(f"  {t0.name} is immune to disease.")
+            elif not saving_throw(ui, t0, "fort", dc, stags):
+                amt = _sroll("1d6").total
+                t0.ability_damage["con"] = t0.ability_damage.get("con", 0) + amt
+                ui.bad(f"  {t0.name} is wracked by disease: {amt} Constitution damage!")
+                if t0.is_pc:
+                    t0.afflictions.append({"name": "contagion", "dc": dc, "damage": "1d6",
+                                           "ability": "con", "successes": 0})
+                if (t0.ability("con") or 1) <= 0:
+                    t0.dead = True
+                if combat is not None:
+                    combat.after_damage(t0)
+    elif n == "Animate Dead":
+        if combat is None:
+            ui.out("  There are no corpses worth raising here.")
+        else:
+            for i in range(max(1, min(4, cl // 2))):
+                combat.add_summon(caster, "human skeleton" if i % 2 == 0 else "human zombie",
+                                  100)
+    elif n == "Fire Shield":
+        buff(caster, "Fire Shield", tags=["fire_shield"], data={"dmg": f"1d6+{min(15, cl)}"})
+    elif n == "Confusion":
+        for t in targets:
+            if t.dead:
+                continue
+            if _mind_immune(t, sp["tags"]):
+                ui.out(f"  {t.name} is unaffected.")
+            elif not saving_throw(ui, t, "will", dc, stags):
+                buff(t, "Confused", tags=["confused"])
     elif n == "Invisibility":
         buff(t0, "Invisibility", [("concealment", "concealment", 50), ("attack", "untyped", 2)],
              tags=["invisible"])
@@ -954,14 +1021,20 @@ def spell_targets_kind(spell: str) -> str:
 def caster_dc(caster, cast: dict) -> int:
     if cast.get("item"):
         return 10 + cast["level"] + (cast["level"] // 2 + 0)
-    return caster.spell_dc(cast["class"], cast["spell"])
+    return caster.spell_dc(cast["class"], cast["spell"], cast.get("level"))
 
 
 def caster_cl(caster, cast: dict) -> int:
     if cast.get("item"):
         return cast.get("cl", 1)
     cl = caster.caster_level(cast["class"])
-    if "good" in SPELLS[cast["spell"]]["tags"] and "Good" in getattr(caster, "domains", []):
+    from .data.classes import DOMAINS
+    for d in getattr(caster, "domains", []):
+        tag = DOMAINS.get(d, {}).get("cl_tag")
+        if tag and tag in SPELLS[cast["spell"]]["tags"]:
+            cl += 1
+    if "Knowledge" in getattr(caster, "domains", []) and \
+            SPELLS[cast["spell"]]["school"] == "divination":
         cl += 1
     return cl
 
@@ -975,6 +1048,8 @@ def scroll_usable(ch, d: dict):
         info = CLASSES[cls]
         if (kind is None or info.get("caster") == kind) and cls in spell["levels"]:
             return True, False
+    if "Magic" in getattr(ch, "domains", []) and ch.class_level("cleric"):
+        return True, False
     if ch.skill_ranks.get("Use Magic Device", 0) > 0:
         return True, True
     return False, False

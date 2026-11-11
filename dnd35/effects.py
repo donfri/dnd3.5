@@ -37,7 +37,8 @@ CONDITION_TEXT = {
 }
 
 HELPLESS_TAGS = {"paralyzed", "asleep", "unconscious"}
-NO_ACTION_TAGS = {"paralyzed", "asleep", "unconscious", "stunned", "dazed", "turned"}
+NO_ACTION_TAGS = {"paralyzed", "asleep", "unconscious", "stunned", "dazed", "turned",
+                  "fascinated"}
 
 
 class Effect:

@@ -12,7 +12,7 @@ from . import dice, rules
 from .character import Character
 from .companions import choose_companion, choose_familiar
 from .data.classes import (CLASSES, CLASS_ORDER, DEITIES, DOMAINS, FAVORED_ENEMIES,
-                           alignment_allowed)
+                           alignment_allowed, domain_allowed)
 from .data.feats import FEATS, SPELL_SCHOOLS
 from .data.items import WEAPONS
 from .data.skills import SKILL_ORDER
@@ -367,32 +367,80 @@ def allocate_skills(ch: Character, points: int, ui, auto: bool) -> None:
 # ---------------------------------------------------------------- class features
 def choose_deity_domains(ch: Character, ui, auto: bool) -> None:
     rec = RECOMMENDED["cleric"]
+
+    def legal(deity):
+        return [d for d in DEITIES[deity]["domains"] if domain_allowed(d, ch.alignment)]
+
     if auto:
-        ch.deity = ch.deity or rec["deity"]
-        doms = DEITIES[ch.deity]["domains"]
+        if not ch.deity or len(legal(ch.deity)) < 2:
+            ch.deity = rec["deity"] if len(legal(rec["deity"])) >= 2 else next(
+                n for n in DEITIES if len(legal(n)) >= 2)
+        doms = legal(ch.deity)
         ch.domains = [d for d in rec["domains"] if d in doms][:2]
         for d in doms:
             if len(ch.domains) < 2 and d not in ch.domains:
                 ch.domains.append(d)
+    else:
+        names = [n for n in DEITIES if len(legal(n)) >= 2]
+        ui.sub("Choose a deity")
+        i = ui.choose("Deity #", [f"{n} ({DEITIES[n]['alignment']}): "
+                                  f"{DEITIES[n]['portfolio']}; domains "
+                                  f"{', '.join(legal(n))}; favored weapon "
+                                  f"{DEITIES[n]['weapon']}" for n in names])
+        ch.deity = names[i]
+        doms = legal(ch.deity)
+        if len(doms) <= 2:
+            ch.domains = list(doms)
+            ui.out(f"Domains: {', '.join(ch.domains)}")
+        else:
+            ui.sub("Choose two domains")
+            picks = []
+            while len(picks) < 2:
+                rest = [d for d in doms if d not in picks]
+                j = ui.choose(f"Domain #{len(picks) + 1}",
+                              [f"{d}: {DOMAINS[d]['power']}" for d in rest])
+                picks.append(rest[j])
+            ch.domains = picks
+    # channel energy: good clerics turn undead and cure; evil clerics rebuke and inflict
+    if "Evil" in ch.alignment:
+        ch.energy = "negative"
+    elif "Good" in ch.alignment or auto:
+        ch.energy = "positive"
+    else:
+        ch.energy = ["positive", "negative"][ui.choose(
+            "A neutral cleric chooses how to channel energy",
+            ["Positive energy: turn undead, convert spells into cure spells",
+             "Negative energy: rebuke and command undead, convert spells into inflict spells"],
+            default=0)]
+
+
+SCHOOL_TEXT = {"abjuration": "wards and protection", "conjuration": "summoning and acid",
+               "divination": "knowledge (only one school prohibited)",
+               "enchantment": "charms and sleep", "evocation": "fire, lightning and force",
+               "illusion": "blur, invisibility and color spray",
+               "necromancy": "life and death", "transmutation": "haste and buffs"}
+
+
+def choose_specialty(ch: Character, ui, auto: bool) -> None:
+    """Wizard school specialization: +1 spell slot per level for that school, two
+    prohibited schools (one for divination)."""
+    if auto:
         return
-    names = list(DEITIES)
-    ui.sub("Choose a deity")
-    i = ui.choose("Deity #", [f"{n} ({d['alignment']}): {d['portfolio']}; domains "
-                              f"{', '.join(d['domains'])}; favored weapon {d['weapon']}"
-                              for n, d in DEITIES.items()])
-    ch.deity = names[i]
-    doms = DEITIES[ch.deity]["domains"]
-    if len(doms) <= 2:
-        ch.domains = list(doms)
-        ui.out(f"Domains: {', '.join(ch.domains)}")
+    opts = ["Generalist (no specialty, no prohibited schools)"] + [
+        f"Specialist: {sch} ({SCHOOL_TEXT[sch]})" for sch in SPELL_SCHOOLS]
+    i = ui.choose("Specialize in a school of magic?", opts, default=0)
+    if i == 0:
         return
-    ui.sub("Choose two domains")
-    picks = []
-    while len(picks) < 2:
-        rest = [d for d in doms if d not in picks]
-        j = ui.choose(f"Domain #{len(picks) + 1}", [f"{d}: {DOMAINS[d]['power']}" for d in rest])
-        picks.append(rest[j])
-    ch.domains = picks
+    ch.specialty = SPELL_SCHOOLS[i - 1]
+    rest = [sch for sch in SPELL_SCHOOLS if sch not in (ch.specialty, "divination")]
+    need = 1 if ch.specialty == "divination" else 2
+    ui.out(f"Choose {need} prohibited school(s): you can never cast those spells.")
+    while len(ch.prohibited) < need:
+        left = [sch for sch in rest if sch not in ch.prohibited]
+        ch.prohibited.append(left[ui.choose(f"Prohibited school #{len(ch.prohibited) + 1}",
+                                            left)])
+    ui.good(f"{ch.name} specializes in {ch.specialty}; prohibited: "
+            f"{', '.join(ch.prohibited)}.")
 
 
 def choose_favored_enemy(ch: Character, ui, auto: bool) -> None:
@@ -429,7 +477,8 @@ def choose_combat_style(ch: Character, ui, auto: bool) -> None:
 def learn_spells(ch: Character, cls: str, ui, auto: bool, first: bool) -> None:
     if cls == "wizard":
         if first:
-            ch.spellbook = spells_for("wizard", 0)
+            ch.spellbook = [sp for sp in spells_for("wizard", 0)
+                            if SPELLS[sp]["school"] not in ch.prohibited]
             n = 3 + max(0, ch.mod("int"))
             pool_levels = [1]
         else:
@@ -437,7 +486,7 @@ def learn_spells(ch: Character, cls: str, ui, auto: bool, first: bool) -> None:
             pool_levels = [l for l in ch.spells_per_day("wizard") if l >= 1]
         for _ in range(n):
             pool = [s for l in pool_levels for s in spells_for("wizard", l)
-                    if s not in ch.spellbook]
+                    if s not in ch.spellbook and SPELLS[s]["school"] not in ch.prohibited]
             if not pool:
                 break
             if auto:
@@ -518,6 +567,13 @@ def prepare_spells(ch: Character, ui, auto: bool = False, keep_ok: bool = True) 
                     except ValueError:
                         pass
                     ui.bad(f"Please enter exactly {n} numbers from the list.")
+            if cls == "wizard" and ch.specialty and picks and not any(
+                    SPELLS[p]["school"] == ch.specialty for p in picks):
+                spec = [p for p in pool if SPELLS[p]["school"] == ch.specialty]
+                if spec:   # the specialist's bonus slot must hold a specialty spell
+                    picks[-1] = spec[0]
+                    if ui and not auto:
+                        ui.out(f"  (Bonus specialist slot: {spec[0]}.)")
             slots = [{"spell": p, "used": False} for p in picks]
             if sl in dom:
                 dspells = ch.domain_spells(sl)
@@ -587,6 +643,14 @@ def gain_level(ch: Character, cls: str, ui=None, auto: bool = False,
         choose_companion(ch, ui, auto)
     if cls in ("wizard", "sorcerer") and first_in_class and not ch.familiar:
         choose_familiar(ch, ui, auto)
+    if cls == "wizard" and first_in_class:
+        choose_specialty(ch, ui, auto)
+    if cls == "paladin" and clvl == 5 and not ch.mount:
+        ch.mount = {"kind": "heavy warhorse", "name": "Valor" if auto else (
+            ui.ask("Name your celestial warhorse", "Valor").strip() or "Valor"),
+            "damage": 0, "dead": False}
+        if ui and not auto:
+            ui.good(f"A shining warhorse, {ch.mount['name']}, answers {ch.name}'s call.")
     # skills
     pts = ch.skill_points_for_level(cls, first)
     allocate_skills(ch, pts, ui, auto)

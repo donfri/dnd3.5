@@ -249,6 +249,16 @@ class Creature:
         if dtype in ENERGY:
             if dtype in self.immunities():
                 return 0, f"immune to {dtype}"
+            pe = self.get_effect("Protection from Energy")
+            if pe and pe.data.get("dtype") == dtype:
+                soak = min(pe.data.get("left", 0), amount)
+                pe.data["left"] = pe.data.get("left", 0) - soak
+                amount -= soak
+                note = f"protection from energy absorbs {soak}"
+                if pe.data["left"] <= 0:
+                    self.effects.remove(pe)
+                if amount <= 0:
+                    return 0, note
             if dtype in self.vulnerabilities():
                 amount = int(amount * 1.5)
                 note = f"vulnerable to {dtype}!"
@@ -279,7 +289,7 @@ class Creature:
             self.stable = False
             # damage wakes sleepers
             for e in list(self.effects):
-                if "asleep" in e.tags:
+                if "asleep" in e.tags or "fascinated" in e.tags:
                     self.effects.remove(e)
         self.check_death()
         return amount + absorbed, note
@@ -410,6 +420,8 @@ class Creature:
             typed += self.bonuses("saves_vs_fear")
         if "spell" in tags:
             typed += self.bonuses("saves_vs_spell")
+        if "sonic" in tags:
+            typed += self.bonuses("saves_vs_sonic")
         comps.extend(stacked_breakdown(typed))
         return comps
 

@@ -365,6 +365,12 @@ class GM:
             self.recruit()
         elif do == "riddle":
             self.riddle(eff)
+        elif do == "paladin_falls":
+            for p in gs.living():
+                if p.class_level("paladin") and not p.fallen:
+                    p.fallen = True
+                    ui.bad(f"{p.name} has broken the paladin's code and FALLS: no smiting, "
+                           f"no lay on hands, no spells, no mount, until atonement.")
         elif do == "end_adventure":
             raise GameOver("victory")
         elif do == "custom":
@@ -962,6 +968,8 @@ class GM:
                     "Healing: cure moderate wounds (60 gp)",
                     "Lesser restoration: heal all ability damage on one hero (60 gp)",
                     "Remove disease (150 gp)"]
+            if any(getattr(p, "fallen", False) for p in gs.living()):
+                opts.append("Atonement: restore a fallen paladin's oath (450 gp)")
             if any(p.get_effect("Negative levels") for p in gs.living()):
                 opts.append("Restoration: remove life drain from one hero (380 gp)")
             dead = [p for p in gs.party if p.dead]
@@ -1001,6 +1009,15 @@ class GM:
                     ui.good(f"{who.name} is cured of disease.")
                 elif who:
                     ui.out(f"{who.name} isn't sick.")
+            elif opts[i].startswith("Atonement"):
+                fallen = [p for p in gs.living() if getattr(p, "fallen", False)]
+                who = fallen[0] if len(fallen) == 1 else self.pick_hero("Who?", heroes=fallen)
+                payer = who and self._payer(450)
+                if payer:
+                    payer.cp -= 450 * 100
+                    who.fallen = False
+                    ui.good(f"{who.name} kneels through a night of prayer. At dawn, their "
+                            f"oath burns bright again.")
             elif opts[i].startswith("Restoration"):
                 drained = [p for p in gs.living() if p.get_effect("Negative levels")]
                 who = drained[0] if len(drained) == 1 else self.pick_hero("Who?", heroes=drained)
@@ -1022,6 +1039,38 @@ class GM:
                     raise_dead(ui, who)
             else:
                 return
+
+    def familiar_scout(self) -> None:
+        ui, gs = self.ui, self.gs
+        owner = next(p for p in gs.living() if p.familiar and p.conscious)
+        fam = owner.familiar
+        exits = self.exits()
+        i = ui.choose(f"Where does {fam['name']} the {fam['kind']} go?",
+                      [f"{ex_id}: {ex['label']}" for ex_id, ex in exits], allow_cancel=True)
+        if i is None:
+            return
+        ex_id, ex = exits[i]
+        room = self.adv.ROOMS[ex["to"]]
+        gs.pass_time(5, ui)
+        ui.out(f"{fam['name']} slips away {ex_id} and comes back a few minutes later, sharing "
+               f"what it saw through your empathic link:")
+        seen = []
+        encs = [e for e, d in self.adv.ENCOUNTERS.items() if d.get("room") == ex["to"]]
+        for enc_id in dict.fromkeys(room.get("encounters_enter", []) + encs):
+            if not self.enc_done(enc_id):
+                mons = self.adv.ENCOUNTERS[enc_id]["monsters"]
+                from ..data.monsters import MONSTERS
+                names = {}
+                for k in mons:
+                    names[MONSTERS[k]["name"]] = names.get(MONSTERS[k]["name"], 0) + 1
+                seen.append(", ".join(f"{n}x {k}" if n > 1 else k for k, n in names.items()))
+        ui.gm(f"{room['name']}: {room['desc']}")
+        if seen:
+            ui.warn("Danger waiting there: " + "; ".join(seen) + ".")
+        else:
+            ui.good("Nothing hostile waiting there, as far as it could tell.")
+        if dice.percent() <= 10:
+            ui.bad(f"Something nearly caught {fam['name']}; it comes back shaking.")
 
     def drain_check(self, p) -> None:
         """Each day a drained hero tries to shake off each negative level (Fort save)."""
@@ -1173,6 +1222,9 @@ class GM:
             opts.append((c("Level up!", "bgreen", "bold"), "levelup", None))
         opts += [("Character sheet", "sheet", None), ("Inventory & equipment", "inv", None),
                  ("Cast a spell (healing, buffs)", "cast", None)]
+        if not room.get("town") and any(p.familiar and p.conscious for p in gs.living()) \
+                and self.exits():
+            opts.append(("Send a familiar to scout ahead", "scout", None))
         if has_usable(gs.living()):
             opts.append(("Use a class ability (lay on hands, wild shape...)", "ability", None))
         if not room.get("town"):
@@ -1183,7 +1235,8 @@ class GM:
                  ("Quit (offers to save)", "quit", None)]
         group_of = {"feature": "Actions", "exit": "Travel", "search": "Explore",
                     "sneak": "Explore", "rest": "Explore", "levelup": "Party",
-                    "sheet": "Party", "inv": "Party", "cast": "Party", "ability": "Party"}
+                    "sheet": "Party", "inv": "Party", "cast": "Party", "ability": "Party",
+                    "scout": "Explore"}
         i = ui.choose("What do you do?", [o[0] for o in opts],
                       groups=[group_of.get(o[1], "Game") for o in opts])
         _, kind, data = opts[i]
@@ -1209,6 +1262,8 @@ class GM:
             inventory_menu(ui, gs.living())
         elif kind == "cast":
             cast_out_of_combat(ui, gs.party)
+        elif kind == "scout":
+            self.familiar_scout()
         elif kind == "ability":
             ability_menu(ui, gs.living())
         elif kind == "rest":
