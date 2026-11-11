@@ -832,10 +832,7 @@ class GM:
         first = not st["visited"]
         st["visited"] = True
         gs.pass_time(room.get("travel_minutes", 1), ui)
-        try:
-            save_game(gs, "autosave")
-        except OSError:
-            pass
+        self.autosave()
         ui.header(room["name"])
         if first and room.get("first"):
             ui.gm(room["first"])
@@ -1071,6 +1068,13 @@ class GM:
             self.run(eff["failure"], h)
 
     # ------------------------------------------------------------ main menu loop
+    def autosave(self) -> None:
+        """Saved after entering an area and after every action, one file per table."""
+        try:
+            save_game(self.gs, getattr(self.ui, "autosave_name", "autosave"))
+        except OSError:
+            pass
+
     def loop(self) -> None:
         gs = self.gs
         self.enter(gs.room) if not gs.rs()["visited"] else self.describe_brief()
@@ -1078,6 +1082,8 @@ class GM:
             if not gs.able():
                 raise GameOver("defeat")
             self.turn_menu()
+            if gs.able():
+                self.autosave()
 
     def describe_brief(self) -> None:
         room = self.adv.ROOMS[self.gs.room]

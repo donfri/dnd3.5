@@ -357,7 +357,7 @@ def sheet_data(ch: Character) -> dict:
         })
 
     equipment = []
-    for e in ch.inventory:
+    for idx, e in enumerate(ch.inventory):
         d = item_data(e)
         slot = {"main": "in hand", "off": "off hand", "armor": "worn", "shield": "on arm",
                 "ring": "worn", "ring2": "worn", "cloak": "worn", "amulet": "worn"}.get(
@@ -368,8 +368,13 @@ def sheet_data(ch: Character) -> dict:
             desc = ""
         else:
             desc = d.get("desc", "")
-        equipment.append({"name": item_name(e), "qty": e.get("qty", 1), "slot": slot,
-                          "weight": weight, "desc": desc})
+        equipment.append({"idx": idx, "name": item_name(e), "qty": e.get("qty", 1),
+                          "slot": slot, "weight": weight, "desc": desc,
+                          "kind": d["kind"], "equipped": bool(e.get("slot")),
+                          "hands": d.get("hands"), "use": d.get("use"),
+                          "spell": d.get("spell"),
+                          "target": SPELLS[d["spell"]]["target"] if d.get("spell") in SPELLS
+                          else None})
 
     md = ch.max_dex_bonus()
     return {

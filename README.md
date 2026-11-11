@@ -71,6 +71,21 @@ campaign at the same time, give it a different table name.
   choices are party decisions anyone can make. If a hero's player isn't connected,
   anyone can answer for them, or use **Play this hero** on the Party tab to take
   it over. Names aren't passwords; this is to keep turns tidy among friends.
+- **🗺 Map:** draws itself as you explore. It shows rooms you've visited,
+  doorways you've seen but not walked through, where you are, locked doors, and
+  traps you've found.
+- **Gear:** in the Party tab, **🎒 Inventory** (or the sheet's Equipment table)
+  has buttons to Equip, Unequip, Off hand, Use (potions and scrolls, on yourself
+  or a friend), Give and Drop. These work while exploring, between actions, and
+  only for your own hero.
+- **Turn alerts:** if you've switched to another tab, the page plays a chime,
+  flashes its title, and can show a desktop notification when it's your
+  decision. Set these up under 🔊⚙.
+- **Never lose progress:** each table autosaves after every action, into its own
+  file. When anyone opens the table, after a server restart or Fly putting the
+  machine to sleep, it picks up exactly where you left off.
+- **Phones:** the page adapts to small screens, with stacked buttons, text that
+  wraps to the screen, and a full-screen character sheet.
 - **Narrator:** the 🔊⚙ menu reads the story aloud. Choose *Story & dialogue* or
   *Story + combat*. By default the **server voice** is used: the server renders
   speech with [Piper](https://github.com/rhasspy/piper), a free offline neural

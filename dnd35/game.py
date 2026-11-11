@@ -197,9 +197,10 @@ def play(ui: UI, gs: GameState) -> None:
             ui.gm("Darkness closes in, and the tale ends here... unless fate allows a second "
                   "chance.")
             saves = list_saves()
-            if "autosave" in saves and ui.confirm("Load the last autosave (start of the "
-                                                  "current area)?", True):
-                gs = load_game("autosave")
+            auto = getattr(ui, "autosave_name", "autosave")
+            if auto in saves and ui.confirm("Go back to the last autosave (just before "
+                                            "this fight)?", True):
+                gs = load_game(auto)
                 gm = GM(ui, gs)
                 gm.describe_brief()
                 continue
@@ -211,14 +212,20 @@ def main_menu(ui: UI) -> None:
     ui.out(c(f"  version {__version__}", "dim"))
     while True:
         saves = list_saves()
-        opts = ["New game", "Quick start (two ready-made heroes, heroic mode)"]
+        auto = getattr(ui, "autosave_name", "autosave")
+        opts = []
+        if auto in saves:
+            opts.append("Continue: " + save_info(auto).split(": ", 1)[-1])
+        opts += ["New game", "Quick start (two ready-made heroes, heroic mode)"]
         if saves:
             opts.append("Load a saved game")
         opts += ["How to play", "Quit"]
         i = ui.choose("Main menu", opts)
         label = opts[i]
         try:
-            if label == "New game":
+            if label.startswith("Continue: "):
+                gm_play_loaded(ui, load_game(auto))
+            elif label == "New game":
                 play(ui, new_game(ui))
             elif label.startswith("Quick start"):
                 play(ui, new_game(ui, quick=True))

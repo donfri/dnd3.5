@@ -47,6 +47,8 @@ class QuitGame(Exception):
 class UI:
     """Interactive terminal UI."""
 
+    autosave_name = "autosave"
+
     def __init__(self):
         self.transcript: List[str] = []
 

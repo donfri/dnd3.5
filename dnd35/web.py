@@ -87,6 +87,7 @@ class WebUI(UI):
         self.game_state = None  # set by the GM so the page can show party/journal tabs
         self._owners: List[str] = []
         self.last_who = ""
+        self._explore = False
 
     # ownership: only the hero's player may answer prompts inside acting()
     @contextmanager
@@ -126,14 +127,24 @@ class WebUI(UI):
                                  "text": m.group(2)})
             else:
                 self.table.emit({"t": "narrate", "kind": "gm", "text": plain})
-        super().para(text, style, indent)
+        # let the browser wrap paragraphs to the screen width (phones!)
+        for block in str(text).strip("\n").split("\n\n"):
+            block = " ".join(block.split())
+            if block:
+                self.out(indent + block, style)
+                self.out()
 
     def header(self, text: str) -> None:
         title = text.strip()
         if title and not title.startswith(("TABLE", "NEW GAME", "HERO ")):
             words = " ".join(w.capitalize() for w in title.lower().split())
             self.table.emit({"t": "narrate", "kind": "title", "text": words + "."})
-        super().header(text)
+        # short heading instead of 80-column banner bars (fits phones)
+        self.out()
+        self.out(f"\u25c6 {title} \u25c6", ("bold", "byellow"))
+
+    def sub(self, text: str) -> None:
+        self.out(f"\u2014 {text} \u2014", ("yellow",))
 
     # input <- browser
     def _raw_input(self, prompt: str) -> str:
@@ -141,9 +152,11 @@ class WebUI(UI):
         kind = self._pending_kind
         groups = self._pending_groups if kind == "choose" else None
         owner = self.current_owner()
+        self.table.explore_idle = self._explore
         self.table.emit({"t": "prompt", "text": ANSI_RE.sub("", prompt), "options": opts,
                          "kind": kind, "groups": groups, "owner": owner})
         text, who = self.table.wait_input(owner)
+        self.table.explore_idle = False
         self.last_who = who
         shown = text if text else "(enter)"
         if opts and kind == "choose" and text.strip().isdigit():
@@ -168,13 +181,14 @@ class WebUI(UI):
                 opts = opts + ["(back)"]
                 if grp:
                     grp.append("Game")
-            prev = self._pending_groups
+            prev = (self._pending_groups, self._explore)
             self._pending_groups = grp
+            self._explore = prompt == "What do you do?" and bool(groups)
             try:
                 return self._with_options(opts, "choose", super().choose, prompt, options,
                                           allow_cancel, default)
             finally:
-                self._pending_groups = prev
+                self._pending_groups, self._explore = prev
         return super().choose(prompt, options, allow_cancel, default)
 
     def confirm(self, prompt, default=True):
@@ -225,8 +239,11 @@ class Table:
         self.inputs: List[tuple] = []
         self.waiting = False
         self.owner = ""
+        self.explore_idle = False
+        self.item_lock = threading.Lock()
         self.presence: Dict[str, float] = {}
         self.ui = WebUI(self)
+        self.ui.autosave_name = f"autosave-{name}"
         self.thread = threading.Thread(target=self._run, daemon=True)
         self.thread.start()
 
@@ -280,6 +297,88 @@ class Table:
             self.cond.notify_all()
             return True, ""
 
+    def item_action(self, hero: int, item: int, action: str, target: int, who: str):
+        """Inventory changes from the character sheet, only between exploration actions."""
+        from .data.items import item_data, item_name
+        from .magic import cast_spell, use_scroll_check
+        from .effects import Effect, ROUNDS_PER_HOUR
+        gs = self.ui.game_state
+        if gs is None:
+            return False, "No game running."
+        with self.item_lock:
+            if not (self.waiting and self.explore_idle):
+                return False, ("You can manage gear while exploring, between actions "
+                               "(not during combat, shopping or other questions).")
+            if not (0 <= hero < len(gs.party)):
+                return False, "No such hero."
+            ch = gs.party[hero]
+            owner = ch.player or ""
+            here = {self._norm(n) for n in self.present()}
+            if owner and self._norm(owner) in here and self._norm(owner) != self._norm(who):
+                return False, f"That's {owner}'s hero. Ask them (or use chat)."
+            if ch.dead or not (0 <= item < len(ch.inventory)):
+                return False, "That item isn't there any more."
+            e = ch.inventory[item]
+            d = item_data(e)
+            name = item_name(e)
+            others = [p for p in gs.party if not p.dead]
+            tgt = gs.party[target] if 0 <= target < len(gs.party) else ch
+
+            def say(msg):
+                self.emit({"t": "line", "kind": "inv", "text": c(f"\U0001f392 {msg}", "bcyan")})
+
+            if action in ("equip", "equip_off"):
+                if d["kind"] not in ("weapon", "armor", "shield", "ring", "cloak", "amulet"):
+                    return False, "That can't be equipped."
+                say(ch.equip(e, "off" if action == "equip_off" else None))
+            elif action == "unequip":
+                ch.unequip(e)
+                say(f"{ch.name} puts away {name}.")
+            elif action == "drop":
+                e.pop("slot", None)
+                ch.inventory.remove(e)
+                say(f"{ch.name} drops {name}.")
+            elif action == "give":
+                if tgt is ch or tgt not in others:
+                    return False, "Give it to whom?"
+                given = dict(e, qty=1)
+                given.pop("slot", None)
+                if e.get("qty", 1) > 1:
+                    e["qty"] -= 1
+                else:
+                    ch.inventory.remove(e)
+                tgt.add_item(given)
+                say(f"{ch.name} gives {name} to {tgt.name}.")
+            elif action == "use":
+                use = d.get("use")
+                if use == "antitoxin":
+                    ch.add_effect(Effect("Antitoxin", ROUNDS_PER_HOUR,
+                                         [("save_fort_poison", "alchemical", 5)]))
+                    ch.remove_item(e, 1)
+                    say(f"{ch.name} drinks the antitoxin.")
+                elif use in ("spell", "scroll"):
+                    from .data.spells import SPELLS
+                    sp = SPELLS[d["spell"]]
+                    if sp["target"] in ("enemy", "enemies"):
+                        return False, "Save that for a fight."
+                    if use == "scroll" and not use_scroll_check(self.ui, ch, d):
+                        return True, ""
+                    lvl = min(sp["levels"].values())
+                    who_gets = tgt if sp["target"] == "ally" else ch
+                    if use == "spell" and who_gets is not ch:
+                        say(f"{ch.name} gives {who_gets.name} {name}.")
+                    else:
+                        say(f"{ch.name} uses {name}.")
+                    cast_spell(self.ui, ch if use == "scroll" else who_gets, d["spell"],
+                               [who_gets], d.get("cl", 1), 10 + lvl + lvl // 2,
+                               allies=others)
+                    ch.remove_item(e, 1)
+                else:
+                    return False, "That can't be used outside combat."
+            else:
+                return False, "Unknown action."
+            return True, ""
+
     def claim(self, index: int, who: str):
         gs = self.ui.game_state
         if gs is None or not (0 <= index < len(gs.party)) or not who:
@@ -319,7 +418,10 @@ class Table:
         rooms = gs.adv.ROOMS
         visited = [rooms[r]["name"] for r, st in gs.rooms.items()
                    if st.get("visited") and r in rooms]
+        from .adventure.mapping import map_data
         return {"active": True, "location": rooms.get(gs.room, {}).get("name", gs.room),
+                "can_manage": bool(self.waiting and self.explore_idle),
+                "map": map_data(gs),
                 "time": gs.time_str(), "party": party, "journal": list(gs.journal),
                 "visited": visited, "adventure": gs.adv.TITLE,
                 "heroic": gs.settings.get("heroic", False)}
@@ -340,14 +442,26 @@ class Table:
                     "reset": since < self.first_seq}
 
     def _run(self) -> None:
-        from .game import main_menu
+        from .adventure.engine import list_saves, load_game, save_info
+        from .game import gm_play_loaded, main_menu
         Color.enabled = True
+        resume = True
         while True:
             try:
                 self.ui.header(f"TABLE '{self.name}' IS OPEN")
                 self.ui.para("Everyone at this table sees the same game. Click a choice or "
                              "type an answer. In combat, the game names whose turn it is; "
                              "that player should answer. Use the chat box to talk.")
+                auto = self.ui.autosave_name
+                if resume and auto in list_saves():
+                    resume = False
+                    self.ui.good("Resuming where you left off: " +
+                                 save_info(auto).split(": ", 1)[-1])
+                    self.ui.out("(To start something else, choose More options -> Quit "
+                                "to go to the main menu.)", ("dim",))
+                    gm_play_loaded(self.ui, load_game(auto))
+                    continue
+                resume = False
                 main_menu(self.ui)
             except QuitGame:
                 pass
@@ -465,6 +579,14 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
+        elif u.path == "/api/item":
+            try:
+                ok, why = t.item_action(int(body.get("hero", -1)), int(body.get("item", -1)),
+                                        str(body.get("action", "")),
+                                        int(body.get("target", -1)), who)
+            except (TypeError, ValueError):
+                ok, why = False, "bad request"
+            self._json({"ok": ok, "why": why})
         elif u.path == "/api/claim":
             try:
                 ok, why = t.claim(int(body.get("hero", -1)), who)
