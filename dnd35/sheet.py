@@ -39,7 +39,8 @@ def attack_lines(ch: Character) -> List[str]:
     for w in ch.weapon_infos():
         comps = ch.attack_components(w, power=0)
         total = _sum(comps)
-        full = "/".join(f"{total - bab + b:+d}" for b in iters)
+        full = "/".join(f"{total - bab + b:+d}" for b in (iters if not w.get("natural")
+                                                           else [bab]))
         dice, dcomps = ch.damage_profile(w)
         db = _sum(dcomps)
         dmg = dice + (f"{db:+d}" if db else "")
@@ -81,8 +82,13 @@ def render(ch: Character, full: bool = True) -> str:
         racial = r["ability_adj"].get(ab, 0)
         inc = ch.ability_increases.count(ab)
         cur = ch.ability(ab)
-        temp = (cur or 0) - (base + racial + inc)
+        form = ch.wild_form()
+        if form and ab in ("str", "dex", "con"):
+            base, racial, inc = form["abilities"][ab], 0, 0
+        temp = (cur or 0) - (base + racial + inc) + ch.ability_damage.get(ab, 0)
         extra = []
+        if form and ab in ("str", "dex", "con"):
+            extra.append(f"{form['name'].lower()} form")
         if racial:
             extra.append(f"racial {racial:+d}")
         if inc:
@@ -149,13 +155,7 @@ def render(ch: Character, full: bool = True) -> str:
         L.append(_box("SPECIAL ABILITIES"))
         for s in ch.special_abilities():
             L.append(f"| {s}")
-        daily = []
-        if ch.rage_per_day():
-            daily.append(f"Rage {ch.uses_left('rage')}/{ch.rage_per_day()}")
-        if ch.turn_per_day():
-            daily.append(f"Turn undead {ch.uses_left('turn')}/{ch.turn_per_day()}")
-        if "Strength" in ch.domains:
-            daily.append(f"Feat of strength {ch.uses_left('feat_of_strength')}/1")
+        daily = ch.daily_list()
         if daily:
             L.append("| Daily uses left: " + ", ".join(daily))
 
@@ -258,6 +258,10 @@ def sheet_data(ch: Character) -> dict:
         inc = ch.ability_increases.count(ab)
         cur = ch.ability(ab)
         notes = []
+        form = ch.wild_form()
+        if form and ab in ("str", "dex", "con"):
+            base, racial, inc = form["abilities"][ab], 0, 0
+            notes.append(f"{form['name'].lower()} form")
         if racial:
             notes.append(f"racial {racial:+d}")
         if inc:
@@ -295,7 +299,8 @@ def sheet_data(ch: Character) -> dict:
         attacks.append({
             "name": w["name"], "state": {"main": "in hand", "off": "off hand",
                                          None: "stowed"}[w.get("wielded")],
-            "bonus": "/".join(f"{total - bab + b:+d}" for b in iters),
+            "bonus": "/".join(f"{total - bab + b:+d}" for b in (iters if not w.get("natural")
+                                                                 else [bab])),
             "damage": dice_expr + (f"{db:+d}" if db else ""),
             "crit": (f"{w['crit_range']}-20" if w["crit_range"] < 20 else "20")
                     + f" x{w['crit_mult']}",
@@ -321,13 +326,7 @@ def sheet_data(ch: Character) -> dict:
         base = f.split(" (")[0]
         feats.append({"name": f, "desc": FEATS.get(base, FEATS.get(f, {})).get("desc", "")})
 
-    daily = []
-    if ch.rage_per_day():
-        daily.append(f"Rage {ch.uses_left('rage')}/{ch.rage_per_day()}")
-    if ch.turn_per_day():
-        daily.append(f"Turn undead {ch.uses_left('turn')}/{ch.turn_per_day()}")
-    if "Strength" in ch.domains:
-        daily.append(f"Feat of strength {ch.uses_left('feat_of_strength')}/1")
+    daily = ch.daily_list()
 
     spells = []
     for cls in ch.caster_classes():
@@ -360,7 +359,8 @@ def sheet_data(ch: Character) -> dict:
     for idx, e in enumerate(ch.inventory):
         d = item_data(e)
         slot = {"main": "in hand", "off": "off hand", "armor": "worn", "shield": "on arm",
-                "ring": "worn", "ring2": "worn", "cloak": "worn", "amulet": "worn"}.get(
+                "ring": "worn", "ring2": "worn", "cloak": "worn", "amulet": "worn",
+                "wrists": "worn", "hands": "worn", "head": "worn", "belt": "worn"}.get(
                     e.get("slot", ""), "")
         weight = d.get("weight", 0)
         if d.get("ammo_count"):

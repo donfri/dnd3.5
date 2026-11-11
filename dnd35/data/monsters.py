@@ -228,3 +228,68 @@ MONSTERS = {
                 "she has already won.",
     },
 }
+
+# ---------------------------------------------------------------- wild shape forms
+# Druids take the physical scores, size, natural armor, speed and attacks of these.
+MONSTERS.update({
+    "black bear": {
+        # MM: AC 13, claw +6 (1d4+4) x2, bite +1 (1d6+2)
+        "name": "Black Bear", "type": "animal", "size": "medium",
+        "hd": 3, "hit_die": 8, "bab": 2, "base_saves": (5, 4, 2), "cr": 2,
+        "abilities": {"str": 19, "dex": 13, "con": 15, "int": 2, "wis": 12, "cha": 6},
+        "natural": 2, "speed": 40,
+        "natural_attacks": [{"name": "claw", "damage": "1d4", "dtype": "S", "primary": True},
+                            {"name": "claw", "damage": "1d4", "dtype": "S", "primary": True},
+                            {"name": "bite", "damage": "1d6", "dtype": "P",
+                             "primary": False}],
+        "skills": {"Climb": 4, "Listen": 4, "Spot": 4, "Swim": 8},
+        "feats": ["Endurance", "Run"], "vision": "low-light, scent",
+        "desc": "A shaggy black bear, all muscle and claws.",
+    },
+    "leopard": {
+        # MM: AC 15, bite +6 (1d6+3), claw +1 (1d3+1) x2
+        "name": "Leopard", "type": "animal", "size": "medium",
+        "hd": 3, "hit_die": 8, "bab": 2, "base_saves": (4, 7, 2), "cr": 2,
+        "abilities": {"str": 16, "dex": 19, "con": 15, "int": 2, "wis": 12, "cha": 6},
+        "natural": 1, "speed": 40,
+        "natural_attacks": [{"name": "bite", "damage": "1d6", "dtype": "P", "primary": True},
+                            {"name": "claw", "damage": "1d3", "dtype": "S", "primary": False},
+                            {"name": "claw", "damage": "1d3", "dtype": "S",
+                             "primary": False}],
+        "skills": {"Balance": 12, "Climb": 11, "Hide": 8, "Jump": 11, "Listen": 6,
+                   "Move Silently": 8, "Spot": 6},
+        "feats": ["Alertness", "Weapon Finesse"], "vision": "low-light, scent",
+        "desc": "A spotted great cat, low and coiled to spring.",
+    },
+    "brown bear": {
+        # MM: Large, AC 15, claw +11 (1d8+8) x2, bite +6 (2d6+4)
+        "name": "Brown Bear", "type": "animal", "size": "large",
+        "hd": 6, "hit_die": 8, "bab": 4, "base_saves": (8, 6, 3), "cr": 4,
+        "abilities": {"str": 27, "dex": 13, "con": 19, "int": 2, "wis": 12, "cha": 6},
+        "natural": 5, "speed": 40,
+        "natural_attacks": [{"name": "claw", "damage": "1d8", "dtype": "S", "primary": True},
+                            {"name": "claw", "damage": "1d8", "dtype": "S", "primary": True},
+                            {"name": "bite", "damage": "2d6", "dtype": "P",
+                             "primary": False}],
+        "skills": {"Listen": 4, "Spot": 7, "Swim": 12},
+        "feats": ["Endurance", "Run", "Track"], "vision": "low-light, scent",
+        "desc": "A towering brown bear that blots out the light behind it.",
+    },
+    "dire wolf": {
+        # MM: Large, AC 14, bite +11 (1d8+10), trip
+        "name": "Dire Wolf", "type": "animal", "size": "large",
+        "hd": 6, "hit_die": 8, "bab": 4, "base_saves": (8, 7, 6), "cr": 3,
+        "abilities": {"str": 25, "dex": 15, "con": 17, "int": 2, "wis": 12, "cha": 10},
+        "natural": 3, "speed": 50,
+        "natural_attacks": [{"name": "bite", "damage": "1d8", "dtype": "P", "primary": True,
+                             "str_mult": 1.5, "trip": True}],
+        "skills": {"Hide": 0, "Listen": 7, "Move Silently": 4, "Spot": 7, "Survival": 2},
+        "feats": ["Alertness", "Run", "Track", "Weapon Focus (bite)"],
+        "vision": "low-light, scent",
+        "desc": "A wolf as big as a horse, with a mouth full of yellow knives.",
+    },
+})
+
+WILD_SHAPES = {  # key: minimum druid level
+    "wolf": 5, "black bear": 5, "leopard": 5, "brown bear": 8, "dire wolf": 8,
+}

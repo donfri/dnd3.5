@@ -10,7 +10,8 @@ from typing import List, Optional
 
 from . import dice, rules
 from .character import Character
-from .data.classes import CLASSES, CLASS_ORDER, DEITIES, DOMAINS, FAVORED_ENEMIES
+from .data.classes import (CLASSES, CLASS_ORDER, DEITIES, DOMAINS, FAVORED_ENEMIES,
+                           alignment_allowed)
 from .data.feats import FEATS, SPELL_SCHOOLS
 from .data.items import WEAPONS
 from .data.skills import SKILL_ORDER
@@ -22,22 +23,68 @@ RECOMMENDED = {
         "abilities": ["str", "con", "dex", "wis", "cha", "int"],
         "skills": ["Climb", "Jump", "Listen", "Intimidate", "Survival", "Swim"],
         "feats": ["Power Attack", "Cleave", "Weapon Focus (greataxe)", "Toughness",
-                  "Improved Initiative", "Iron Will"],
+                  "Improved Initiative", "Great Cleave", "Iron Will",
+                  "Improved Critical (greataxe)"],
         "weapon": "greataxe",
+    },
+    "bard": {
+        "abilities": ["cha", "dex", "con", "int", "wis", "str"],
+        "skills": ["Perform", "Diplomacy", "Concentration", "Tumble", "Listen", "Bluff",
+                   "Sense Motive", "Use Magic Device", "Spellcraft", "Gather Information",
+                   "Knowledge (local)", "Knowledge (history)"],
+        "feats": ["Weapon Finesse", "Improved Initiative", "Combat Casting", "Dodge",
+                  "Extra Music", "Toughness", "Lightning Reflexes"],
+        "weapon": "rapier",
+        "spells": {0: ["Daze", "Flare", "Detect Magic", "Light", "Resistance", "Mage Hand",
+                       "Prestidigitation", "Know Direction"],
+                   1: ["Cure Light Wounds", "Sleep", "Grease", "Hideous Laughter",
+                       "Remove Fear"],
+                   2: ["Heroism", "Hold Person", "Cure Moderate Wounds", "Sound Burst",
+                       "Cat's Grace", "Blur"],
+                   3: ["Haste", "Good Hope", "Slow", "Cure Serious Wounds", "Displacement"],
+                   4: ["Cure Critical Wounds", "Hold Monster", "Shout",
+                       "Greater Invisibility"]},
     },
     "cleric": {
         "abilities": ["wis", "con", "str", "cha", "dex", "int"],
         "skills": ["Concentration", "Heal", "Knowledge (religion)", "Spellcraft", "Diplomacy"],
         "feats": ["Combat Casting", "Improved Initiative", "Extra Turning", "Toughness",
-                  "Iron Will"],
+                  "Iron Will", "Craft Wondrous Item"],
         "deity": "Pelor", "domains": ["Healing", "Strength"], "weapon": "heavy mace",
+    },
+    "druid": {
+        "abilities": ["wis", "con", "dex", "str", "int", "cha"],
+        "skills": ["Concentration", "Knowledge (nature)", "Survival", "Spellcraft", "Heal",
+                   "Listen", "Spot", "Handle Animal"],
+        "feats": ["Improved Initiative", "Natural Spell", "Combat Casting", "Toughness",
+                  "Iron Will"],
+        "weapon": "scimitar",
     },
     "fighter": {
         "abilities": ["str", "con", "dex", "wis", "int", "cha"],
         "skills": ["Climb", "Jump", "Intimidate", "Swim", "Ride"],
         "feats": ["Power Attack", "Weapon Focus (longsword)", "Cleave", "Dodge",
                   "Weapon Specialization (longsword)", "Improved Initiative", "Toughness",
-                  "Mobility", "Iron Will"],
+                  "Mobility", "Great Cleave", "Greater Weapon Focus (longsword)",
+                  "Improved Critical (longsword)", "Spring Attack", "Combat Reflexes",
+                  "Iron Will"],
+        "weapon": "longsword",
+    },
+    "monk": {
+        "abilities": ["wis", "dex", "str", "con", "int", "cha"],
+        "skills": ["Tumble", "Jump", "Balance", "Climb", "Listen", "Spot", "Move Silently",
+                   "Hide", "Concentration", "Escape Artist", "Sense Motive"],
+        "feats": ["Dodge", "Improved Initiative", "Weapon Focus (unarmed strike)", "Mobility",
+                  "Spring Attack", "Toughness", "Lightning Reflexes"],
+        "bonus": {1: "Stunning Fist", 2: "Deflect Arrows", 6: "Improved Trip"},
+        "weapon": "quarterstaff",
+    },
+    "paladin": {
+        "abilities": ["str", "cha", "con", "wis", "dex", "int"],
+        "skills": ["Diplomacy", "Sense Motive", "Heal", "Concentration", "Ride",
+                   "Knowledge (religion)"],
+        "feats": ["Power Attack", "Weapon Focus (longsword)", "Cleave", "Improved Initiative",
+                  "Extra Smiting", "Toughness", "Iron Will", "Great Cleave"],
         "weapon": "longsword",
     },
     "ranger": {
@@ -45,7 +92,8 @@ RECOMMENDED = {
         "skills": ["Hide", "Move Silently", "Listen", "Spot", "Survival", "Search", "Heal",
                    "Climb", "Knowledge (nature)", "Use Rope"],
         "feats": ["Point Blank Shot", "Precise Shot", "Weapon Focus (longbow)",
-                  "Improved Initiative", "Toughness", "Iron Will"],
+                  "Improved Initiative", "Toughness", "Improved Critical (longbow)",
+                  "Iron Will"],
         "favored_enemy": "goblinoid", "style": "archery", "weapon": "longbow",
     },
     "rogue": {
@@ -54,32 +102,42 @@ RECOMMENDED = {
                    "Move Silently", "Tumble", "Use Magic Device", "Bluff", "Sense Motive",
                    "Diplomacy", "Climb", "Balance", "Escape Artist", "Jump"],
         "feats": ["Weapon Finesse", "Dodge", "Improved Initiative", "Mobility",
-                  "Weapon Focus (rapier)", "Lightning Reflexes"],
+                  "Weapon Focus (rapier)", "Combat Reflexes", "Improved Critical (rapier)",
+                  "Lightning Reflexes"],
         "weapon": "rapier",
     },
     "sorcerer": {
         "abilities": ["cha", "dex", "con", "int", "wis", "str"],
         "skills": ["Concentration", "Spellcraft", "Knowledge (arcana)", "Bluff"],
         "feats": ["Improved Initiative", "Toughness", "Combat Casting",
-                  "Spell Focus (evocation)", "Iron Will"],
+                  "Spell Focus (evocation)", "Iron Will", "Spell Penetration"],
         "spells": {0: ["Ray of Frost", "Acid Splash", "Daze", "Disrupt Undead", "Detect Magic",
-                       "Light", "Resistance", "Mage Hand"],
+                       "Light", "Resistance", "Mage Hand", "Flare"],
                    1: ["Magic Missile", "Sleep", "Mage Armor", "Shield", "Burning Hands",
-                       "Color Spray"],
-                   2: ["Scorching Ray", "Blur", "Melf's Acid Arrow"]},
+                       "Color Spray", "Grease"],
+                   2: ["Scorching Ray", "Blur", "Melf's Acid Arrow", "Cat's Grace",
+                       "Flaming Sphere"],
+                   3: ["Fireball", "Haste", "Lightning Bolt", "Slow"],
+                   4: ["Stoneskin", "Greater Invisibility", "Ice Storm"],
+                   5: ["Cone of Cold", "Hold Monster"]},
     },
     "wizard": {
         "abilities": ["int", "dex", "con", "wis", "cha", "str"],
         "skills": ["Concentration", "Spellcraft", "Knowledge (arcana)", "Knowledge (religion)",
                    "Knowledge (dungeoneering)", "Decipher Script", "Knowledge (history)"],
         "feats": ["Improved Initiative", "Toughness", "Spell Focus (evocation)",
-                  "Combat Casting", "Iron Will"],
+                  "Combat Casting", "Iron Will", "Spell Penetration"],
         "spells": {1: ["Magic Missile", "Sleep", "Mage Armor", "Shield", "Color Spray",
-                       "Burning Hands", "Ray of Enfeeblement", "True Strike", "Enlarge Person",
-                       "Protection from Evil", "Magic Weapon"],
+                       "Burning Hands", "Grease", "Ray of Enfeeblement", "True Strike",
+                       "Enlarge Person", "Protection from Evil", "Magic Weapon"],
                    2: ["Scorching Ray", "Melf's Acid Arrow", "Blur", "Bull's Strength",
-                       "Cat's Grace", "Bear's Endurance", "Resist Energy"],
-                   3: ["Fireball", "Haste", "Lightning Bolt", "Hold Person"]},
+                       "Cat's Grace", "Bear's Endurance", "Resist Energy", "Flaming Sphere",
+                       "Hideous Laughter", "Fox's Cunning"],
+                   3: ["Fireball", "Haste", "Lightning Bolt", "Slow", "Hold Person",
+                       "Displacement", "Heroism"],
+                   4: ["Stoneskin", "Greater Invisibility", "Ice Storm", "Shout", "Fear",
+                       "Bestow Curse"],
+                   5: ["Cone of Cold", "Hold Monster", "Waves of Fatigue"]},
     },
 }
 
@@ -88,13 +146,34 @@ PREP_PRIORITY = {
                1: ["Bless", "Shield of Faith", "Divine Favor", "Doom", "Cure Light Wounds"],
                2: ["Aid", "Spiritual Weapon", "Bull's Strength", "Hold Person",
                    "Cure Moderate Wounds"],
-               3: ["Prayer", "Searing Light", "Magic Vestment", "Cure Serious Wounds"]},
+               3: ["Prayer", "Searing Light", "Magic Vestment", "Cure Serious Wounds"],
+               4: ["Divine Power", "Freedom of Movement", "Cure Critical Wounds",
+                   "Death Ward"],
+               5: ["Flame Strike", "Righteous Might", "Mass Cure Light Wounds",
+                   "Slay Living"]},
+    "druid": {0: ["Flare", "Guidance", "Resistance", "Virtue", "Cure Minor Wounds"],
+              1: ["Produce Flame", "Entangle", "Cure Light Wounds", "Magic Fang"],
+              2: ["Barkskin", "Flaming Sphere", "Bull's Strength", "Owl's Wisdom"],
+              3: ["Call Lightning", "Cure Moderate Wounds", "Greater Magic Fang", "Poison"],
+              4: ["Flame Strike", "Ice Storm", "Cure Serious Wounds"],
+              5: ["Call Lightning Storm", "Stoneskin", "Cure Critical Wounds"]},
     "wizard": {0: ["Ray of Frost", "Acid Splash", "Daze", "Disrupt Undead", "Resistance"],
                1: ["Magic Missile", "Sleep", "Mage Armor", "Shield", "Color Spray"],
-               2: ["Scorching Ray", "Melf's Acid Arrow", "Blur"],
-               3: ["Fireball", "Haste"]},
-    "ranger": {1: ["Cure Light Wounds", "Longstrider"]},
+               2: ["Scorching Ray", "Melf's Acid Arrow", "Blur", "Flaming Sphere"],
+               3: ["Fireball", "Haste", "Slow"],
+               4: ["Stoneskin", "Greater Invisibility", "Ice Storm", "Shout"],
+               5: ["Cone of Cold", "Hold Monster"]},
+    "paladin": {1: ["Divine Favor", "Bless", "Cure Light Wounds", "Protection from Evil"],
+                2: ["Bull's Strength", "Eagle's Splendor", "Owl's Wisdom"]},
+    "ranger": {1: ["Entangle", "Magic Fang", "Longstrider"],
+               2: ["Barkskin", "Cure Light Wounds", "Cat's Grace"]},
 }
+
+MONK_BONUS_FEATS = {1: ["Stunning Fist", "Improved Grapple"],
+                    2: ["Deflect Arrows", "Combat Reflexes"],
+                    6: ["Improved Trip", "Improved Disarm"]}
+CASTER_BONUS_FEATS = ["Brew Potion", "Craft Wondrous Item", "Craft Magic Arms and Armor",
+                      "Empower Spell", "Spell Penetration"]
 
 ABILITY_INCREASE_LEVELS = (4, 8, 12, 16, 20)
 FEAT_LEVELS = (1, 3, 6, 9, 12, 15, 18)
@@ -131,7 +210,8 @@ def feat_eligible(ch: Character, feat: str, param: Optional[str] = None,
         return False
     full = f"{feat} ({param})" if param else feat
     have = ch.feat_list()
-    if full in have and feat not in ("Toughness", "Extra Turning"):
+    if full in have and feat not in ("Toughness", "Extra Turning", "Extra Smiting",
+                                      "Extra Music"):
         return False
     pre = info.get("prereq", {})
     for ab in rules.ABILITIES:
@@ -150,7 +230,13 @@ def feat_eligible(ch: Character, feat: str, param: Optional[str] = None,
     if pre.get("caster"):
         if not any(ch.caster_level(c) >= pre["caster"] for c in ch.caster_classes()):
             return False
-    if pre.get("turn_undead") and ch.class_level("cleric") < 1:
+    if pre.get("turn_undead") and ch.turn_per_day() < 1:
+        return False
+    if pre.get("wild_shape") and ch.class_level("druid") < 5:
+        return False
+    if pre.get("smite") and not ch.class_level("paladin"):
+        return False
+    if pre.get("music") and not ch.class_level("bard"):
         return False
     if info.get("param") and param is None:
         return bool(feat_param_options(ch, feat))
@@ -361,17 +447,17 @@ def learn_spells(ch: Character, cls: str, ui, auto: bool, first: bool) -> None:
             ch.spellbook.append(pick)
             if not auto:
                 ui.good(f"Learned {pick}.")
-    elif cls == "sorcerer":
-        lvl = min(ch.class_level("sorcerer"), rules.MAX_LEVEL)
-        known_table = CLASSES["sorcerer"]["spells_known"][lvl]
+    elif CLASSES[cls].get("spells_known"):
+        lvl = min(ch.class_level(cls), rules.MAX_LEVEL)
+        known_table = CLASSES[cls]["spells_known"][lvl]
         for sl, n in enumerate(known_table):
             have = ch.spells_known.setdefault(sl, [])
             while len(have) < n:
-                pool = [s for s in spells_for("sorcerer", sl) if s not in have]
+                pool = [s for s in spells_for(cls, sl) if s not in have]
                 if not pool:
                     break
                 if auto:
-                    prio = RECOMMENDED["sorcerer"]["spells"].get(sl, [])
+                    prio = RECOMMENDED[cls]["spells"].get(sl, [])
                     pick = next((s for s in prio if s in pool), pool[0])
                 else:
                     ui.sub(f"Choose a level-{sl} spell known for {ch.name} "
@@ -488,7 +574,7 @@ def gain_level(ch: Character, cls: str, ui=None, auto: bool = False,
     # class features needing choices
     if cls == "cleric" and first_in_class:
         choose_deity_domains(ch, ui, auto)
-    if cls == "ranger" and clvl in (1, 5):
+    if cls == "ranger" and clvl in (1, 5, 10):
         choose_favored_enemy(ch, ui, auto)
     if cls == "ranger" and clvl == 2:
         choose_combat_style(ch, ui, auto)
@@ -503,17 +589,27 @@ def gain_level(ch: Character, cls: str, ui=None, auto: bool = False,
     if clvl in CLASSES[cls].get("bonus_feat_levels", []):
         if cls == "fighter":
             choose_feat(ch, ui, auto, fighter_bonus=True, label="fighter bonus feat")
-        else:
-            # wizard 5th: metamagic / item creation, simplified to any caster feat
+        elif cls == "monk":
+            # monks ignore prerequisites for their bonus feats
+            opts = [f for f in MONK_BONUS_FEATS[clvl] if f not in ch.feats] or \
+                MONK_BONUS_FEATS[clvl]
             if auto:
-                ch.feats.append("Brew Potion" if "Brew Potion" not in ch.feats
-                                else "Spell Penetration")
+                pick = RECOMMENDED["monk"]["bonus"][clvl]
+                pick = pick if pick in opts else opts[0]
             else:
-                opts = ["Brew Potion", "Empower Spell", "Spell Penetration"]
-                opts = [o for o in opts if o not in ch.feats] or ["Spell Penetration"]
+                from .data.feats import FEATS as _F
+                pick = opts[ui.choose("Monk bonus feat", [f"{o}: {_F[o]['desc']}"
+                                                          for o in opts])]
+            ch.feats.append(pick)
+        else:
+            # wizard 5th/10th: metamagic / item creation (mostly flavor here)
+            opts = [o for o in CASTER_BONUS_FEATS if o not in ch.feats] or ["Spell Penetration"]
+            if auto:
+                ch.feats.append(opts[0])
+            else:
                 ch.feats.append(opts[ui.choose("Wizard bonus feat", opts)])
     # spells
-    if cls in ("wizard", "sorcerer"):
+    if cls == "wizard" or CLASSES[cls].get("spells_known"):
         learn_spells(ch, cls, ui, auto, first_in_class)
     after = ch.spells_per_day(cls) if CLASSES[cls].get("caster") else {}
     if after and after != before_spells:
@@ -534,7 +630,8 @@ def _level_up_interactive(ch: Character, ui, heroic: bool = False) -> None:
         current = list(ch.classes())
         opts = [f"{CLASSES[k]['name']} (continue, level {ch.class_level(k) + 1})"
                 for k in current]
-        others = [k for k in CLASS_ORDER if k not in current]
+        others = [k for k in CLASS_ORDER if k not in current
+                  and alignment_allowed(k, ch.alignment)]
         opts += [f"{CLASSES[k]['name']} (multiclass)" for k in others]
         i = ui.choose("Advance in which class?", opts, default=0)
         cls = (current + others)[i]

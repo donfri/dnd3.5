@@ -6,18 +6,22 @@ from typing import Dict, List, Optional, Tuple
 
 from . import rules
 from .creature import Creature, weapon_info_from_entry, thrown_variant
-from .data.classes import CLASSES, DEITIES, DOMAINS
+from .data.classes import CLASSES, DEITIES, DOMAINS, METAL_ARMOR, MONK_UNARMED
 from .data.feats import FEATS
-from .data.items import WEAPONS, item_data, item_name, make_item
+from .data.items import WEAPONS, WORN_SLOTS, item_data, item_name, make_item
+from .data.monsters import MONSTERS
 from .data.races import RACES
 from .data.skills import SKILLS, SYNERGIES
 from .data.spells import SPELLS
 from .effects import Effect
 
-EQUIP_SLOTS = ["main", "off", "armor", "shield", "ring", "ring2", "cloak", "amulet"]
+EQUIP_SLOTS = ["main", "off", "armor", "shield", "ring", "ring2", "cloak", "amulet", "wrists",
+               "hands", "head", "belt"]
+WORN = [sl for slots in WORN_SLOTS.values() for sl in slots]
 
 CURE_BY_LEVEL = {0: "Cure Minor Wounds", 1: "Cure Light Wounds", 2: "Cure Moderate Wounds",
-                 3: "Cure Serious Wounds"}
+                 3: "Cure Serious Wounds", 4: "Cure Critical Wounds",
+                 5: "Mass Cure Light Wounds"}
 
 SKILL_FEATS = {k: v["skills"] for k, v in FEATS.items() if "skills" in v}
 
@@ -79,7 +83,15 @@ class Character(Creature):
 
     @property
     def base_size(self) -> str:  # type: ignore[override]
-        return self.race_data["size"]
+        form = self.wild_form()
+        return form["size"] if form else self.race_data["size"]
+
+    # ------------------------------------------------------------ wild shape
+    def wild_form(self) -> Optional[dict]:
+        for e in self.effects:
+            if e.name == "Wild Shape":
+                return MONSTERS.get(e.data.get("form"))
+        return None
 
     @property
     def ctype(self) -> str:  # type: ignore[override]
@@ -95,6 +107,10 @@ class Character(Creature):
 
     # ------------------------------------------------------------ hooks
     def base_ability_score(self, ab):
+        if ab in ("str", "dex", "con"):
+            form = self.wild_form()
+            if form:
+                return form["abilities"][ab]
         return (self.base_abilities[ab] + self.race_data["ability_adj"].get(ab, 0)
                 + self.ability_increases.count(ab))
 
@@ -128,6 +144,11 @@ class Character(Creature):
                 out.append("Two-Weapon Fighting")
         if self.class_level("ranger") >= 3:
             out.append("Endurance")
+        if self.class_level("ranger") >= 6 and self.combat_style and self._light_or_no_armor():
+            out.append("Manyshot" if self.combat_style == "archery"
+                       else "Improved Two-Weapon Fighting")
+        if self.class_level("monk") >= 1 and "Improved Unarmed Strike" not in out:
+            out.append("Improved Unarmed Strike")
         if "War" in self.domains and self.deity in DEITIES:
             w = DEITIES[self.deity]["weapon"]
             out.append(f"Weapon Focus ({w})")
@@ -136,6 +157,14 @@ class Character(Creature):
     def _light_or_no_armor(self) -> bool:
         e = self.equipped("armor")
         return e is None or item_data(e)["category"] == "light"
+
+    def monk_unarmored(self) -> bool:
+        """Monk AC bonus, flurry and fast movement need no armor, no shield, light load."""
+        if self.class_level("monk") < 1 or self.wild_form():
+            return False
+        if self.equipped("armor") or self.equipped("shield"):
+            return False
+        return self.load() == "light"
 
     # ------------------------------------------------------------ equipment
     def equipped(self, slot: str) -> Optional[dict]:
@@ -169,7 +198,7 @@ class Character(Creature):
 
     def armor_data(self):
         e = self.equipped("armor")
-        if not e:
+        if not e or self.wild_form():
             return None
         d = item_data(e)
         eff = self.bonus("armor_enh")
@@ -179,7 +208,11 @@ class Character(Creature):
 
     def shield_data(self):
         e = self.equipped("shield")
-        return item_data(e) if e else None
+        return item_data(e) if e and not self.wild_form() else None
+
+    def natural_armor(self):
+        form = self.wild_form()
+        return form.get("natural", 0) if form else 0
 
     def add_item(self, item_id_or_entry, qty: int = 1) -> dict:
         entry = make_item(item_id_or_entry, qty) if isinstance(item_id_or_entry, str) \
@@ -237,12 +270,15 @@ class Character(Creature):
                 slot = "shield"
             elif kind == "weapon":
                 slot = "main"
-            elif kind == "ring":
-                slot = "ring" if not self.equipped("ring") else "ring2"
-            elif kind in ("cloak", "amulet"):
-                slot = kind
+            elif kind in WORN_SLOTS:
+                slots = WORN_SLOTS[kind]
+                slot = next((sl for sl in slots if not self.equipped(sl)), slots[0])
             else:
                 return f"You can't equip {item_name(entry)}."
+        if (kind in ("armor", "shield") and self.class_level("druid")
+                and entry["id"] in METAL_ARMOR):
+            return (f"{self.name} refuses to wear metal armor: it would cut a druid off from "
+                    f"nature's magic.")
         # split stacks so only one is equipped
         if entry.get("qty", 1) > 1 and kind == "weapon":
             entry["qty"] -= 1
@@ -313,17 +349,56 @@ class Character(Creature):
                                    self.base_size)
 
     def speed(self) -> int:
+        form = self.wild_form()
+        if form:
+            return form.get("speed", 30) + self.bonus("speed")
         base = self.race_data["speed"]
         a = self.armor_data()
         if a and a.get("speed_reduce") and not self.race_data.get("speed_unaffected_by_armor"):
             base = 20 if base == 30 else 15
         if self.class_level("barbarian") >= 1 and not (a and a["category"] == "heavy"):
             base += 10
+        if self.class_level("monk") >= 3 and self.monk_unarmored():
+            base += 10 * (self.class_level("monk") // 3)
         base += self.bonus("speed")
         return base
 
-    def weapon_infos(self) -> List[dict]:
+    def natural_attacks(self) -> List[dict]:
+        form = self.wild_form()
         out = []
+        if not form:
+            return out
+        for nat in form.get("natural_attacks", []):
+            w = {"name": nat["name"], "wid": nat["name"], "damage": nat["damage"],
+                 "base_damage": nat["damage"], "crit_range": nat.get("crit_range", 20),
+                 "crit_mult": nat.get("crit_mult", 2), "dtype": nat.get("dtype", "B"),
+                 "ranged": False, "thrown": False, "light": False, "two_handed": False,
+                 "natural": True, "primary": nat.get("primary", True), "special": nat,
+                 "wielded": "main"}
+            if "str_mult" in nat:
+                w["str_mult"] = nat["str_mult"]
+            elif len(form["natural_attacks"]) == 1:
+                w["str_mult"] = 1.5
+            out.append(w)
+        return out
+
+    def monk_unarmed(self) -> dict:
+        w = weapon_info_from_entry(make_item("unarmed strike"), self.base_size)
+        m = self.class_level("monk")
+        table = MONK_UNARMED["small" if self.base_size == "small" else "medium"]
+        w["damage"] = table[max(k for k in table if k <= m)]
+        w["base_damage"] = MONK_UNARMED["medium"][max(k for k in table if k <= m)]
+        w["nonlethal"] = False
+        w["name"] = "Unarmed strike (monk)"
+        w["wielded"] = "main"
+        return w
+
+    def weapon_infos(self) -> List[dict]:
+        if self.wild_form():
+            return self.natural_attacks()
+        out = []
+        if self.class_level("monk"):
+            out.append(self.monk_unarmed())
         main = self.equipped("main")
         off = self.equipped("off")
         size = self.base_size
@@ -413,12 +488,20 @@ class Character(Creature):
             out.append(("dodge", 1, "Dodge"))
         if stat == "saves" and self.race_data.get("save_bonus_all"):
             out.append(("racial", self.race_data["save_bonus_all"], "racial"))
-        for slot in ("ring", "ring2", "cloak", "amulet"):
+        for slot in WORN:
             e = self.equipped(slot)
             if e:
                 for s, btype, val in item_data(e).get("bonuses", []):
                     if s == stat:
                         out.append((btype, val, item_name(e)))
+        if stat == "ac" and self.class_level("monk") and self.monk_unarmored():
+            val = max(0, self.mod("wis")) + self.class_level("monk") // 5
+            if val:
+                out.append(("monk", val, "monk AC bonus"))
+        if stat == "saves" and self.class_level("paladin") >= 2:
+            cha = self.mod("cha")
+            if cha > 0:
+                out.append(("divine_grace", cha, "divine grace"))
         return out
 
     def save_vs_tags(self, tags):
@@ -432,12 +515,44 @@ class Character(Creature):
             ts = self.trap_sense()
             if ts:
                 out.append(("untyped", ts, "trap sense"))
+        if "enchantment" in tags and self.class_level("monk") >= 3:
+            out.append(("still_mind", 2, "still mind"))
         return out
 
     def trap_sense(self) -> int:
+        return self.class_level("barbarian") // 3 + self.class_level("rogue") // 3
+
+    def immunities(self):
+        out = []
+        if self.class_level("paladin") >= 3:
+            out += ["fear", "disease"]
+        if self.class_level("monk") >= 5:
+            out.append("disease")
+        if self.class_level("druid") >= 9:
+            out.append("poison")
+        if self.get_effect("Death Ward"):
+            out += ["death", "negative"]
+        if self.get_effect("Freedom of Movement"):
+            out += ["paralysis", "entangle", "slow"]
+        return out
+
+    def dr(self):
+        out = []
         b = self.class_level("barbarian")
-        r = self.class_level("rogue")
-        return (1 if b >= 3 else 0) + (1 if r >= 3 else 0)
+        if b >= 7:
+            out.append((1 + (b - 7) // 3, "-"))
+        sk = self.get_effect("Stoneskin")
+        if sk:
+            out.insert(0, (min(10, sk.data.get("left", 10)), "adamantine"))
+        return out
+
+    def on_dr_absorbed(self, bypass, amount):
+        if bypass == "adamantine":
+            sk = self.get_effect("Stoneskin")
+            if sk:
+                sk.data["left"] = sk.data.get("left", 10) - amount
+                if sk.data["left"] <= 0:
+                    self.effects.remove(sk)
 
     def dodge_vs(self):
         return dict(self.race_data.get("dodge_vs", {}))
@@ -445,8 +560,21 @@ class Character(Creature):
     def has_uncanny_dodge(self):
         return self.class_level("barbarian") >= 2 or self.class_level("rogue") >= 4
 
+    def has_improved_uncanny_dodge(self):
+        return self.class_level("barbarian") >= 5 or self.class_level("rogue") >= 8
+
+    def _evasion_ok(self) -> bool:
+        a = self.armor_data()
+        return not a or a["category"] == "light"
+
     def has_evasion(self) -> bool:
-        return self.class_level("rogue") >= 2
+        return self._evasion_ok() and (self.class_level("rogue") >= 2
+                                       or self.class_level("monk") >= 2
+                                       or self.class_level("ranger") >= 9)
+
+    def has_improved_evasion(self) -> bool:
+        return self._evasion_ok() and (self.class_level("rogue") >= 10
+                                       or self.class_level("monk") >= 9)
 
     def racial_attack_bonus(self, w, target):
         out = []
@@ -502,6 +630,8 @@ class Character(Creature):
         rb = self.race_data.get("skill_bonus", {}).get(skill)
         if rb:
             typed.append(("racial", rb, "racial"))
+        if self.class_level("druid") and skill in ("Knowledge (nature)", "Survival"):
+            typed.append(("untyped", 2, "nature sense"))
         if skill == "Hide":
             sz = rules.SIZE_HIDE[self.size]
             if sz:
@@ -604,9 +734,16 @@ class Character(Creature):
                     s["used"] = False
         self.spont_used = {}
 
+    def can_cast_now(self) -> bool:
+        if self.wild_form() and not self.has_feat("Natural Spell"):
+            return False
+        return not self.has_tag("raging")
+
     def available_casts(self) -> List[dict]:
         """Every spell this character could cast right now."""
         out = []
+        if self.wild_form() and not self.has_feat("Natural Spell"):
+            return out
         for cls in self.caster_classes():
             if CLASSES[cls].get("prepared"):
                 for sl, slots in sorted(self.prepared.get(cls, {}).items()):
@@ -646,13 +783,20 @@ class Character(Creature):
             sl = cast["level"]
             self.spont_used[sl] = self.spont_used.get(sl, 0) + 1
 
-    def arcane_spell_failure(self) -> int:
-        if not any(CLASSES[c].get("caster") == "arcane" for c in self.classes()):
+    def arcane_spell_failure(self, cls: Optional[str] = None) -> int:
+        arcane = [c for c in self.classes() if CLASSES[c].get("caster") == "arcane"]
+        if cls is not None:
+            arcane = [cls] if cls in arcane else []
+        if not arcane:
             return 0
         total = 0
-        for d in (self.armor_data(), self.shield_data()):
-            if d:
-                total += d.get("asf", 0)
+        a = self.armor_data()
+        if a and not (a["category"] == "light"
+                      and all(CLASSES[c].get("light_armor_casting") for c in arcane)):
+            total += a.get("asf", 0)
+        sh = self.shield_data()
+        if sh:
+            total += sh.get("asf", 0)
         return total
 
     # ------------------------------------------------------------ daily abilities
@@ -662,20 +806,72 @@ class Character(Creature):
             return 0
         return 1 + b // 4
 
+    def turn_level(self) -> int:
+        lvl = self.class_level("cleric")
+        if self.class_level("paladin") >= 4:
+            lvl += self.class_level("paladin") - 3
+        return lvl
+
     def turn_per_day(self) -> int:
-        if self.class_level("cleric") < 1:
+        if self.turn_level() < 1:
             return 0
         n = 3 + self.mod("cha")
         n += 4 * self.feat_list().count("Extra Turning")
         return max(0, n)
 
-    def uses_left(self, key: str) -> int:
-        total = {"rage": self.rage_per_day(), "turn": self.turn_per_day(),
-                 "feat_of_strength": 1 if "Strength" in self.domains else 0}.get(key, 0)
-        return max(0, total - self.daily.get(key, 0))
+    def smite_per_day(self) -> int:
+        p = self.class_level("paladin")
+        if not p:
+            return 0
+        return 1 + p // 5 + 2 * self.feat_list().count("Extra Smiting")
 
-    def spend(self, key: str) -> None:
-        self.daily[key] = self.daily.get(key, 0) + 1
+    def lay_on_hands_pool(self) -> int:
+        p = self.class_level("paladin")
+        return p * self.mod("cha") if p >= 2 and self.mod("cha") > 0 else 0
+
+    def music_per_day(self) -> int:
+        b = self.class_level("bard")
+        return b + 4 * self.feat_list().count("Extra Music") if b else 0
+
+    def wild_shape_per_day(self) -> int:
+        d = self.class_level("druid")
+        if d < 5:
+            return 0
+        return {5: 1, 6: 2, 7: 3, 8: 3, 9: 3}.get(d, 4)
+
+    def stunning_fist_per_day(self) -> int:
+        if not self.has_feat("Stunning Fist"):
+            return 0
+        m = self.class_level("monk")
+        return m + (self.level - m) // 4
+
+    def wholeness_pool(self) -> int:
+        m = self.class_level("monk")
+        return 2 * m if m >= 7 else 0
+
+    def uses_total(self, key: str) -> int:
+        return {"rage": self.rage_per_day(), "turn": self.turn_per_day(),
+                "feat_of_strength": 1 if "Strength" in self.domains else 0,
+                "smite": self.smite_per_day(), "lay_on_hands": self.lay_on_hands_pool(),
+                "music": self.music_per_day(), "wild_shape": self.wild_shape_per_day(),
+                "stunning_fist": self.stunning_fist_per_day(),
+                "wholeness": self.wholeness_pool()}.get(key, 0)
+
+    def uses_left(self, key: str) -> int:
+        return max(0, self.uses_total(key) - self.daily.get(key, 0))
+
+    def spend(self, key: str, n: int = 1) -> None:
+        self.daily[key] = self.daily.get(key, 0) + n
+
+    DAILY_LABELS = [("rage", "Rage"), ("turn", "Turn undead"),
+                    ("feat_of_strength", "Feat of strength"), ("smite", "Smite evil"),
+                    ("lay_on_hands", "Lay on hands (hp)"), ("music", "Bardic music"),
+                    ("wild_shape", "Wild shape"), ("stunning_fist", "Stunning fist"),
+                    ("wholeness", "Wholeness of body (hp)")]
+
+    def daily_list(self) -> List[str]:
+        return [f"{label} {self.uses_left(k)}/{self.uses_total(k)}"
+                for k, label in self.DAILY_LABELS if self.uses_total(k)]
 
     def special_abilities(self) -> List[str]:
         out = list(self.race_data["traits"])

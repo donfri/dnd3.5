@@ -5,7 +5,7 @@ from typing import List, Sequence
 
 from . import rules
 from .character import Character
-from .data.items import GEAR, SHOP_STOCK, item_data, item_name, make_item
+from .data.items import EQUIPPABLE_KINDS, GEAR, SHOP_STOCK, item_data, item_name, make_item
 from .ui import c
 
 
@@ -158,7 +158,7 @@ def _inventory_loop(ui, party, who) -> None:
         e = entries[i]
         d = item_data(e)
         acts = []
-        if d["kind"] in ("weapon", "armor", "shield", "ring", "cloak", "amulet"):
+        if d["kind"] in EQUIPPABLE_KINDS:
             if e.get("slot"):
                 acts.append("Unequip")
             else:

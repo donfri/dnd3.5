@@ -413,7 +413,7 @@ async function openBlock(seq){const b=blocks[seq];await refreshState();
 const sgn=n=>(n>=0?'+':'')+n;
 function canManageHero(i){if(!lastState||!lastState.can_manage)return false;const p=lastState.party[i];
  const owner=(p.player||'').toLowerCase();return !owner||owner==me.toLowerCase()||!hereNow.includes(owner)}
-const EQUIPPABLE=['weapon','armor','shield','ring','cloak','amulet'];
+const EQUIPPABLE=['weapon','armor','shield','ring','cloak','amulet','bracers','gloves','head','belt'];
 function itemButtons(e,others){const b=[];const h=sheetIdx;
  if(EQUIPPABLE.includes(e.kind)){
   if(e.equipped)b.push(`<button onclick="itemAct(${h},${e.idx},'unequip')">Unequip</button>`);

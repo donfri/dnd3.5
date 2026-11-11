@@ -68,6 +68,52 @@ FEATS = {
                                         "provoke.", "fighter": True},
     "Quick Draw": {"desc": "Draw a weapon as a free action.", "prereq": {"bab": 1},
                    "fighter": True},
+    "Improved Critical": {"desc": "Double the threat range of the chosen weapon.",
+                          "param": "weapon", "prereq": {"bab": 8, "proficient": True},
+                          "fighter": True},
+    "Greater Weapon Focus": {"desc": "+1 more on attack rolls with the chosen weapon.",
+                             "param": "weapon",
+                             "prereq": {"fighter_level": 8, "feats": ["Weapon Focus"]},
+                             "fighter": True, "fighter_only": True},
+    "Great Cleave": {"desc": "Cleave any number of times per round.",
+                     "prereq": {"str": 13, "bab": 4, "feats": ["Cleave"]}, "fighter": True},
+    "Spring Attack": {"desc": "Full-round action: move in, attack, and move back out without "
+                              "provoking from your target.",
+                      "prereq": {"dex": 13, "bab": 4, "feats": ["Mobility"]}, "fighter": True},
+    "Combat Reflexes": {"desc": "Make extra attacks of opportunity each round (1 + Dex "
+                                "modifier), even while flat-footed.", "fighter": True},
+    "Deflect Arrows": {"desc": "Once per round, knock aside a ranged weapon that would hit you "
+                               "(not while flat-footed).",
+                       "prereq": {"dex": 13, "feats": ["Improved Unarmed Strike"]},
+                       "fighter": True},
+    "Stunning Fist": {"desc": "Declare before an unarmed attack: if it hits, the foe must make "
+                              "a Fort save (DC 10 + 1/2 level + Wis) or be stunned 1 round. "
+                              "Uses per day: 1 per 4 levels (monks: 1 per level).",
+                      "prereq": {"dex": 13, "wis": 13, "bab": 8,
+                                 "feats": ["Improved Unarmed Strike"]}, "fighter": True},
+    "Improved Grapple": {"desc": "+4 on grapple checks; grabbing doesn't provoke.",
+                         "prereq": {"dex": 13, "feats": ["Improved Unarmed Strike"]},
+                         "fighter": True},
+    "Improved Trip": {"desc": "+4 on trip attempts; trip doesn't provoke, and a successful "
+                              "trip earns a free attack.",
+                      "prereq": {"int": 13, "feats": ["Combat Expertise"]}, "fighter": True},
+    "Improved Disarm": {"desc": "+4 on disarm attempts; disarming doesn't provoke.",
+                        "prereq": {"int": 13, "feats": ["Combat Expertise"]}, "fighter": True},
+    "Improved Bull Rush": {"desc": "+4 on bull rush attempts; bull rush doesn't provoke.",
+                           "prereq": {"str": 13, "feats": ["Power Attack"]}, "fighter": True},
+    "Manyshot": {"desc": "Standard action: fire two arrows at once at -4 each.",
+                 "prereq": {"dex": 17, "bab": 6, "feats": ["Rapid Shot"]}, "fighter": True},
+    "Improved Two-Weapon Fighting": {"desc": "A second off-hand attack at -5 on a full "
+                                             "attack.",
+                                     "prereq": {"dex": 17, "bab": 6,
+                                                "feats": ["Two-Weapon Fighting"]},
+                                     "fighter": True},
+    "Natural Spell": {"desc": "Cast spells while in wild shape.",
+                      "prereq": {"wis": 13, "wild_shape": True}},
+    "Extra Smiting": {"desc": "Smite evil two more times per day.",
+                      "prereq": {"smite": True}},
+    "Extra Music": {"desc": "Use bardic music four more times per day.",
+                    "prereq": {"music": True}},
     "Combat Casting": {"desc": "+4 on Concentration checks to cast defensively."},
     "Spell Focus": {"desc": "+1 to the save DC of spells from the chosen school.",
                     "param": "school"},
@@ -89,6 +135,10 @@ FEATS = {
                     "prereq": {"caster": 3}},
     "Empower Spell": {"desc": "Metamagic (flavor in this version).", "prereq": {"caster": 1},
                       "metamagic": True},
+    "Craft Wondrous Item": {"desc": "Create wondrous items (downtime, flavor).",
+                            "prereq": {"caster": 3}},
+    "Craft Magic Arms and Armor": {"desc": "Create magic weapons and armor (downtime, "
+                                           "flavor).", "prereq": {"caster": 5}},
     "Spell Penetration": {"desc": "+2 on caster level checks to beat spell resistance."},
 }
 

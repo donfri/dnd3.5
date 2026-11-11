@@ -188,6 +188,29 @@ CONSUMABLES = {
     "holy water": {"kind": "consumable", "name": "Holy water", "cost": 25 * GP, "weight": 1,
                    "stack": True, "use": "splash", "damage": "2d4", "dtype": "holy",
                    "only_vs": ["undead"], "desc": "Thrown splash weapon: 2d4 to undead."},
+    "potion of cure serious wounds": {"kind": "consumable",
+                                      "name": "Potion of cure serious wounds",
+                                      "cost": 750 * GP, "weight": 0.1, "stack": True,
+                                      "use": "spell", "spell": "Cure Serious Wounds", "cl": 5,
+                                      "desc": "Heals 3d8+5."},
+    "potion of lesser restoration": {"kind": "consumable",
+                                     "name": "Potion of lesser restoration",
+                                     "cost": 300 * GP, "weight": 0.1, "stack": True,
+                                     "use": "spell", "spell": "Lesser Restoration", "cl": 3,
+                                     "desc": "Heals 1d4 ability damage, removes fatigue."},
+    "scroll of fireball": {"kind": "consumable", "name": "Scroll of fireball",
+                           "cost": 375 * GP, "weight": 0, "stack": True, "use": "scroll",
+                           "spell": "Fireball", "cl": 5, "list": "arcane",
+                           "desc": "Arcane scroll (5d6 fireball)."},
+    "scroll of cure serious wounds": {"kind": "consumable",
+                                      "name": "Scroll of cure serious wounds",
+                                      "cost": 375 * GP, "weight": 0, "stack": True,
+                                      "use": "scroll", "spell": "Cure Serious Wounds", "cl": 5,
+                                      "list": "divine", "desc": "Divine scroll."},
+    "scroll of remove disease": {"kind": "consumable", "name": "Scroll of remove disease",
+                                 "cost": 375 * GP, "weight": 0, "stack": True, "use": "scroll",
+                                 "spell": "Remove Disease", "cl": 5, "list": "divine",
+                                 "desc": "Divine scroll."},
     "antitoxin": {"kind": "consumable", "name": "Antitoxin", "cost": 50 * GP, "weight": 0,
                   "stack": True, "use": "antitoxin",
                   "desc": "+5 alchemical bonus on Fort saves vs poison for 1 hour."},
@@ -208,6 +231,59 @@ MAGIC = {
                                    "bonuses": [("ac", "natural_enh", 1)],
                                    "desc": "+1 enhancement bonus to natural armor."},
 }
+
+
+def _wi(kind, name, gp, bonuses, desc, weight=0):
+    return {"kind": kind, "name": name, "cost": gp * GP, "weight": weight, "bonuses": bonuses,
+            "desc": desc}
+
+
+MAGIC.update({
+    "ring of protection +2": _wi("ring", "Ring of protection +2", 8000,
+                                 [("ac", "deflection", 2)], "+2 deflection bonus to AC."),
+    "cloak of resistance +2": _wi("cloak", "Cloak of resistance +2", 4000,
+                                  [("saves", "resistance", 2)],
+                                  "+2 resistance bonus on all saving throws.", 1),
+    "amulet of natural armor +2": _wi("amulet", "Amulet of natural armor +2", 8000,
+                                      [("ac", "natural_enh", 2)],
+                                      "+2 enhancement bonus to natural armor."),
+    "bracers of armor +1": _wi("bracers", "Bracers of armor +1", 1000, [("ac", "armor", 1)],
+                               "+1 armor bonus to AC (doesn't stack with armor; monks love "
+                               "these).", 1),
+    "bracers of armor +2": _wi("bracers", "Bracers of armor +2", 4000, [("ac", "armor", 2)],
+                               "+2 armor bonus to AC (doesn't stack with armor).", 1),
+    "gauntlets of ogre power": _wi("gloves", "Gauntlets of ogre power", 4000,
+                                   [("str", "enhancement", 2)],
+                                   "+2 enhancement bonus to Strength.", 4),
+    "gloves of dexterity +2": _wi("gloves", "Gloves of Dexterity +2", 4000,
+                                  [("dex", "enhancement", 2)],
+                                  "+2 enhancement bonus to Dexterity."),
+    "headband of intellect +2": _wi("head", "Headband of intellect +2", 4000,
+                                    [("int", "enhancement", 2)],
+                                    "+2 enhancement bonus to Intelligence."),
+    "periapt of wisdom +2": _wi("amulet", "Periapt of Wisdom +2", 4000,
+                                [("wis", "enhancement", 2)],
+                                "+2 enhancement bonus to Wisdom (neck slot)."),
+    "cloak of charisma +2": _wi("cloak", "Cloak of Charisma +2", 4000,
+                                [("cha", "enhancement", 2)],
+                                "+2 enhancement bonus to Charisma.", 1),
+    "amulet of health +2": _wi("amulet", "Amulet of health +2", 4000,
+                               [("con", "enhancement", 2)],
+                               "+2 enhancement bonus to Constitution (neck slot)."),
+    "belt of giant strength +4": _wi("belt", "Belt of giant strength +4", 16000,
+                                     [("str", "enhancement", 4)],
+                                     "+4 enhancement bonus to Strength.", 1),
+    "amulet of mighty fists +1": _wi("amulet", "Amulet of mighty fists +1", 6000,
+                                     [("natural_weapon_enh", "enhancement", 1)],
+                                     "+1 on attack and damage with unarmed strikes and "
+                                     "natural weapons."),
+})
+
+# where each kind of worn item goes
+WORN_SLOTS = {"ring": ["ring", "ring2"], "cloak": ["cloak"], "amulet": ["amulet"],
+              "bracers": ["wrists"], "gloves": ["hands"], "head": ["head"], "belt": ["belt"]}
+WORN_KINDS = set(WORN_SLOTS)
+EQUIPPABLE_KINDS = {"weapon", "armor", "shield"} | WORN_KINDS
 
 
 def make_item(item_id: str, qty: int = 1, **overrides) -> dict:
@@ -281,14 +357,25 @@ SHOP_STOCK = {
     "weapons": [k for k in WEAPONS if k not in ("unarmed strike", "greatclub (large)")],
     "armor": list(ARMOR),
     "temple": ["potion of cure light wounds", "potion of cure moderate wounds",
+               "potion of cure serious wounds", "potion of lesser restoration",
                "potion of shield of faith", "holy water", "scroll of cure light wounds",
-               "scroll of bless", "silver holy symbol"],
-    "magic": ["scroll of magic missile", "scroll of sleep", "potion of bull's strength"],
+               "scroll of bless", "scroll of cure serious wounds", "scroll of remove disease",
+               "silver holy symbol"],
+    "magic": ["scroll of magic missile", "scroll of sleep", "scroll of fireball",
+              "potion of bull's strength"],
     "fine": ["masterwork longsword", "masterwork rapier", "masterwork greataxe",
              "masterwork longbow", "+1 longsword", "+1 rapier", "+1 greataxe",
              "+1 greatsword", "+1 battleaxe", "+1 warhammer", "+1 heavy mace",
              "+1 morningstar", "+1 longbow", "+1 shortbow", "+1 quarterstaff",
              "+1 chain shirt", "+1 studded leather", "+1 breastplate", "+1 full plate",
              "+1 heavy steel shield", "ring of protection +1", "cloak of resistance +1",
-             "amulet of natural armor +1", "potion of cure moderate wounds"],
+             "amulet of natural armor +1", "potion of cure moderate wounds",
+             "+2 longsword", "+2 rapier", "+2 greataxe", "+2 greatsword", "+2 longbow",
+             "+2 quarterstaff", "+2 scimitar", "+2 heavy mace", "+2 chain shirt",
+             "+2 breastplate", "+2 full plate", "+2 heavy steel shield",
+             "ring of protection +2", "cloak of resistance +2", "amulet of natural armor +2",
+             "bracers of armor +1", "bracers of armor +2", "amulet of mighty fists +1",
+             "gauntlets of ogre power", "gloves of dexterity +2", "headband of intellect +2",
+             "periapt of wisdom +2", "cloak of charisma +2", "amulet of health +2",
+             "belt of giant strength +4"],
 }

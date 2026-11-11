@@ -4,7 +4,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Dict, Iterable, List, Optional, Tuple
 
-MAX_LEVEL = 5
+MAX_LEVEL = 10
 
 ABILITIES = ["str", "dex", "con", "int", "wis", "cha"]
 ABILITY_NAMES = {

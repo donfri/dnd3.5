@@ -238,10 +238,11 @@ class Creature:
                 note = f"resists {reduced} {dtype}"
         elif dtype and not magic:
             for dr_amt, bypass in self.dr():
-                if not any(ch in dtype for ch in bypass):
+                if not _dr_bypassed(bypass, dtype):
                     reduced = min(dr_amt, amount)
                     amount -= reduced
                     note = f"DR {dr_amt}/{_dr_name(bypass)} absorbs {reduced}"
+                    self.on_dr_absorbed(bypass, reduced)
                     break
         if amount <= 0:
             return 0, note
@@ -261,6 +262,9 @@ class Creature:
                     self.effects.remove(e)
         self.check_death()
         return amount + absorbed, note
+
+    def on_dr_absorbed(self, bypass: str, amount: int) -> None:
+        pass
 
     def heal(self, amount: int) -> int:
         if self.dead or amount <= 0:
@@ -382,6 +386,8 @@ class Creature:
             typed += self.bonuses("saves_vs_evil")
         if "fear" in tags:
             typed += self.bonuses("saves_vs_fear")
+        if "spell" in tags:
+            typed += self.bonuses("saves_vs_spell")
         comps.extend(stacked_breakdown(typed))
         return comps
 
@@ -412,14 +418,15 @@ class Creature:
         size = rules.SIZE_ATTACK_AC[self.size]
         if size:
             comps.append(("size", size, "size"))
-        enh = max(w.get("enhancement", 0), self.bonus("weapon_enh") if not w.get("natural")
-                  else 0)
+        enh = self.weapon_enhancement(w)
         if enh:
             comps.append(("enhancement", enh, "enhancement"))
         elif w.get("masterwork"):
             comps.append(("enhancement", 1, "masterwork"))
         if self.has_feat(f"Weapon Focus ({w.get('wid')})"):
             comps.append(("untyped", 1, "Weapon Focus"))
+        if self.has_feat(f"Greater Weapon Focus ({w.get('wid')})"):
+            comps.append(("untyped", 1, "Greater Weapon Focus"))
         if not w.get("natural") and not self.is_proficient(w):
             comps.append(("untyped", -4, "nonproficient"))
         for d in (self.armor_data(), self.shield_data()):
@@ -450,6 +457,15 @@ class Creature:
             comps.append(("untyped", -2, "shaken"))
         comps.extend(situational)
         return comps
+
+    def weapon_enhancement(self, w: dict) -> int:
+        enh = w.get("enhancement", 0)
+        if w.get("natural") or w.get("wid") == "unarmed strike":
+            return max(enh, self.bonus("natural_weapon_enh"))
+        enh = max(enh, self.bonus("weapon_enh"))
+        if self.has_tag("shillelagh") and w.get("wid") in ("club", "quarterstaff"):
+            enh = max(enh, 1)
+        return enh
 
     def racial_attack_bonus(self, w: dict, target: Optional["Creature"]):
         return []
@@ -482,14 +498,15 @@ class Creature:
     def damage_profile(self, w: dict, target: "Creature" = None, offhand: bool = False,
                        power: int = 0) -> Tuple[str, List[Tuple[str, int, str]]]:
         dice = w["damage"]
-        if self.has_tag("enlarged") and self.base_size == "medium":
+        if self.has_tag("enlarged") and self.base_size == "medium" and not w.get("natural"):
             dice = rules.scale_damage(w.get("base_damage", dice), "large")
+        if self.has_tag("shillelagh") and w.get("wid") in ("club", "quarterstaff"):
+            dice = rules.scale_damage(rules.scale_damage(dice, "large"), "large")
         comps: List[Tuple[str, int, str]] = []
         s = self.str_damage(w, offhand)
         if s:
             comps.append(("ability", s, "Str"))
-        enh = max(w.get("enhancement", 0), self.bonus("weapon_enh") if not w.get("natural")
-                  else 0)
+        enh = self.weapon_enhancement(w)
         if enh:
             comps.append(("enhancement", enh, "enhancement"))
         if self.has_feat(f"Weapon Specialization ({w.get('wid')})"):
@@ -546,7 +563,22 @@ class Creature:
         return msgs
 
 
+def _dr_bypassed(bypass: str, dtype: str) -> bool:
+    """DR entries name what gets through: weapon damage letters ("B", "S"), nothing
+    ("" or "-": DR x/-), or a material/quality word ("adamantine", "magic") that
+    ordinary attacks here never have."""
+    if bypass in ("", "-"):
+        return False
+    if bypass.isupper():
+        return any(ch in dtype for ch in bypass)
+    return False
+
+
 def _dr_name(bypass: str) -> str:
+    if bypass in ("", "-"):
+        return "-"
+    if not bypass.isupper():
+        return bypass
     names = {"B": "bludgeoning", "S": "slashing", "P": "piercing"}
     return " or ".join(names.get(b, b) for b in bypass)
 

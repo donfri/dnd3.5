@@ -15,6 +15,7 @@ from ..combat import Combat, award_xp
 from ..data.items import item_data, item_name, make_item
 from ..effects import Effect, ROUNDS_PER_MINUTE
 from ..levelup import level_up_interactive, prepare_spells
+from ..abilities import ability_menu, has_usable
 from ..magic import cast_out_of_combat, heal, saving_throw
 from ..monster import Monster
 from ..sheet import render, short_status
@@ -152,9 +153,10 @@ class GM:
         if skill.startswith("ability:"):
             return ch.mod(skill.split(":")[1])
         if skill == "Wild Empathy":
-            if not ch.class_level("ranger"):
+            lvl = ch.class_level("ranger") + ch.class_level("druid")
+            if not lvl:
                 return None
-            return ch.class_level("ranger") + ch.mod("cha")
+            return lvl + ch.mod("cha")
         if not ch.can_use_skill(skill):
             if skill == "Handle Animal":
                 return ch.mod("cha")
@@ -949,7 +951,11 @@ class GM:
                     "Healing: cure light wounds cast on a hero (10 gp)",
                     "Healing: cure moderate wounds (60 gp)",
                     "Lesser restoration: heal all ability damage on one hero (60 gp)",
-                    "Remove disease (150 gp)", "Leave the shrine"]
+                    "Remove disease (150 gp)"]
+            dead = [p for p in gs.party if p.dead]
+            if dead:
+                opts.append("Raise dead: return a fallen hero to life (5,450 gp)")
+            opts.append("Leave the shrine")
             i = ui.choose(getattr(self.adv, "TEMPLE_GREETING",
                                   "Sister Elowen, the priestess of Pelor, smiles. 'How may "
                                   "the Dawnfather help?'"), opts)
@@ -983,6 +989,16 @@ class GM:
                     ui.good(f"{who.name} is cured of disease.")
                 elif who:
                     ui.out(f"{who.name} isn't sick.")
+            elif opts[i].startswith("Raise dead"):
+                dead = [p for p in gs.party if p.dead]
+                who = dead[0] if len(dead) == 1 else self.pick_hero("Raise whom?", heroes=dead)
+                payer = who and self._payer(5450)
+                if payer:
+                    payer.cp -= 5450 * 100
+                    ui.gm(f"The priests lay {who.name} on the altar and pray through the "
+                          f"night, crushing a flawless diamond into the holy oil...")
+                    from ..magic import raise_dead
+                    raise_dead(ui, who)
             else:
                 return
 
@@ -1115,6 +1131,8 @@ class GM:
             opts.append((c("Level up!", "bgreen", "bold"), "levelup", None))
         opts += [("Character sheet", "sheet", None), ("Inventory & equipment", "inv", None),
                  ("Cast a spell (healing, buffs)", "cast", None)]
+        if has_usable(gs.living()):
+            opts.append(("Use a class ability (lay on hands, wild shape...)", "ability", None))
         if not room.get("town"):
             opts.append(("Rest for 8 hours (heal, regain spells; may attract wanderers)",
                          "rest", None))
@@ -1123,7 +1141,7 @@ class GM:
                  ("Quit (offers to save)", "quit", None)]
         group_of = {"feature": "Actions", "exit": "Travel", "search": "Explore",
                     "sneak": "Explore", "rest": "Explore", "levelup": "Party",
-                    "sheet": "Party", "inv": "Party", "cast": "Party"}
+                    "sheet": "Party", "inv": "Party", "cast": "Party", "ability": "Party"}
         i = ui.choose("What do you do?", [o[0] for o in opts],
                       groups=[group_of.get(o[1], "Game") for o in opts])
         _, kind, data = opts[i]
@@ -1148,7 +1166,9 @@ class GM:
         elif kind == "inv":
             inventory_menu(ui, gs.living())
         elif kind == "cast":
-            cast_out_of_combat(ui, gs.living())
+            cast_out_of_combat(ui, gs.party)
+        elif kind == "ability":
+            ability_menu(ui, gs.living())
         elif kind == "rest":
             self.rest(safe=False)
         elif kind == "look":

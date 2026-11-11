@@ -299,7 +299,7 @@ class Table:
 
     def item_action(self, hero: int, item: int, action: str, target: int, who: str):
         """Inventory changes from the character sheet, only between exploration actions."""
-        from .data.items import item_data, item_name
+        from .data.items import EQUIPPABLE_KINDS, item_data, item_name
         from .magic import cast_spell, use_scroll_check
         from .effects import Effect, ROUNDS_PER_HOUR
         gs = self.ui.game_state
@@ -328,7 +328,7 @@ class Table:
                 self.emit({"t": "line", "kind": "inv", "text": c(f"\U0001f392 {msg}", "bcyan")})
 
             if action in ("equip", "equip_off"):
-                if d["kind"] not in ("weapon", "armor", "shield", "ring", "cloak", "amulet"):
+                if d["kind"] not in EQUIPPABLE_KINDS:
                     return False, "That can't be equipped."
                 say(ch.equip(e, "off" if action == "equip_off" else None))
             elif action == "unequip":

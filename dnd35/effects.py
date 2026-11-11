@@ -28,6 +28,11 @@ CONDITION_TEXT = {
     "enlarged": "Enlarged (Large size)",
     "charging": "Charging (-2 AC)",
     "total_defense": "Total defense (+4 dodge AC)",
+    "entangled": "Entangled (-2 attacks, -4 Dex, can't move)",
+    "slowed": "Slowed (one action per turn, -1 attack, AC and Reflex)",
+    "frightened": "Frightened (flees in panic)",
+    "invisible": "Invisible",
+    "wild_shape": "Wild shape",
     "fighting_defensively": "Fighting defensively (-4 attack, +2 dodge AC)",
 }
 

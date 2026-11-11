@@ -6,7 +6,7 @@ from typing import List, Optional
 from . import dice, rules
 from .character import Character
 from .data.classes import (AGE_CATEGORY, ALIGNMENTS, CLASS_ORDER, CLASSES, DEITIES,
-                           STARTING_AGE)
+                           STARTING_AGE, alignment_allowed)
 from .data.items import GP
 from .data.races import RACE_ORDER, RACES
 from .levelup import RECOMMENDED, gain_level, prepare_spells
@@ -15,7 +15,8 @@ from .ui import c
 
 ELITE_ARRAY = [15, 14, 13, 12, 10, 8]
 # DMG "character wealth by level" (minus the 1st-level kit), to spend in town
-LEVEL_WEALTH_GP = {2: 900, 3: 2700, 4: 5400, 5: 9000}
+LEVEL_WEALTH_GP = {2: 900, 3: 2700, 4: 5400, 5: 9000, 6: 13000, 7: 19000, 8: 27000,
+                   9: 36000, 10: 49000}
 POINT_BUY_COST = {8: 0, 9: 1, 10: 2, 11: 3, 12: 4, 13: 5, 14: 6, 15: 8, 16: 10, 17: 13,
                   18: 16}
 
@@ -25,6 +26,19 @@ KITS = {
     "barbarian": {"equip": ["studded leather", "greataxe"],
                   "carry": [("shortbow", 1), ("arrows", 20), ("dagger", 1), ("javelin", 2)],
                   "gold": "2d4"},
+    "bard": {"equip": ["studded leather", "rapier"],
+             "carry": [("shortbow", 1), ("arrows", 20), ("dagger", 1)],
+             "gold": "3d4"},
+    "druid": {"equip": ["hide", "heavy wooden shield", "scimitar"],
+              "carry": [("sling", 1), ("sling bullets", 10), ("quarterstaff", 1),
+                        ("healer's kit", 1)],
+              "gold": "1d4"},
+    "monk": {"equip": [],
+             "carry": [("quarterstaff", 1), ("sling", 1), ("sling bullets", 10)],
+             "gold": "1d4"},
+    "paladin": {"equip": ["scale mail", "heavy steel shield", "longsword"],
+                "carry": [("javelin", 2), ("holy symbol", 1)],
+                "gold": "2d4"},
     "cleric": {"equip": ["scale mail", "heavy wooden shield", "heavy mace"],
                "carry": [("light crossbow", 1), ("bolts", 10), ("holy symbol", 1),
                          ("healer's kit", 1)],
@@ -63,15 +77,16 @@ def apply_kit(ch: Character, cls: str) -> None:
         gear = [(i, min(q, 2) if i == "rations" else (1 if i == "torch" else q))
                 for i, q in COMMON_GEAR]
     for iid, qty in kit["carry"] + gear:
-        if ch.base_size == "small" and iid == "rope":
+        if (ch.base_size == "small" and iid == "rope") or qty <= 0:
             continue
         ch.add_item(iid, qty)
     ch.cp += dice.roll(kit["gold"]).total * GP
 
 
 def roll_starting_gold(cls: str) -> int:
-    expr = CLASSES[cls]["gold"].replace("x10", "")
-    return dice.roll(expr).total * 10 * GP
+    gold = CLASSES[cls]["gold"]
+    mult = 10 if "x10" in gold else 1
+    return dice.roll(gold.replace("x10", "")).total * mult * GP
 
 
 def random_physical(ch: Character, cls: str) -> None:
@@ -201,9 +216,10 @@ def create_character(ui, player: str = "", start_level: int = 1) -> Character:
         for a in rules.ABILITIES))
 
     ui.sub("Alignment")
-    allowed = ALIGNMENTS
-    if cls == "barbarian":
-        allowed = [a for a in ALIGNMENTS if not a.startswith("Lawful")]
+    allowed = [a for a in ALIGNMENTS if alignment_allowed(cls, a)]
+    if len(allowed) < len(ALIGNMENTS):
+        ui.out(f"(A {CLASSES[cls]['name'].lower()} must be "
+               f"{CLASSES[cls].get('alignment', 'any')}.)")
     k = ui.choose("Alignment", allowed, default=allowed.index("Neutral Good")
                   if "Neutral Good" in allowed else 0)
     ch.alignment = allowed[k]
@@ -227,6 +243,8 @@ def create_character(ui, player: str = "", start_level: int = 1) -> Character:
         ch.add_item("backpack")
         if cls == "wizard":
             ch.add_item("spellbook")
+        if cls == "paladin" or cls == "cleric":
+            ch.add_item("holy symbol")
         ui.out(f"{ch.name} has {rules.money_str(ch.cp)} to spend.")
         from .shop import shop_menu
         shop_menu(ui, [ch], "Outfitter's Market", ["general", "weapons", "armor", "temple"])
@@ -269,6 +287,23 @@ PREGENS = {
               "alignment": "Neutral Good", "gender": "Female",
               "abilities": {"str": 8, "dex": 14, "con": 13, "int": 10, "wis": 12, "cha": 15},
               "blurb": "Human sorcerer: fewer spells known, more spells per day."},
+    "wren": {"name": "Wren Tallowsong", "race": "half-elf", "cls": "bard",
+             "alignment": "Chaotic Good", "gender": "Female",
+             "abilities": {"str": 10, "dex": 14, "con": 12, "int": 13, "wis": 8, "cha": 15},
+             "blurb": "Half-elf bard: songs of courage, healing magic, a silver tongue."},
+    "moss": {"name": "Old Moss", "race": "gnome", "cls": "druid",
+             "alignment": "True Neutral", "gender": "Male",
+             "abilities": {"str": 10, "dex": 13, "con": 14, "int": 12, "wis": 15, "cha": 8},
+             "blurb": "Gnome druid: entangling plants, fire and lightning; becomes a bear at "
+                      "5th level."},
+    "jin": {"name": "Brother Jin", "race": "human", "cls": "monk",
+            "alignment": "Lawful Neutral", "gender": "Male",
+            "abilities": {"str": 13, "dex": 14, "con": 12, "int": 10, "wis": 15, "cha": 8},
+            "blurb": "Human monk: fast, unarmored, flurries of blows and stunning fists."},
+    "elowen": {"name": "Dame Elowen", "race": "human", "cls": "paladin",
+               "alignment": "Lawful Good", "gender": "Female",
+               "abilities": {"str": 15, "dex": 10, "con": 13, "int": 8, "wis": 12, "cha": 14},
+               "blurb": "Human paladin: heavy armor, smites evil, heals with a touch."},
 }
 
 

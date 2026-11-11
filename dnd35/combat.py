@@ -11,11 +11,12 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from . import dice, rules
 from .creature import Creature
-from .data.classes import CLASSES
 from .data.items import item_data, item_name
 from .data.spells import SPELLS
 from .effects import Effect, ROUNDS_PER_MINUTE
-from .magic import (cast_spell, caster_cl, caster_dc, consume_one_shot, deal_damage,
+from .abilities import (inspire_courage, lay_on_hands, revert_shape, wholeness_of_body,
+                        wild_shape)
+from .magic import (call_bolt, cast_spell, caster_cl, caster_dc, consume_one_shot, deal_damage,
                     saving_throw, scroll_usable, touch_attack, use_scroll_check)
 from .sheet import render, short_status
 from .ui import c
@@ -38,6 +39,12 @@ class CState:
         self.spent_ammo: Dict[str, int] = {}
         self.burst_cd = 0
         self.surprise = False
+        self.deflect_used = False
+
+    @property
+    def single(self) -> bool:
+        """Surprise round or slowed: one move OR one standard action."""
+        return self.surprise or self.c.has_tag("slowed")
 
 
 def wound_word(cr: Creature) -> str:
@@ -131,8 +138,13 @@ class Combat:
         return False
 
     def threatens(self, cr: Creature) -> bool:
-        return (self.active(cr) and cr.can_act() and not self.s(cr).flat
-                and self.has_melee(cr))
+        flat_ok = not self.s(cr).flat or cr.has_feat("Combat Reflexes")
+        return self.active(cr) and cr.can_act() and flat_ok and self.has_melee(cr)
+
+    def aoo_limit(self, cr: Creature) -> int:
+        if cr.has_feat("Combat Reflexes"):
+            return 1 + max(0, cr.mod("dex"))
+        return 1
 
     def shooting_into_melee(self, shooter: Creature, target: Creature) -> bool:
         for ally in self.allies(shooter):
@@ -141,6 +153,8 @@ class Combat:
         return False
 
     def flanked(self, attacker: Creature, target: Creature) -> bool:
+        if getattr(target, "has_improved_uncanny_dodge", lambda: False)():
+            return False
         for ally in self.allies(attacker):
             if ally is attacker:
                 continue
@@ -253,7 +267,9 @@ class Combat:
         for p in self.party:
             for e in list(p.effects):
                 if e.tags & {"prone", "charging", "total_defense", "fighting_defensively",
-                             "_spiritual_weapon"} or e.name in ("Dazed", "Turned"):
+                             "_spiritual_weapon", "_sphere", "_stun_primed", "_smite",
+                             "stunned", "dazed", "entangled", "frightened"} \
+                        or e.name in ("Dazed", "Turned"):
                     p.effects.remove(e)
             st = self.s(p)
             for ammo, n in st.spent_ammo.items():
@@ -274,6 +290,7 @@ class Combat:
         x.full_used = False
         x.moved = False
         x.cleave_used = False
+        x.deflect_used = False
         # dying
         if cr.is_pc and cr.hp < 0 and not cr.dead:
             if cr.stable:
@@ -296,9 +313,11 @@ class Combat:
                 deal_damage(ui, cr, r.total, e.data.get("dtype", "acid"), self)
                 if not self.active(cr):
                     return False
-        # spiritual weapon
+        # spiritual weapon / flaming sphere
         if cr.get_effect("Spiritual Weapon"):
             self.spiritual_weapon_attack(cr)
+        if cr.get_effect("Flaming Sphere"):
+            self.flaming_sphere_attack(cr)
         can = cr.can_act()
         reason = cr.status_word()
         for msg in cr.tick(1):
@@ -327,7 +346,7 @@ class Combat:
     # ------------------------------------------------------------ attacks
     def make_attack(self, attacker: Creature, target: Creature, w: dict, bab: int,
                     situational: Sequence[Tuple[str, int, str]] = (), offhand=False,
-                    twf=False, aoo=False, power: int = 0) -> bool:
+                    twf=False, aoo=False, power: int = 0, extra_damage: int = 0) -> bool:
         """Resolve one attack roll. Returns True on hit."""
         ui = self.ui
         if w.get("natural") is False and offhand:
@@ -360,6 +379,14 @@ class Combat:
                + (f" ({sitnote})" if sitnote else "") + " -> "
                + (c("HIT", "bgreen") if hit else c("miss", "dim")))
         if not hit:
+            attacker.remove_effect("Stunning Fist")
+            return False
+        # deflect arrows
+        if ranged and not w.get("ray") and target.has_feat("Deflect Arrows") \
+                and target.uid in self.st and not self.s(target).deflect_used \
+                and not self.is_flat_footed(target) and target.conscious:
+            self.s(target).deflect_used = True
+            ui.good(f"  {target.name} snatches the missile out of the air (Deflect Arrows)!")
             return False
         # concealment
         conc = target.bonus("concealment")
@@ -371,9 +398,13 @@ class Combat:
                 else:
                     ui.out(f"  ...but the blow passes through a blurred image (d% {r} <= "
                            f"{conc}%).")
+                    attacker.remove_effect("Stunning Fist")
                     return False
         crit = False
-        threat = roll >= w.get("crit_range", 20) or roll == 20
+        crange = w.get("crit_range", 20)
+        if attacker.has_feat(f"Improved Critical ({w.get('wid')})"):
+            crange = 21 - 2 * (21 - crange)
+        threat = roll >= crange or roll == 20
         if threat and not target.crit_immune():
             cr = dice.d20()
             ctot = cr + bonus
@@ -382,13 +413,14 @@ class Combat:
                     f"{'CRITICAL HIT!' if crit else 'not confirmed'}")
         elif threat:
             ui.roll(f"(threat, but {target.name} is immune to critical hits)")
-        self.apply_hit(attacker, target, w, crit, offhand, power, flat)
+        self.apply_hit(attacker, target, w, crit, offhand, power, flat, extra_damage)
         return True
 
-    def apply_hit(self, attacker, target, w, crit, offhand, power, target_flat):
+    def apply_hit(self, attacker, target, w, crit, offhand, power, target_flat,
+                  extra_damage: int = 0):
         ui = self.ui
         dice_expr, comps = attacker.damage_profile(w, target, offhand=offhand, power=power)
-        static = sum(v for _, v, _ in comps)
+        static = sum(v for _, v, _ in comps) + extra_damage
         mult = w.get("crit_mult", 2) if crit else 1
         total = 0
         rolls = []
@@ -410,19 +442,32 @@ class Combat:
                 total += r.total
         dmg_type = "" if w.get("magic_force") else w.get("dtype", "B")
         deal_damage(ui, target, total, dmg_type, self, magic=False)
+        if attacker.remove_effect("Stunning Fist") and not target.dead:
+            if "stun" in target.immunities() or not target.is_living():
+                ui.out(f"  {target.name} can't be stunned.")
+            else:
+                lvl = getattr(attacker, "level", attacker.hit_dice())
+                dc = 10 + lvl // 2 + attacker.mod("wis")
+                if not saving_throw(ui, target, "fort", dc, ["stun"], "Stunning Fist"):
+                    target.add_effect(Effect("Stunned", 1, tags=["stunned"]))
+                    ui.warn(f"  {target.name} is STUNNED!")
         special = w.get("special") or {}
         extra = special.get("extra_damage")
         if extra and not target.dead:
             r = dice.roll(extra[0])
             deal_damage(ui, target, r.total, extra[1], self)
         if not target.dead and target.is_living():
-            if special.get("disease"):
+            if special.get("disease") and "disease" in target.immunities():
+                ui.out(f"  {target.name} is immune to disease.")
+            elif special.get("disease"):
                 dz = special["disease"]
                 if not saving_throw(ui, target, "fort", dz["dc"], ["disease"], dz["name"]):
                     if target.is_pc and not any(a["name"] == dz["name"] for a in target.afflictions):
                         target.afflictions.append(dict(dz, successes=0))
                         ui.warn(f"  {target.name} has contracted {dz['name']}!")
-            if special.get("poison") and target.ctype not in ("undead",):
+            if special.get("poison") and "poison" in target.immunities():
+                ui.out(f"  {target.name} is immune to poison.")
+            elif special.get("poison") and target.ctype not in ("undead",):
                 pz = special["poison"]
                 if not saving_throw(ui, target, "fort", pz["dc"], ["poison"], pz["name"]):
                     amt = dice.roll(pz["damage"]).total
@@ -433,6 +478,8 @@ class Combat:
                 elf = getattr(target, "race", "") == "elf"
                 if elf:
                     ui.out(f"  {target.name}'s elven blood resists the ghoul's paralysis.")
+                elif "paralysis" in target.immunities():
+                    ui.out(f"  {target.name} shrugs off the paralysis.")
                 elif not saving_throw(ui, target, "fort", special["paralysis"]["dc"],
                                       ["paralysis"], "paralysis"):
                     d = dice.roll(special["paralysis"]["duration"]).total
@@ -456,7 +503,9 @@ class Combat:
 
     def try_cleave(self, attacker, w):
         st = self.s(attacker)
-        if w.get("ranged") or st.cleave_used or not attacker.has_feat("Cleave"):
+        if w.get("ranged") or not attacker.has_feat("Cleave"):
+            return
+        if st.cleave_used and not attacker.has_feat("Great Cleave"):
             return
         foes = [f for f in self.engaged_foes(attacker) if not f.helpless()]
         if not foes:
@@ -484,12 +533,12 @@ class Combat:
         before = mover.damage
         for foe in self.engaged_foes(mover):
             st = self.s(foe)
-            if not self.threatens(foe) or st.aoo_used:
+            if not self.threatens(foe) or st.aoo_used >= self.aoo_limit(foe):
                 continue
             w = self.best_melee(foe)
             if not w:
                 continue
-            st.aoo_used = 1
+            st.aoo_used += 1
             self.ui.warn(f"{mover.name} {reason}, provoking an attack of opportunity from "
                          f"{foe.name}!")
             sit = []
@@ -524,6 +573,26 @@ class Combat:
             r = dice.roll(e.data["damage"])
             deal_damage(self.ui, tgt, r.total, "force", self)
 
+    def flaming_sphere_attack(self, caster: Creature) -> None:
+        e = caster.get_effect("Flaming Sphere")
+        if not e:
+            return
+        tgt = next((x.c for x in self.st.values() if x.c.uid == e.data["target"]
+                    and self.active(x.c)), None)
+        if tgt is None:
+            foes = [f for f in self.enemies(caster) if not f.dead]
+            if not foes:
+                return
+            tgt = foes[0]
+            e.data["target"] = tgt.uid
+        self.ui.out(f"{caster.name}'s flaming sphere rolls over {tgt.name}!")
+        if saving_throw(self.ui, tgt, "ref", e.data["dc"], e.data["stags"]):
+            self.ui.out(f"  {tgt.name} leaps aside.")
+            return
+        r = dice.roll("2d6")
+        self.ui.roll(r.detail())
+        deal_damage(self.ui, tgt, r.total, "fire", self)
+
     # ------------------------------------------------------------ PC turn
     def pc_turn(self, x: CState, surprise: bool) -> None:
         with self.ui.acting(getattr(x.c, "player", "")):
@@ -553,23 +622,60 @@ class Combat:
             def add(label, fn, *args):
                 acts.append((label, fn, args))
 
-            full_ok = x.std and x.move and not x.moved and not surprise and not disabled
+            single = x.single
+            entangled = p.has_tag("entangled")
+            full_ok = x.std and x.move and not x.moved and not single and not disabled
+            foes_all = self.enemies(p)
             if x.std:
                 add("Attack (standard action; moves into melee first if needed)", self.act_attack,
                     x, False)
             if full_ok:
                 add("Full attack (all your attacks; must already be in position)",
                     self.act_attack, x, True)
-                if not p.has_tag("fatigued"):
+                if not p.has_tag("fatigued") and not entangled:
                     add("Charge (+2 attack, -2 AC; move and attack a foe you're not engaged with)",
                         self.act_charge, x)
+                if p.has_feat("Spring Attack") and not entangled and \
+                        any(not self.is_engaged(p, f) for f in foes_all):
+                    add("Spring Attack: dart in, strike, and dart back out (full round)",
+                        self.act_spring, x)
+            if x.std and p.uses_left("smite"):
+                add(f"Smite evil ({p.uses_left('smite')} left): attack +Cha, +"
+                    f"{p.class_level('paladin')} damage vs evil", self.act_attack, x, False,
+                    "smite")
+            if x.std and p.uses_left("stunning_fist") and not p.wild_form():
+                add(f"Stunning Fist ({p.uses_left('stunning_fist')} left): unarmed attack that "
+                    f"can stun", self.act_attack, x, False, "stun")
+            if x.std and p.has_feat("Manyshot") and p.bab() >= 6 and any(
+                    w.get("bow") and p.ammo_count(w["ammo"]) >= 2 for w in p.weapon_infos()):
+                add("Manyshot: loose two arrows at once (-4 each)", self.act_manyshot, x)
+            lightning = next((e for e in p.effects if "_lightning" in e.tags), None)
+            if x.std and lightning and lightning.data.get("bolts", 0) > 0:
+                add(f"Call down lightning ({lightning.data['bolts']} bolts left)",
+                    self.act_lightning, x, lightning)
             if x.std and getattr(p, "available_casts", None) and p.available_casts() \
-                    and not p.has_tag("raging"):
+                    and p.can_cast_now():
                 add("Cast a spell", self.act_cast, x)
             if x.std and self.usable_items(p):
                 add("Use an item (potion, scroll, alchemist's fire...)", self.act_item, x)
             if x.std and p.uses_left("turn") and any(m.ctype == "undead" for m in self.enemies(p)):
                 add(f"Turn undead ({p.uses_left('turn')} left)", self.act_turn, x)
+            if x.std and p.uses_left("music") and p.skill_ranks.get("Perform", 0) >= 3 \
+                    and not p.wild_form():
+                add(f"Bardic music: inspire courage ({p.uses_left('music')} left)",
+                    self.act_music, x)
+            hurt = [a for a in self.allies(p) if a.damage > 0 and not a.dead]
+            if x.std and p.uses_left("lay_on_hands") and hurt:
+                add(f"Lay on hands ({p.uses_left('lay_on_hands')} hp of healing left)",
+                    self.act_lay_on_hands, x)
+            if x.std and p.uses_left("wholeness") and p.damage > 0:
+                add(f"Wholeness of body ({p.uses_left('wholeness')} hp left)",
+                    self.act_wholeness, x)
+            if x.std and p.uses_left("wild_shape") and not p.wild_form():
+                add(f"Wild shape: become an animal ({p.uses_left('wild_shape')} left)",
+                    self.act_wild_shape, x)
+            if x.std and p.wild_form():
+                add("Return to your normal form", self.act_revert, x)
             if p.uses_left("rage") and not p.has_tag("raging") and not p.has_tag("fatigued"):
                 add("Rage! (free action)", self.act_rage, x)
             if p.uses_left("feat_of_strength") and not p.get_effect("Feat of Strength"):
@@ -582,13 +688,14 @@ class Combat:
                 if p.has_tag("prone"):
                     add("Stand up (move action, provokes)", self.act_stand, x)
                 foes = [f for f in self.enemies(p) if not self.is_engaged(p, f)]
-                if foes:
+                if foes and not entangled:
                     add("Move into melee with a foe (move action)", self.act_approach, x)
-                if eng:
+                if eng and not entangled:
                     add("Move away from melee (move action, provokes attacks of opportunity)",
                         self.act_move_away, x)
-                add("Draw / switch weapon (move action)", self.act_draw, x)
-            if eng and full_ok:
+                if not p.wild_form():
+                    add("Draw / switch weapon (move action)", self.act_draw, x)
+            if eng and full_ok and not entangled:
                 add("Withdraw (full round: leave melee safely)", self.act_withdraw, x)
             if x.std:
                 add("Total defense (+4 dodge AC until your next turn)", self.act_total_defense, x)
@@ -597,14 +704,16 @@ class Combat:
             if not p.get_effect("Fighting defensively") and x.std:
                 add("Toggle: fight defensively this turn (-4 attack, +2 AC)", self.act_defensive, x)
             add("Look: battlefield / my character sheet / foe details", self.act_look, x)
-            if self.can_flee and full_ok:
+            if self.can_flee and full_ok and not entangled:
                 add("Flee the battle (withdraw out of the fight)", self.act_flee, x)
             add("End turn", None)
             groups = []
             for a in acts:
                 lab = a[0]
                 if lab.startswith(("Attack", "Full attack", "Charge", "Cast", "Use an item",
-                                   "Turn undead", "Rage", "Feat of Strength")):
+                                   "Turn undead", "Rage", "Feat of Strength", "Smite",
+                                   "Stunning", "Manyshot", "Spring", "Call down", "Bardic",
+                                   "Lay on", "Wholeness", "Wild shape", "Return to")):
                     groups.append("Fight")
                 elif lab.startswith(("Move", "Stand", "Draw", "Withdraw", "Flee")):
                     groups.append("Move")
@@ -620,7 +729,7 @@ class Combat:
                 return
             before = (x.std, x.move)
             fn(*args)
-            if surprise and (x.std, x.move) != before:
+            if x.single and (x.std, x.move) != before:
                 return
 
     def _pick_target(self, p, pool, prompt="Target") -> Optional[Creature]:
@@ -704,11 +813,17 @@ class Combat:
                     p.inventory.remove(e)
         return True
 
-    def act_attack(self, x: CState, full: bool) -> None:
+    def act_attack(self, x: CState, full: bool, mode: Optional[str] = None) -> None:
         p = x.c
         ui = self.ui
         foes = self.enemies(p)
-        w = self._choose_weapon(p, x=x)
+        if mode == "stun":
+            w = next((w for w in p.weapon_infos() if w.get("wid") == "unarmed strike"), None)
+            if w is None:
+                ui.bad("You need your fists free for that.")
+                return
+        else:
+            w = self._choose_weapon(p, want_ranged=False if mode == "smite" else None, x=x)
         if not w:
             return
         if full and not w.get("wielded") and not p.has_feat("Quick Draw"):
@@ -726,7 +841,7 @@ class Combat:
                     x.std = x.move = False
                     return
         else:
-            if not x.move or x.surprise:
+            if not x.move or x.single or p.has_tag("entangled"):
                 foes = [f for f in foes if self.is_engaged(p, f)] or foes
             tgt = self._pick_target(p, foes)
             if not tgt:
@@ -737,9 +852,12 @@ class Combat:
                 if full:
                     ui.bad("You must already be in melee with that foe to full attack.")
                     return
-                if x.surprise:
-                    ui.bad("In the surprise round you can move OR attack, not both. Choose "
-                           "'Move into melee' instead.")
+                if p.has_tag("entangled"):
+                    ui.bad("You're entangled and can't move to reach that foe.")
+                    return
+                if x.single:
+                    ui.bad("You get only one action this turn: move OR attack, not both. "
+                           "Choose 'Move into melee' instead.")
                     return
                 if not x.move:
                     ui.bad("No move action left to close the distance.")
@@ -756,7 +874,24 @@ class Combat:
             x.std = False
             if not self._spend_ammo(p, w):
                 return
-            self.make_attack(p, tgt, w, p.bab(), sit, power=power)
+            extra = 0
+            if mode == "smite":
+                p.spend("smite")
+                cha = max(0, p.mod("cha"))
+                if tgt.evil:
+                    ui.out(f"{p.name} calls on holy power to SMITE {tgt.name}!", ("byellow",))
+                    if cha:
+                        sit.append(("untyped", cha, "smite evil"))
+                    extra = p.class_level("paladin")
+                else:
+                    ui.out(f"{p.name} attempts to smite, but {tgt.name} is not evil: the "
+                           f"smite is wasted.")
+            elif mode == "stun":
+                p.spend("stunning_fist")
+                p.add_effect(Effect("Stunning Fist", 1, tags=["_stun_primed"], hidden=True))
+                ui.out(f"{p.name} strikes at a nerve cluster...")
+            self.make_attack(p, tgt, w, p.bab(), sit, power=power, extra_damage=extra)
+            p.remove_effect("Stunning Fist")
             if p.hp == 0 and not p.dead:
                 self._strain(p)
             return
@@ -766,6 +901,17 @@ class Combat:
 
     def full_attack(self, p, tgt, w, sit, power):
         ui = self.ui
+        if w.get("natural"):
+            for nat in p.natural_attacks():
+                if not self.active(tgt) or tgt.dead:
+                    alts = [f for f in self.engaged_foes(p)]
+                    if not alts:
+                        return
+                    tgt = alts[0]
+                self.make_attack(p, tgt, nat, p.bab(), sit, power=power)
+                if not p.conscious:
+                    return
+            return
         babs = rules.iterative_attacks(p.bab())
         offhand = None
         twf = False
@@ -784,6 +930,16 @@ class Combat:
             "Use Rapid Shot (extra arrow, all attacks -2)?", True)
         if rapid:
             sit = sit + [("untyped", -2, "Rapid Shot")]
+        monk = getattr(p, "class_level", lambda c: 0)("monk")
+        if (monk and not w["ranged"] and not twf and p.monk_unarmored()
+                and w.get("wid") in ("unarmed strike", "quarterstaff", "club", "dagger",
+                                     "handaxe", "javelin")
+                and ui.confirm("Flurry of blows (one extra attack"
+                               + (", all attacks " + str(-2 if monk <= 4 else -1)
+                                  if monk <= 8 else "") + ")?", True)):
+            extra += 1
+            if monk <= 8:
+                sit = sit + [("untyped", -2 if monk <= 4 else -1, "flurry of blows")]
         seq = [babs[0]] * (1 + extra + (1 if rapid else 0)) + babs[1:]
         main_w = dict(w, _offhand_light=offhand.get("light") if offhand else False)
         for b in seq:
@@ -799,12 +955,96 @@ class Combat:
             if not p.conscious:
                 return
         if twf and offhand:
-            if not self.active(tgt):
-                alts = [f for f in self.engaged_foes(p)]
-                if not alts:
+            off_babs = [babs[0]]
+            if p.has_feat("Improved Two-Weapon Fighting"):
+                off_babs.append(babs[0] - 5)
+            for b in off_babs:
+                if not self.active(tgt) or tgt.dead:
+                    alts = [f for f in self.engaged_foes(p)]
+                    if not alts:
+                        return
+                    tgt = alts[0]
+                self.make_attack(p, tgt, offhand, b, sit, offhand=True, twf=True, power=power)
+                if not p.conscious:
                     return
-                tgt = alts[0]
-            self.make_attack(p, tgt, offhand, babs[0], sit, offhand=True, twf=True, power=power)
+
+    def act_manyshot(self, x: CState) -> None:
+        p = x.c
+        ui = self.ui
+        bows = [w for w in p.weapon_infos() if w.get("bow") and p.ammo_count(w["ammo"]) >= 2]
+        w = bows[0]
+        tgt = self._pick_target(p, self.enemies(p), "Manyshot at whom?")
+        if not tgt or not self._ready_weapon(x, w):
+            return
+        x.std = False
+        if self.engaged_foes(p):
+            self.provoke(p, "shoots while in melee")
+            if not p.conscious:
+                return
+        ui.out(f"{p.name} nocks two arrows at once and lets fly!")
+        for _ in range(2):
+            if tgt.dead or not self._spend_ammo(p, w):
+                return
+            self.make_attack(p, tgt, w, p.bab(), [("untyped", -4, "Manyshot")])
+
+    def act_spring(self, x: CState) -> None:
+        p = x.c
+        ui = self.ui
+        foes = [f for f in self.enemies(p) if not self.is_engaged(p, f)]
+        tgt = self._pick_target(p, foes, "Spring at whom?")
+        if not tgt:
+            return
+        w = self.best_melee(p)
+        if not w or w["ranged"]:
+            ui.bad("You need a melee weapon in hand.")
+            return
+        x.std = x.move = False
+        x.moved = True
+        if self.engaged_foes(p):
+            self.provoke(p, "darts away", movement=True)
+            if not p.conscious:
+                return
+            self.disengage_all(p)
+        ui.out(f"{p.name} darts in at {tgt.name}...")
+        self.engage(p, tgt)
+        self.make_attack(p, tgt, w, p.bab(), power=p.power_attack)
+        if p.conscious:
+            self.disengage_all(p)
+            ui.out("...and springs back out of reach.")
+
+    def act_lightning(self, x: CState, e) -> None:
+        p = x.c
+        tgt = self._pick_target(p, self.enemies(p), "Call lightning on whom?")
+        if not tgt:
+            return
+        x.std = False
+        call_bolt(self.ui, p, e, tgt, self)
+
+    def act_music(self, x: CState) -> None:
+        x.std = False
+        inspire_courage(self.ui, x.c, self.allies(x.c))
+
+    def act_lay_on_hands(self, x: CState) -> None:
+        p = x.c
+        hurt = [a for a in self.allies(p) if a.damage > 0 and not a.dead]
+        tgt = hurt[0] if len(hurt) == 1 else hurt[self.ui.choose(
+            "Lay hands on whom?", [f"{a.name} ({a.hp}/{a.max_hp()})" for a in hurt])]
+        if tgt is not p and not self.is_engaged(p, tgt) and self.engaged_foes(p):
+            pass  # adjacency is abstract: allies are always within reach
+        x.std = False
+        lay_on_hands(self.ui, p, tgt)
+
+    def act_wholeness(self, x: CState) -> None:
+        x.std = False
+        wholeness_of_body(self.ui, x.c)
+
+    def act_wild_shape(self, x: CState) -> None:
+        if wild_shape(self.ui, x.c):
+            x.std = False
+
+    def act_revert(self, x: CState) -> None:
+        x.std = False
+        revert_shape(self.ui, x.c)
 
     def _strain(self, p):
         p.damage += 1
@@ -814,6 +1054,9 @@ class Combat:
 
     def act_charge(self, x: CState) -> None:  # noqa: C901
         p = x.c
+        if p.has_tag("entangled"):
+            self.ui.bad("You're entangled!")
+            return
         foes = [f for f in self.enemies(p) if not self.is_engaged(p, f)]
         tgt = self._pick_target(p, foes, "Charge whom?")
         if not tgt:
@@ -938,7 +1181,7 @@ class Combat:
         ui = self.ui
         x.std = False
         p.spend("turn")
-        lvl = p.class_level("cleric")
+        lvl = p.turn_level()
         if "Sun" in getattr(p, "domains", []):
             pass
         r = dice.d20()
@@ -1002,11 +1245,16 @@ class Combat:
             ui.out(f"  Condition: {wound_word(f)}; {f.status_word()}")
             skill = {"undead": "Knowledge (religion)", "animal": "Knowledge (nature)",
                      "humanoid": "Knowledge (local)"}.get(f.ctype, "Knowledge (arcana)")
-            if p.skill_ranks.get(skill, 0) > 0:
+            bard = p.class_level("bard")
+            if p.skill_ranks.get(skill, 0) > 0 or bard:
                 r = dice.d20()
-                tot = r + p.skill_total(skill)
+                tot = r + p.skill_total(skill) if p.skill_ranks.get(skill, 0) > 0 else 0
+                label = skill
+                if bard and r + bard + p.mod("int") > tot:
+                    tot = r + bard + p.mod("int")
+                    label = "Bardic knowledge"
                 dc = 10 + f.hit_dice()
-                ui.roll(f"{skill}: d20={r} -> {tot} vs DC {dc}")
+                ui.roll(f"{label}: d20={r} -> {tot} vs DC {dc}")
                 if tot >= dc:
                     ui.good("  " + f.statline())
                     if f.dr():
@@ -1022,7 +1270,7 @@ class Combat:
 
     # ------------------------------------------------------------ items
     def usable_items(self, p) -> List[dict]:
-        if not p.is_pc:
+        if not p.is_pc or p.wild_form():
             return []
         out = []
         for e in p.inventory:
@@ -1142,7 +1390,8 @@ class Combat:
     def act_cast(self, x: CState) -> None:
         p = x.c
         ui = self.ui
-        casts = [c_ for c_ in p.available_casts() if not SPELLS[c_["spell"]]["utility"]]
+        casts = [c_ for c_ in p.available_casts() if not SPELLS[c_["spell"]]["utility"]
+                 and SPELLS[c_["spell"]]["combat"]]
         if not casts:
             ui.out("No combat spells available.")
             return
@@ -1163,7 +1412,8 @@ class Combat:
         lvl = cast["level"]
         p.expend(cast)
         # touch spells on enemies require being in melee
-        if spell in ("Inflict Light Wounds", "Inflict Moderate Wounds") or (
+        if spell in ("Inflict Light Wounds", "Inflict Moderate Wounds", "Bestow Curse",
+                     "Poison", "Slay Living") or (
                 spell.startswith("Cure") and targets and targets[0].ctype == "undead"):
             t = targets[0]
             if not self.is_engaged(p, t):
@@ -1197,7 +1447,7 @@ class Combat:
                     if tot < dc:
                         ui.bad("Concentration broken: the spell is lost!")
                         return
-        asf = p.arcane_spell_failure() if CLASSES[cast["class"]].get("caster") == "arcane" else 0
+        asf = p.arcane_spell_failure(cast["class"])
         if asf:
             r = dice.percent()
             if r <= asf:
@@ -1217,9 +1467,10 @@ class Combat:
         if not pcs:
             return
         block = getattr(m, "block", {})
-        # morale
-        if block.get("morale") and m.hp <= m.max_hp() / 3 and dice.die(2) == 1:
-            ui.warn(f"{m.name} panics and flees!")
+        # morale / magical fear
+        frightened = m.has_tag("frightened")
+        if frightened or (block.get("morale") and m.hp <= m.max_hp() / 3 and dice.die(2) == 1):
+            ui.warn(f"{m.name} {'flees in terror' if frightened else 'panics and flees'}!")
             self.provoke(m, "flees", movement=True)
             if not m.dead:
                 self.disengage_all(m)
@@ -1246,7 +1497,23 @@ class Combat:
         engaged = [p for p in self.engaged_foes(m) if p in targets]
         melee = [w for w in m.melee_attacks()]
         ranged = [w for w in m.ranged_attacks()]
-        single = block.get("single_actions")
+        single = block.get("single_actions") or m.has_tag("slowed")
+        if m.has_tag("prone"):
+            self.provoke(m, "struggles to its feet")
+            m.remove_effect("Prone")
+            if not self.active(m) or not m.conscious:
+                return
+            ui.out(f"{m.name} gets back up.")
+            single = True
+            surprise = True  # only a single attack left
+        if m.has_tag("entangled") and not engaged:
+            if ranged:
+                tgt = min(targets, key=lambda p: (p.ac(), p.hp))
+                ui.out(f"{m.name}, tangled in the plants, attacks from where it stands.")
+                self.make_attack(m, tgt, ranged[0], m.bab())
+            else:
+                ui.out(f"{m.name} strains against the grasping plants.")
+            return
 
         if engaged and melee:
             tgt = min(engaged, key=lambda p: (p.hp, p.ac()))

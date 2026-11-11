@@ -153,24 +153,38 @@ Command-line options:
 - 7 races: human, dwarf, elf, gnome, half-elf, half-orc, halfling, with all
   their combat-relevant traits (stonecunning, sleep immunity, +1 vs goblinoids,
   size modifiers, and so on).
-- 7 classes, levels 1 to 5: barbarian, cleric, fighter, ranger, rogue, sorcerer,
-  wizard. **Multiclassing** is supported.
+- All 11 core classes, levels 1 to 10: barbarian, bard, cleric, druid, fighter,
+  monk, paladin, ranger, rogue, sorcerer, wizard. **Multiclassing** is supported,
+  and class alignment rules apply (paladins are lawful good, monks lawful, and so
+  on).
 - Ability scores by 4d6-drop-lowest (with the PHB reroll rule), the elite array,
   or 25-point buy.
 - All 44 skills, with class/cross-class ranks, synergies, armor check penalties,
   and trained-only skills.
-- About 50 feats with real mechanics (Power Attack, Cleave, Weapon Finesse,
-  Point Blank/Precise/Rapid Shot, Two-Weapon Fighting, Dodge/Mobility, Combat
-  Casting, Spell Focus, Extra Turning...), each with its prerequisites.
-- Class features: rage, uncanny dodge, trap sense, sneak attack, trapfinding,
-  evasion, favored enemy, combat styles, wild empathy, turn undead, domains,
-  spontaneous cure casting, a spellbook, and spells known.
-- 50 spells (cantrips through 3rd level) with real effects: *magic missile*,
-  *sleep*, *color spray*, *bless*, *hold person*, *spiritual weapon*, *fireball*,
-  *haste*, and more. Casters can be prepared or spontaneous, bonus spells come
-  from high ability scores, and arcane spell failure applies.
-- Weapons, armor, shields, masterwork and +1 gear, potions, scrolls (with Use
-  Magic Device), alchemist's fire, holy water, encumbrance, and ammunition (you
+- About 70 feats with real mechanics (Power Attack, Cleave/Great Cleave, Weapon
+  Finesse, Point Blank/Precise/Rapid Shot, Manyshot, Two-Weapon Fighting and
+  Improved TWF, Dodge/Mobility/Spring Attack, Improved Critical, Combat Reflexes,
+  Stunning Fist, Deflect Arrows, Natural Spell, Extra Smiting...), each with its
+  prerequisites.
+- Class features: rage, damage reduction, uncanny dodge (and improved), trap
+  sense, sneak attack, trapfinding, evasion and improved evasion, favored enemy,
+  combat styles, wild empathy, turn undead, domains, spontaneous cure casting,
+  a spellbook, and spells known. Plus:
+  - **Bard:** inspire courage, bardic knowledge, casting in light armor.
+  - **Druid:** nature sense, wild shape at 5th level (wolf, black bear, leopard;
+    brown bear and dire wolf at 8th), no metal armor, venom immunity.
+  - **Monk:** Wisdom to AC, flurry of blows, monk unarmed damage, fast movement,
+    stunning fist, still mind, purity of body, wholeness of body.
+  - **Paladin:** smite evil, divine grace, lay on hands, aura of courage, divine
+    health, turn undead, and paladin spells.
+- About 100 spells, cantrips through 5th level, with real effects: *magic
+  missile*, *sleep*, *bless*, *hold person*, *fireball*, *haste*, *entangle*,
+  *barkskin*, *call lightning*, *slow*, *stoneskin*, *flame strike*, *cone of
+  cold*, *raise dead*, and more. Casters can be prepared or spontaneous, bonus
+  spells come from high ability scores, and arcane spell failure applies.
+- Weapons, armor, shields, masterwork, +1 and +2 gear, rings, cloaks, amulets,
+  bracers, belts, gauntlets and headbands, potions, scrolls (with Use Magic
+  Device), alchemist's fire, holy water, encumbrance, and ammunition (you
   recover half of it after a fight).
 - **Detailed character sheets** that break down every number: AC by source,
   each save, every attack line with iterative attacks, every skill, spells per
@@ -226,6 +240,7 @@ dnd35/
   levelup.py creation.py   character creation, leveling, pregens, recommended builds
   sheet.py                 character sheet rendering
   magic.py combat.py       spells and the combat engine
+  abilities.py             lay on hands, wild shape, wholeness of body, bardic music
   shop.py                  shopping & inventory
   adventure/engine.py      the GM: rooms, checks, traps, encounters, rest, town
   adventure/ember_barrow.py   the adventure itself (pure data + a few scripts)
@@ -262,7 +277,10 @@ python3 -m unittest discover -s tests
 - There is no battle grid. Positioning is abstracted as being "in melee with" a
   foe, which still drives attacks of opportunity, flanking, charging, full
   attacks, and firing into melee.
-- Levels are capped at 5. Spells go up to 3rd level.
+- Levels are capped at 10, and spells go up to 5th level. The adventures so far
+  are written for levels 1 to 5.
+- *Raise dead* costs the hero half a level of experience instead of a whole
+  level (or 2 Constitution at 1st level). The temple can cast it for 5,450 gp.
 - Familiars and the ranger's animal companion are flavor only. Grapple, trip
   (other than wolves), bull rush, and metamagic aren't implemented.
 - Monsters die at 0 HP. PCs use the full dying rules.

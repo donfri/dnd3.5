@@ -58,9 +58,12 @@ class Monster(Creature):
         return self.block["hd"]
 
     def max_hp(self):
-        con_bonus = 0
-        # Con boosts (bear's endurance on a monster) are ignored for simplicity
-        return self._max_hp + con_bonus
+        base = self.abilities.get("con")
+        if base is None:
+            return self._max_hp
+        # Con changes (poison, bear's endurance) shift hit points per HD
+        delta = rules.ability_mod(self.ability("con")) - rules.ability_mod(base)
+        return max(1, self._max_hp + delta * self.block["hd"])
 
     def feat_list(self):
         return self.feats
