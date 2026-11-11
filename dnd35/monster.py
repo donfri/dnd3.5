@@ -42,6 +42,7 @@ class Monster(Creature):
         self._max_hp = max(1, hp)
         self.special_cooldowns = {}
         self.fled = False
+        self.unhealable = 0   # fire/acid damage a regenerating monster can't heal
 
     # hooks
     def base_ability_score(self, ab):
@@ -67,6 +68,37 @@ class Monster(Creature):
 
     def feat_list(self):
         return self.feats
+
+    # regeneration (trolls): only fire/acid damage can kill
+    def take_damage(self, amount, dtype="", magic=False):
+        regen = self.block.get("regeneration")
+        dealt, note = super().take_damage(amount, dtype, magic)
+        if regen and dealt and dtype in regen["bypass"]:
+            self.unhealable += dealt
+        if regen:
+            self.check_death()
+        return dealt, note
+
+    def check_death(self):
+        regen = self.block.get("regeneration")
+        if not regen:
+            return super().check_death()
+        if self.unhealable >= self.max_hp():
+            self.dead = True
+        elif self.hp <= 0 and not self.dead:
+            if not self.get_effect("Regenerating"):
+                from .effects import Effect
+                self.add_effect(Effect("Regenerating", None, tags=["unconscious"]))
+
+    def regenerate(self) -> int:
+        regen = self.block.get("regeneration")
+        if not regen or self.dead:
+            return 0
+        amt = min(regen["amount"], max(0, self.damage - self.unhealable))
+        self.damage -= amt
+        if self.hp > 0:
+            self.remove_effect("Regenerating")
+        return amt
 
     def static_bonuses(self, stat):
         out = []

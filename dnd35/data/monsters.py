@@ -319,6 +319,111 @@ MONSTERS.update({
     },
 })
 
+# ---------------------------------------------------------------- the Thornwood Fen (6-8)
+MONSTERS.update({
+    "troll": {
+        # MM: Large, AC 16, claw +9 (1d6+6) x2, bite +4 (1d6+3), rend 2d6+9, regen 5
+        "name": "Troll", "type": "giant", "size": "large",
+        "hd": 6, "hit_die": 8, "bab": 4, "base_saves": (5, 2, 2), "cr": 5,
+        "abilities": {"str": 23, "dex": 14, "con": 23, "int": 6, "wis": 9, "cha": 6},
+        "natural": 5, "speed": 30,
+        "natural_attacks": [{"name": "claw", "damage": "1d6", "dtype": "S", "primary": True},
+                            {"name": "claw", "damage": "1d6", "dtype": "S", "primary": True},
+                            {"name": "bite", "damage": "1d6", "dtype": "P",
+                             "primary": False}],
+        "rend": "2d6+9", "regeneration": {"amount": 5, "bypass": ["fire", "acid"]},
+        "skills": {"Listen": 5, "Spot": 6}, "feats": ["Alertness", "Iron Will", "Track"],
+        "vision": "darkvision 90 ft., low-light, scent", "evil": True,
+        "desc": "A gangly green giant with rubbery skin and long clawed arms. Its wounds "
+                "close as you watch. Only fire or acid stops it for good.",
+    },
+    "wight": {
+        # MM: AC 15, slam +3 (1d4+1 plus energy drain)
+        "name": "Wight", "type": "undead", "size": "medium",
+        "hd": 4, "hit_die": 12, "bab": 2, "base_saves": (1, 1, 4), "cr": 3,
+        "abilities": {"str": 12, "dex": 12, "con": None, "int": 11, "wis": 13, "cha": 15},
+        "natural": 4, "speed": 30,
+        "natural_attacks": [{"name": "slam", "damage": "1d4", "dtype": "B", "primary": True,
+                             "drain": {"dc": 14}}],
+        "skills": {"Hide": 8, "Listen": 7, "Move Silently": 16, "Spot": 7},
+        "feats": ["Alertness", "Blind-Fight"], "vision": "darkvision 60 ft.", "evil": True,
+        "desc": "A grave-gaunt corpse with burning eyes. Its touch drains the life from you.",
+    },
+    "gargoyle": {
+        # MM: AC 16, claw +6 (1d4+2) x2, bite +4 (1d6+1), gore +4 (1d6+1), DR 10/magic
+        "name": "Gargoyle", "type": "monstrous humanoid", "size": "medium",
+        "hd": 4, "hit_die": 8, "bab": 4, "base_saves": (5, 6, 4), "cr": 4,
+        "abilities": {"str": 15, "dex": 14, "con": 18, "int": 6, "wis": 11, "cha": 7},
+        "natural": 4, "speed": 40,
+        "natural_attacks": [{"name": "claw", "damage": "1d4", "dtype": "S", "primary": True},
+                            {"name": "claw", "damage": "1d4", "dtype": "S", "primary": True},
+                            {"name": "bite", "damage": "1d6", "dtype": "P", "primary": False},
+                            {"name": "gore", "damage": "1d6", "dtype": "P",
+                             "primary": False}],
+        "dr": [(10, "magic")], "skills": {"Hide": 7, "Listen": 4, "Spot": 4},
+        "feats": ["Multiattack", "Toughness"], "vision": "darkvision 60 ft.", "evil": True,
+        "desc": "A winged stone horror that was a statue a moment ago. Ordinary weapons "
+                "glance off it; magic ones bite.",
+    },
+    "owlbear": {
+        # MM: Large, AC 15, claw +7 (1d6+5) x2, bite +2 (1d8+2), improved grab
+        "name": "Owlbear", "type": "magical beast", "size": "large",
+        "hd": 5, "hit_die": 10, "bab": 5, "base_saves": (9, 5, 2), "cr": 4,
+        "abilities": {"str": 21, "dex": 12, "con": 21, "int": 2, "wis": 12, "cha": 10},
+        "natural": 5, "speed": 30,
+        "natural_attacks": [{"name": "claw", "damage": "1d6", "dtype": "S", "primary": True,
+                             "grab": True},
+                            {"name": "claw", "damage": "1d6", "dtype": "S", "primary": True},
+                            {"name": "bite", "damage": "1d8", "dtype": "P",
+                             "primary": False}],
+        "skills": {"Listen": 8, "Spot": 8}, "feats": ["Alertness", "Toughness", "Track"],
+        "vision": "darkvision 60 ft., low-light, scent", "savage": True,
+        "desc": "A furious bear-sized beast with an owl's hooked beak and huge round eyes. "
+                "If it gets hold of you, it squeezes.",
+    },
+    "dire boar": {
+        # MM: Large, AC 15, gore +12 (1d8+12)
+        "name": "Dire Boar", "type": "animal", "size": "large",
+        "hd": 7, "hit_die": 8, "bab": 5, "base_saves": (8, 5, 6), "cr": 4,
+        "abilities": {"str": 27, "dex": 10, "con": 17, "int": 2, "wis": 13, "cha": 8},
+        "natural": 6, "speed": 40,
+        "natural_attacks": [{"name": "gore", "damage": "1d8", "dtype": "S", "primary": True,
+                             "str_mult": 1.5}],
+        "skills": {"Listen": 8, "Spot": 8}, "feats": ["Alertness", "Endurance", "Iron Will"],
+        "vision": "low-light, scent",
+        "desc": "A boar the size of an ox, black-bristled, with tusks like scythes.",
+    },
+    "lizardfolk": {
+        # MM: AC 15 (17 with shield), club +2 (1d6+1), javelin +1 (1d6+1)
+        "name": "Lizardfolk", "type": "humanoid", "subtypes": ["reptilian"],
+        "size": "medium", "hd": 2, "hit_die": 8, "bab": 1, "base_saves": (1, 3, 0),
+        "cr": 1,
+        "abilities": {"str": 13, "dex": 10, "con": 13, "int": 9, "wis": 10, "cha": 10},
+        "natural": 5, "shield": "heavy wooden shield", "weapons": ["club", "javelin"],
+        "speed": 30, "skills": {"Balance": 4, "Jump": 5, "Swim": 2},
+        "feats": ["Multiattack"], "vision": "-",
+        "desc": "A scaled marsh-warrior with a hide shield and a heavy club, its eyes dull "
+                "and glassy, as if it's dreaming.",
+    },
+    "green hag": {
+        # MM: AC 22, claw +13 (1d4+4) x2, weakness (2d4 Str, Fort DC 16)
+        "name": "Green Hag", "type": "monstrous humanoid", "size": "medium",
+        "hd": 9, "hit_die": 8, "bab": 9, "base_saves": (4, 7, 7), "cr": 5,
+        "abilities": {"str": 19, "dex": 12, "con": 12, "int": 13, "wis": 13, "cha": 14},
+        "natural": 11, "speed": 30,
+        "natural_attacks": [{"name": "claw", "damage": "1d4", "dtype": "S", "primary": True,
+                             "ability_damage": {"ability": "str", "damage": "2d4", "dc": 16,
+                                                "name": "weakness"}},
+                            {"name": "claw", "damage": "1d4", "dtype": "S",
+                             "primary": True}],
+        "skills": {"Concentration": 7, "Hide": 9, "Listen": 11, "Spot": 11, "Swim": 12},
+        "feats": ["Alertness", "Blind-Fight", "Combat Casting", "Great Fortitude"],
+        "vision": "darkvision 90 ft.", "evil": True,
+        "desc": "A stooped crone with mossy skin, lank green hair, and black iron nails. Her "
+                "touch withers strength away.",
+    },
+})
+
 # Animal companions: key -> (minimum effective druid level, levels subtracted)
 COMPANIONS = {
     "wolf": (1, 0), "riding dog": (1, 0), "eagle": (1, 0),

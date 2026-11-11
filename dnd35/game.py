@@ -15,11 +15,13 @@ from .ui import UI, Color, QuitGame, c
 
 BANNER = r"""
   ____        ____     _____ ____
- |  _ \ _ __ |  _ \   |___ /| ___|    T E X T   A D V E N T U R E S
+ |  _ \ _ __ |  _ \   |___ /| ___|
  | | | | '_ \| | | |    |_ \|___ \
- | |_| | | | | |_| |   ___) |___) |   a D&D 3.5 rules engine with a
- |____/|_| |_|____/   |____(_)____/   computer Game Master
-"""
+ | |_| | | | | |_| |   ___) |___) |
+ |____/|_| |_|____/   |____(_)____/
+
+  T E X T   A D V E N T U R E S
+  D&D 3.5 rules, computer Game Master"""
 
 HELP_TEXT = """
 HOW TO PLAY. Everything is menu-driven: type the number of an option and press

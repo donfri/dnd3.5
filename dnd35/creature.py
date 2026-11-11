@@ -569,6 +569,8 @@ def _dr_bypassed(bypass: str, dtype: str) -> bool:
     ordinary attacks here never have."""
     if bypass in ("", "-"):
         return False
+    if bypass == "magic":
+        return "*" in dtype
     if bypass.isupper():
         return any(ch in dtype for ch in bypass)
     return False

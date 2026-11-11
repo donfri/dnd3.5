@@ -58,7 +58,8 @@ def deal_damage(ui, target: Creature, amount: int, dtype: str, combat=None,
                 source: str = "", magic: bool = True) -> int:
     dealt, note = target.take_damage(amount, dtype, magic=magic)
     extra = f" ({note})" if note else ""
-    ui.out(f"  {target.name} takes {dealt} {dtype} damage{extra}." if dealt else
+    shown = dtype.replace("*", "")
+    ui.out(f"  {target.name} takes {dealt} {shown} damage{extra}." if dealt else
            f"  {target.name} takes no damage{extra}.")
     if combat is not None:
         combat.after_damage(target)
@@ -143,6 +144,24 @@ def _hold(ui, t, dc, stags, name, buff, ok: bool, why: str) -> None:
         ui.out(f"  {t.name} moves freely; the spell finds no grip.")
     elif not saving_throw(ui, t, "will", dc, stags):
         buff(t, name, tags=["paralyzed"], data={"save_each_round": ("will", dc, stags)})
+
+
+def drain_level(ui, target, dc: int) -> None:
+    """Energy drain: one more negative level (-1 attacks/saves/checks, -5 hp)."""
+    if "negative" in target.immunities() or not target.is_living():
+        ui.out(f"  {target.name} resists the draining touch.")
+        return
+    old = target.get_effect("Negative levels")
+    n = (old.data.get("n", 0) if old else 0) + 1
+    target.add_effect(Effect("Negative levels", None,
+                             [("attack", "untyped", -n), ("saves", "untyped", -n),
+                              ("skills", "untyped", -n), ("max_hp", "untyped", -5 * n)],
+                             data={"n": n, "dc": dc}))
+    ui.bad(f"  {target.name}'s life is drained! ({n} negative level{'s' if n > 1 else ''})")
+    if target.is_pc and n >= target.level:
+        target.dead = True
+        ui.bad(f"  {target.name} is drained of all life and DIES!")
+    target.check_death()
 
 
 def raise_dead(ui, target) -> None:
@@ -438,6 +457,8 @@ def cast_spell(ui, caster: Creature, spell_name: str, targets: List[Creature], c
             if t0.ability_damage:
                 ui.good(f"  {t0.name}'s ability damage is fully restored.")
             t0.ability_damage = {}
+            if t0.remove_effect("Negative levels"):
+                ui.good(f"  {t0.name}'s drained life force returns.")
         elif t0.ability_damage:
             ab = max(t0.ability_damage, key=lambda a: t0.ability_damage[a])
             amt = dice.roll("1d4").total

@@ -106,7 +106,9 @@ class TestAdventureData(unittest.TestCase):
                     chk = f.get("check")
                     if chk and not chk["skill"].startswith("ability:") and \
                             chk["skill"] != "Wild Empathy":
-                        self.assertIn(chk["skill"], SKILLS, where)
+                        sk = chk["skill"]
+                        for one in (sk[5:].split("|") if sk.startswith("best:") else [sk]):
+                            self.assertIn(one, SKILLS, where)
                     for key in ("effects", "success", "failure", "fail_by_5"):
                         check_effects(f.get(key, []), f"{where}:{f.get('id')}")
                 for t in room.get("traps", {}).values():

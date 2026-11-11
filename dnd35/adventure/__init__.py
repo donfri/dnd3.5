@@ -2,9 +2,9 @@
 
 To add one: copy an existing module, give it a unique ID, and list it below.
 """
-from . import drowned_lantern, ember_barrow, greyfang_pass
+from . import drowned_lantern, ember_barrow, greyfang_pass, thornwood_fen
 
-ORDER = [ember_barrow, drowned_lantern, greyfang_pass]
+ORDER = [ember_barrow, drowned_lantern, greyfang_pass, thornwood_fen]
 ADVENTURES = {m.ID: m for m in ORDER}
 
 

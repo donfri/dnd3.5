@@ -134,7 +134,12 @@ class Character(Creature):
             total += 3 * self.feat_list().count("Toughness")
         if self.familiar and self.familiar.get("kind") == "toad":
             total += 3
+        total += self.bonus("max_hp")
         return max(1, total)
+
+    def negative_levels(self) -> int:
+        e = self.get_effect("Negative levels")
+        return e.data.get("n", 0) if e else 0
 
     def companion_creature(self):
         return _comp.companion_creature(self)

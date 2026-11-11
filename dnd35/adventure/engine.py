@@ -151,6 +151,10 @@ class GM:
 
     # ------------------------------------------------------------ checks
     def check_bonus(self, ch: Character, skill: str) -> Optional[int]:
+        if skill.startswith("best:"):
+            vals = [self.check_bonus(ch, sk) for sk in skill[5:].split("|")]
+            vals = [v for v in vals if v is not None]
+            return max(vals) if vals else None
         if skill.startswith("ability:"):
             return ch.mod(skill.split(":")[1])
         if skill == "Wild Empathy":
@@ -165,6 +169,8 @@ class GM:
         return ch.skill_total(skill)
 
     def skill_label(self, skill: str) -> str:
+        if skill.startswith("best:"):
+            return " or ".join(skill[5:].split("|"))
         if skill.startswith("ability:"):
             return rules.ABILITY_NAMES[skill.split(":")[1]] + " check"
         return skill
@@ -413,7 +419,7 @@ class GM:
             success = all(oks) if need == "all" else any(oks)
             actor = next((h for h, r in results if (r if success else not r)), heroes[0])
         else:
-            actor = self.pick_hero(chk.get("prompt", f"Who attempts it? ({skill} DC "
+            actor = self.pick_hero(chk.get("prompt", f"Who attempts it? ({self.skill_label(skill)} DC "
                                    f"{dc if chk.get('show_dc', True) else '?'})"), skill, heroes)
             if actor is None:
                 return
@@ -898,6 +904,7 @@ class GM:
             ui.out(f"{p.name} recovers {healed} hp ({p.hp}/{p.max_hp()})."
                    + ("  (A soft bed doubles natural healing.)" if cost_sp else ""))
             self.disease_check(p)
+            self.drain_check(p)
             p.reset_spells()
             rest_companion(ui, p)
         for p in gs.living():
@@ -954,6 +961,8 @@ class GM:
                     "Healing: cure moderate wounds (60 gp)",
                     "Lesser restoration: heal all ability damage on one hero (60 gp)",
                     "Remove disease (150 gp)"]
+            if any(p.get_effect("Negative levels") for p in gs.living()):
+                opts.append("Restoration: remove life drain from one hero (380 gp)")
             dead = [p for p in gs.party if p.dead]
             if dead:
                 opts.append("Raise dead: return a fallen hero to life (5,450 gp)")
@@ -991,6 +1000,15 @@ class GM:
                     ui.good(f"{who.name} is cured of disease.")
                 elif who:
                     ui.out(f"{who.name} isn't sick.")
+            elif opts[i].startswith("Restoration"):
+                drained = [p for p in gs.living() if p.get_effect("Negative levels")]
+                who = drained[0] if len(drained) == 1 else self.pick_hero("Who?", heroes=drained)
+                payer = who and self._payer(380)
+                if payer:
+                    payer.cp -= 380 * 100
+                    who.remove_effect("Negative levels")
+                    who.ability_damage = {}
+                    ui.good(f"Warm light floods {who.name}; the cold of the grave is gone.")
             elif opts[i].startswith("Raise dead"):
                 dead = [p for p in gs.party if p.dead]
                 who = dead[0] if len(dead) == 1 else self.pick_hero("Raise whom?", heroes=dead)
@@ -1003,6 +1021,27 @@ class GM:
                     raise_dead(ui, who)
             else:
                 return
+
+    def drain_check(self, p) -> None:
+        """Each day a drained hero tries to shake off each negative level (Fort save)."""
+        e = p.get_effect("Negative levels")
+        if not e:
+            return
+        n, dc = e.data.get("n", 0), e.data.get("dc", 14)
+        kept = 0
+        for _ in range(n):
+            if not saving_throw(self.ui, p, "fort", dc, [], "negative level"):
+                kept += 1
+        p.remove_effect("Negative levels")
+        if kept:
+            p.add_effect(Effect("Negative levels", None,
+                                [("attack", "untyped", -kept), ("saves", "untyped", -kept),
+                                 ("skills", "untyped", -kept), ("max_hp", "untyped", -5 * kept)],
+                                data={"n": kept, "dc": dc}))
+            self.ui.warn(f"{p.name} still carries {kept} negative level(s). Rest again, or "
+                         f"have a temple cast restoration.")
+        else:
+            self.ui.good(f"{p.name} shakes off the life drain.")
 
     def _payer(self, gp: int) -> Optional[Character]:
         rich = [p for p in self.gs.living() if p.cp >= gp * 100]

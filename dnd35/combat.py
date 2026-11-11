@@ -17,7 +17,7 @@ from .effects import Effect, ROUNDS_PER_MINUTE
 from .abilities import (inspire_courage, lay_on_hands, revert_shape, wholeness_of_body,
                         wild_shape)
 from .magic import (call_bolt, cast_spell, caster_cl, caster_dc, consume_one_shot, deal_damage,
-                    saving_throw, scroll_usable, touch_attack, use_scroll_check)
+                    drain_level, saving_throw, scroll_usable, touch_attack, use_scroll_check)
 from .sheet import render, short_status
 from .ui import c
 
@@ -281,7 +281,11 @@ class Combat:
         if result == "victory":
             helpless = [m for m in self.monsters if self.active(m) and m.helpless()]
             for m in helpless:
-                ui.out(f"{m.name} lies helpless; the heroes finish it off.")
+                if m.get_effect("Regenerating"):
+                    ui.out(f"{m.name} twitches, already healing. The heroes hack it apart "
+                           f"and burn the pieces with torch and oil.")
+                else:
+                    ui.out(f"{m.name} lies helpless; the heroes finish it off.")
                 m.dead = True
             ui.header("VICTORY!")
         elif result == "fled":
@@ -353,6 +357,14 @@ class Combat:
                 deal_damage(ui, cr, r.total, e.data.get("dtype", "acid"), self)
                 if not self.active(cr):
                     return False
+        # regeneration
+        if getattr(cr, "regenerate", None):
+            was_down = cr.get_effect("Regenerating") is not None
+            healed = cr.regenerate()
+            if healed:
+                ui.warn(f"{cr.name}'s wounds knit closed (regenerates {healed})."
+                        + (" It lurches back to its feet!" if was_down
+                           and not cr.get_effect("Regenerating") else ""))
         # spiritual weapon / flaming sphere
         if cr.get_effect("Spiritual Weapon"):
             self.spiritual_weapon_attack(cr)
@@ -488,6 +500,10 @@ class Combat:
                 ui.roll(f"Sneak attack! {r.detail()}")
                 total += r.total
         dmg_type = "" if w.get("magic_force") else w.get("dtype", "B")
+        if dmg_type and (attacker.weapon_enhancement(w) > 0 or (
+                w.get("wid") == "unarmed strike" and
+                getattr(attacker, "class_level", lambda c: 0)("monk") >= 4)):
+            dmg_type += "*"   # magic weapon: overcomes DR x/magic
         deal_damage(ui, target, total, dmg_type, self, magic=False)
         if attacker.remove_effect("Stunning Fist") and not target.dead:
             if "stun" in target.immunities() or not target.is_living():
@@ -521,6 +537,27 @@ class Combat:
                     ab = pz["ability"]
                     target.ability_damage[ab] = target.ability_damage.get(ab, 0) + amt
                     ui.bad(f"  {target.name} takes {amt} {ab.upper()} damage from {pz['name']}!")
+            ad = special.get("ability_damage")
+            if ad and target.conscious:
+                if not saving_throw(ui, target, "fort", ad["dc"], [], ad["name"]):
+                    amt = dice.roll(ad["damage"]).total
+                    target.ability_damage[ad["ability"]] = \
+                        target.ability_damage.get(ad["ability"], 0) + amt
+                    ui.bad(f"  {target.name} takes {amt} {ad['ability'].upper()} damage from "
+                           f"{ad['name']}!")
+            if special.get("drain") and not target.dead:
+                drain_level(ui, target, special["drain"]["dc"])
+                self.after_damage(target)
+            if special.get("grab") and not target.dead and not target.has_tag("grappled") \
+                    and not attacker.has_tag("grappled") and target.uid in self.st \
+                    and rules.SIZES.index(target.size) <= rules.SIZES.index(attacker.size):
+                ui.warn(f"  {attacker.name} tries to seize {target.name}!")
+                if self.grapple_check(attacker, target, "Improved grab"):
+                    attacker.add_effect(Effect("Grappling", None, tags=["grappled"],
+                                               data={"with": target.uid, "holder": True}))
+                    target.add_effect(Effect("Grappling", None, tags=["grappled"],
+                                             data={"with": attacker.uid}))
+                    ui.bad(f"  {target.name} is caught in {attacker.name}'s crushing grip!")
             if special.get("paralysis") and target.conscious:
                 elf = getattr(target, "race", "") == "elf"
                 if elf:
@@ -784,6 +821,9 @@ class Combat:
         if target.dead or target.helpless():
             if target.get_effect("Grappling"):
                 self.end_grapple(target)
+        if not target.dead and target.get_effect("Regenerating") and target.hp <= 0:
+            ui.warn(f"  {target.name} collapses... but its flesh is already crawling back "
+                    f"together. Fire or acid will finish it.")
         if target.dead:
             ui.bad(f"  {target.name} is {'slain' if not target.is_pc else 'DEAD'}!")
             self.disengage_all(target)
@@ -1954,6 +1994,11 @@ class Combat:
             single = True
             surprise = True
         partner = self.grapple_partner(m)
+        hold = m.get_effect("Grappling")
+        if partner is not None and hold and hold.data.get("holder"):
+            ui.out(f"{m.name} crushes {partner.name} in its grip!")
+            self.monster_melee(m, partner, full=True)
+            return
         if partner is not None:
             if dice.percent() <= 50 and self.grapple_check(m, partner, f"{m.name} struggles"):
                 self.end_grapple(m)
@@ -2093,6 +2138,7 @@ class Combat:
         melee = m.melee_attacks()
         naturals = [w for w in melee if w.get("natural")]
         if naturals and full:
+            claws = {}
             for w in naturals:
                 if not self.active(tgt) or (tgt.is_pc and not tgt.conscious
                                             and not m.block.get("savage")):
@@ -2100,7 +2146,14 @@ class Combat:
                     if not others:
                         return
                     tgt = others[0]
-                self.make_attack(m, tgt, w, m.bab())
+                if self.make_attack(m, tgt, w, m.bab()) and w["name"] == "claw":
+                    claws[tgt.uid] = claws.get(tgt.uid, 0) + 1
+            rend = m.block.get("rend")
+            if rend and claws.get(tgt.uid, 0) >= 2 and self.active(tgt) and not tgt.dead:
+                r = dice.roll(rend)
+                self.ui.bad(f"{m.name} digs in both claws and rends {tgt.name}!")
+                self.ui.roll(r.detail())
+                deal_damage(self.ui, tgt, r.total, "S", self, magic=False)
             return
         w = naturals[0] if naturals else melee[0]
         babs = rules.iterative_attacks(m.bab()) if full else [m.bab()]

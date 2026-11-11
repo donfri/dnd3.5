@@ -18,6 +18,7 @@ It needs only Python 3.8 or newer. There are no third-party packages to install.
 | **The Ember King's Barrow** | 1-3 | Goblins have kidnapped the miller's apprentice; an old barrow, undead, a riddle door, a fire-crowned king. |
 | **The Drowned Lantern** | 1-3 | A dark lighthouse, kobold wreckers, smugglers, giant spiders, a sunken wreck, and a traitor in the village. |
 | **Greyfang Pass** | 3-5 | A sequel: gnoll raiders, worgs, a broken bridge, a captured keep, dwarf prisoners and Skarn the ogre warlord. |
+| **The Thornwood Fen** | 6-8 | Missing children, a troll under the causeway (bring fire), charmed lizardfolk, a wight-haunted barrow, gargoyles, and a green hag in a drowned abbey. |
 
 Pick one under **New game**. Each adventure is designed so two heroes can win it,
 and gets harder automatically when there are more heroes.
@@ -288,8 +289,8 @@ python3 -m unittest discover -s tests
 - There is no battle grid. Positioning is abstracted as being "in melee with" a
   foe, which still drives attacks of opportunity, flanking, charging, full
   attacks, and firing into melee.
-- Levels are capped at 10, and spells go up to 5th level. The adventures so far
-  are written for levels 1 to 5.
+- Levels are capped at 10, and spells go up to 5th level. The adventures cover
+  levels 1 to 8.
 - *Raise dead* costs the hero half a level of experience instead of a whole
   level (or 2 Constitution at 1st level). The temple can cast it for 5,450 gp.
 - Familiars stay safely with their master; they don't scout or deliver spells.
