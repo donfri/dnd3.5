@@ -58,6 +58,39 @@ class TestSaveLoad(unittest.TestCase):
         self.assertIn("t", engine.list_saves())
 
 
+class TestTrapCrossing(unittest.TestCase):
+    def test_everyone_jumps_once_and_the_party_moves_on(self):
+        class UI(AutoUI):
+            def choose(self, prompt, options, allow_cancel=False, default=None, groups=None):
+                for i, o in enumerate(options):
+                    if o.startswith("Jump across"):
+                        return i
+                return super().choose(prompt, options, allow_cancel, default, groups)
+        ui = UI()
+        party = [build_pregen(k) for k in ("thorgar", "lyra", "pip")]
+        for p in party:
+            make_heroic(p)
+        gs = engine.GameState(ember_barrow, party, {"heroic": True})
+        gs.room = "entry"
+        gs.rs()["found_traps"].append("pit")
+        gm = engine.GM(ui, gs)
+        went = []
+        gm.enter = went.append
+        old = dice.d20
+        dice.d20 = lambda: 1            # everyone who has to roll fails
+        try:
+            gm.try_exit("north", ember_barrow.ROOMS["entry"]["exits"]["north"])
+        finally:
+            dice.d20 = old
+        jumps = [t for t in ui.transcript if " Jump:" in t]
+        self.assertEqual(len(jumps), 3)                     # one attempt each, no retries
+        self.assertEqual(went, ["guard_room"])              # the party moved on together
+        rolled = [p for p in party if any(p.name in t and "d20=1" in t for t in jumps)]
+        self.assertTrue(rolled)
+        self.assertTrue(all(p.damage > 0 for p in rolled))  # failures sprang the pit
+        self.assertTrue(any("Everyone is across" in t for t in ui.transcript))
+
+
 class TestAdventureData(unittest.TestCase):
     def test_all_adventures_valid(self):
         from dnd35.adventure import ORDER

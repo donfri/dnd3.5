@@ -806,16 +806,7 @@ class GM:
                 if i == 2:
                     return
                 if trap.get("bypass"):
-                    ok = True
-                    for h in gs.able():
-                        chk = trap["bypass"]
-                        if self.roll_check(h, chk["skill"], chk["dc"]) < chk["dc"]:
-                            ui.bad(f"{h.name} slips!")
-                            self.trigger_trap(trap_id, h)
-                            ok = False
-                            break
-                    if not ok:
-                        return
+                    self.cross_trap(trap_id, trap)
                 else:
                     ui.out("You edge around it carefully.")
             else:
@@ -826,6 +817,29 @@ class GM:
             ui.gm(ex["text"])
         self.run(ex.get("effects", []))
         self.enter(ex["to"])
+
+    def cross_trap(self, trap_id: str, trap: dict) -> None:
+        """Everyone gets past a known trap one at a time (Jump, Climb, Balance...).
+        Out of danger a hero takes 10 when that's enough; otherwise they roll. A hero
+        who fails springs the trap on themselves, then scrambles across anyway, so
+        nobody has to try twice and the party moves on together."""
+        ui, gs = self.ui, self.gs
+        chk = trap["bypass"]
+        skill, dc = chk["skill"], chk["dc"]
+        for h in list(gs.able()):
+            if self.trap_state(trap_id) == "disabled":   # a one-shot trap already went off
+                break
+            bonus = self.check_bonus(h, skill)
+            take = 10 if bonus is not None and 10 + bonus >= dc else None
+            if self.roll_check(h, skill, dc, take=take) >= dc:
+                continue
+            ui.bad(f"{h.name} slips!")
+            self.trigger_trap(trap_id, h)
+            if h.conscious:
+                ui.out(f"{h.name} scrambles the rest of the way across.")
+            elif not h.dead:
+                ui.out(f"The others haul {h.name} across.")
+        ui.good("Everyone is across.")
 
     def handle_lock(self, ex_id: str, ex: dict, lock: dict) -> bool:
         ui, gs = self.ui, self.gs
