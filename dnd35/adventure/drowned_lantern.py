@@ -370,6 +370,7 @@ ROOMS = {
     },
     # ================================================================ below
     "cove": {
+        "terrain": "open",
         "name": "Smugglers' Cove", "flee_to": "lighthouse_yard",
         "desc": "A shingle beach in a notch of the cliff, invisible from the village. A "
                 "longboat is drawn up on the stones. A cave mouth gapes in the rock to the "

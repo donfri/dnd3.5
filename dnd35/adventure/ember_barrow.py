@@ -356,6 +356,7 @@ ROOMS = {
         "exits": {"west": {"to": "entry", "label": "Back to the antechamber"}},
     },
     "guard_room": {
+        "terrain": "dungeon",
         "dark": True, "name": "The Guard Room", "flee_to": "entry",
         "desc": "A square room with a goblin cookfire, gnawed bones, and an iron-bound chest "
                 "against the wall. Doors lead west and north.",
@@ -607,6 +608,7 @@ ROOMS = {
         "exits": {"south": {"to": "lower_hall", "label": "Back to the Hall of Servants"}},
     },
     "antechamber": {
+        "terrain": "dungeon",
         "dark": True, "name": "The King's Antechamber", "flee_to": "lower_hall",
         "desc": "Heat shimmers above the floor. Bones are scattered everywhere, cracked open "
                 "for the marrow. A great archway glows dull red to the east.",

@@ -233,6 +233,16 @@ Command-line options:
   Fireball, Burning Hands, Lightning Bolt and Cone of Cold are real bursts,
   cones and lines: you pick where to aim, and you're warned if a friend (or you)
   would be caught. Breath weapons hit everyone in their cone.
+- **Terrain** fits the place you're fighting: trees and undergrowth on the forest
+  road, pillars and rubble in crypts, rock walls in caves, deep pools and reeds
+  in the fen, carts and mud in villages, and a narrow bridge or ledge where
+  there's no way round. Walls and trees block movement, rubble, reeds, shallow
+  water and mud cost double, you can't charge across rough ground, walls block
+  arrows and spells (and stop a fireball's blast), and shooting past trees,
+  crates or pillars gives the target cover (+4 AC). Heroes and monsters find
+  their own way around obstacles; you can slip past friends but not foes, so
+  one hero can hold a bridge. A room can name its battlefield with a `terrain`
+  key, and an encounter can override it.
 - The terminal prints an ASCII battle map each round; the web page draws it in
   the story, and the **Map** tab shows it live during a fight.
 - Initiative, surprise rounds, and flat-footed characters.
@@ -354,9 +364,9 @@ python3 -m unittest discover -s tests
 
 ## Simplifications (deliberate)
 
-- The battle grid is open ground: no walls, cover or difficult terrain. You
-  choose who to move toward, and the game picks the exact square (stepping round
-  to flank when it can). Moving past a foe you aren't fighting doesn't provoke.
+- You choose who to move toward, and the game picks the route and the exact
+  square (stepping round to flank when it can). Moving past a foe you aren't
+  fighting doesn't provoke. Battlefields are generated fresh for each fight.
 - Levels go to 20 (no epic levels), and the adventures cover levels 1 to 8.
   Higher-level heroes can still start any adventure, but it won't be a challenge.
 - *Raise dead* costs the hero half a level of experience instead of a whole

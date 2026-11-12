@@ -535,7 +535,8 @@ class GM:
         if enc.get("text"):
             ui.gm(enc["text"])
         combat = Combat(ui, gs.party, mons, surprised, can_flee=enc.get("can_flee", True),
-                        title=enc.get("title", "COMBAT"), dark=self.in_darkness())
+                        title=enc.get("title", "COMBAT"), dark=self.in_darkness(),
+                        terrain=self.battle_terrain(enc))
         result = combat.run()
         award_xp(ui, gs.party, combat.xp_monsters, gs.party_level())
         gs.pass_time(1, ui)
@@ -899,6 +900,11 @@ class GM:
                 if gs.room != room_id:
                     return
 
+    def battle_terrain(self, enc: dict) -> str:
+        """Battlefield theme: the encounter's own, else one that fits the room."""
+        from ..grid import theme_for
+        return enc.get("terrain") or theme_for(self.adv.ROOMS.get(self.gs.room, {}))
+
     # ------------------------------------------------------------ light & darkness
     def in_darkness(self) -> bool:
         room = self.adv.ROOMS[self.gs.room]
@@ -1102,7 +1108,8 @@ class GM:
         self.ui.warn(w["text"])
         mons = [Monster(k) for k in w["monsters"]]
         surprised = list(gs.able()) if resting and dice.percent() <= 50 else []
-        combat = Combat(self.ui, gs.party, mons, surprised, title="WANDERING MONSTERS")
+        combat = Combat(self.ui, gs.party, mons, surprised, title="WANDERING MONSTERS",
+                        terrain=self.battle_terrain({}))
         result = combat.run()
         award_xp(self.ui, gs.party, combat.xp_monsters, gs.party_level())
         if result == "defeat":

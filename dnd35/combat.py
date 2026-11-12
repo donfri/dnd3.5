@@ -77,7 +77,7 @@ def wound_word(cr: Creature) -> str:
 class Combat:
     def __init__(self, ui, party: Sequence[Creature], monsters: Sequence[Creature],
                  surprised: Sequence[Creature] = (), can_flee: bool = True,
-                 title: str = "COMBAT", dark: bool = False):
+                 title: str = "COMBAT", dark: bool = False, terrain=None):
         self.ui = ui
         self.party = list(party)
         self.monsters = list(monsters)
@@ -117,6 +117,12 @@ class Combat:
         self.order: List[CState] = []
         self.xp_monsters: List[Creature] = []
         self.fell_short = False
+        if isinstance(terrain, grid.Terrain):
+            self.terrain = terrain
+        elif terrain:
+            self.terrain = grid.generate(terrain)
+        else:
+            self.terrain = grid.Terrain()
         self.place_tokens()
 
     def _name_monsters(self):
@@ -166,7 +172,12 @@ class Combat:
         self.s(a).engaged.clear()
         if retreat and not a.dead and a.uid in self.st:
             threats = [self.s(f).pos for f in (foes or self.enemies(a))]
-            self.s(a).pos = grid.step_away(self.s(a).pos, threats, self.occupied(a), retreat)
+            here = self.s(a).pos
+            costs, _ = self.terrain.costs(here, self.foe_squares(a))
+            occ = set(self.occupied(a))
+            opts = [q for q, cst in costs.items() if cst <= retreat and q not in occ] or [here]
+            self.s(a).pos = max(opts, key=lambda q: (
+                min((grid.dist(q, t) for t in threats), default=0), -costs.get(q, 0)))
 
     # ------------------------------------------------------------ the grid
     def speed_of(self, cr: Creature) -> int:
@@ -186,43 +197,93 @@ class Combat:
     def distance(self, a: Creature, b: Creature) -> int:
         return grid.dist(self.s(a).pos, self.s(b).pos)
 
+    def foe_squares(self, cr: Creature) -> List[Tuple[int, int]]:
+        """Squares cr can't move through (living foes)."""
+        return [self.s(f).pos for f in self.enemies(cr)]
+
     def place_tokens(self) -> None:
-        """Party on the west edge, foes to the east, 30-45 feet apart (20 in the dark)."""
+        """Party on the west edge, foes to the east, 30-45 feet apart (20 in the dark),
+        each on open ground."""
         gap = 20 if self.dark else 30 + 5 * (dice.die(4) - 1)
-        rows = [4, 3, 5, 2, 6, 1, 7, 0, 8]
         pcs = [x for x in self.st.values() if x.side == "pc"]
         mons = [x for x in self.st.values() if x.side != "pc"]
         pcs.sort(key=lambda x: (not self.has_melee(x.c), -x.c.ac()))
         front = 2
-        for i, x in enumerate(pcs):
-            col = front if i < 5 else front - 1 - (i - 5) // 9
-            x.pos = (max(0, col), rows[i % 5 if i < 5 else (i - 5) % 9])
         mcol = min(grid.W - 2, front + gap // 5)
-        for i, x in enumerate(mons):
-            x.pos = (min(grid.W - 1, mcol + i // 9), rows[i % 9])
+        free = [(x, y) for x in range(grid.W) for y in range(grid.H)
+                if self.terrain.walkable((x, y))]
+        taken: set = set()
 
-    def melee_square(self, a: Creature, b: Creature) -> Tuple[int, int]:
-        """The square next to b that a would step into: closest, but on the far side
-        of b from an ally when that sets up a flank for little extra walking."""
+        def put(group, col, ahead_cost):
+            for st in group:
+                spots = [q for q in free if q not in taken]
+                if not spots:
+                    st.pos = (col, grid.H // 2)
+                    continue
+                q = min(spots, key=lambda q: (ahead_cost(q[0] - col) * 2 + abs(q[1] - 4)
+                                              + (1 if self.terrain.difficult(q) else 0),
+                                              abs(q[1] - 4)))
+                st.pos = q
+                taken.add(q)
+        put(pcs, front, lambda dx: dx * 3 if dx > 0 else -dx)
+        put(mons, mcol, lambda dx: -dx * 3 if dx < 0 else dx)
+
+    def route(self, a: Creature, b: Creature):
+        """Best square next to b for a to fight from: (square, cost in feet, path).
+        Prefers flanking squares for a little extra walking. (None, INF, []) if no way."""
         bp, ap = self.s(b).pos, self.s(a).pos
+        if grid.adjacent(ap, bp):
+            return ap, 0, []
+        blocked = self.foe_squares(a)
+        costs, _ = self.terrain.costs(ap, blocked)
         occ = set(self.occupied(a))
-        cands = [q for q in grid.neighbors(bp) if q not in occ]
+        cands = [q for q in grid.neighbors(bp) if q in costs and q not in occ]
         if not cands:
-            return grid.nearest_free(bp, occ, ap) if bp != ap else ap
+            return None, grid.INF, []
         mates = [self.s(o).pos for o in self.allies(a) if o is not a and self.is_engaged(o, b)]
 
         def flank(q):
             return any((q[0] - bp[0]) * (m[0] - bp[0]) + (q[1] - bp[1]) * (m[1] - bp[1]) < 0
                        for m in mates)
-        near = min(grid.dist(ap, q) for q in cands)
-        return min(cands, key=lambda q: (grid.dist(ap, q) - (15 if flank(q) else 0)
-                                         if grid.dist(ap, q) - near <= 10 else 999,
-                                         grid.dist(ap, q)))
+        near = min(costs[q] for q in cands)
+        dest = min(cands, key=lambda q: (costs[q] - (15 if flank(q) else 0)
+                                         if costs[q] - near <= 10 else 999, costs[q]))
+        return dest, costs[dest], self.terrain.path(ap, dest, blocked)
+
+    def melee_square(self, a: Creature, b: Creature) -> Tuple[int, int]:
+        dest, _, _ = self.route(a, b)
+        if dest is not None:
+            return dest
+        occ = set(self.occupied(a))
+        bp = self.s(b).pos
+        cands = [q for q in grid.neighbors(bp) if q not in occ and self.terrain.walkable(q)]
+        return min(cands, key=lambda q: grid.dist(q, self.s(a).pos)) if cands else \
+            self.s(a).pos
 
     def feet_to_melee(self, a: Creature, b: Creature) -> int:
         if self.is_engaged(a, b) or grid.adjacent(self.s(a).pos, self.s(b).pos):
             return 0
-        return grid.dist(self.s(a).pos, self.melee_square(a, b))
+        return self.route(a, b)[1]
+
+    def clear_charge(self, a: Creature, b: Creature) -> bool:
+        """A charge needs an open run: no difficult ground on the way."""
+        dest, cost, path = self.route(a, b)
+        return dest is not None and not any(self.terrain.difficult(q) for q in path)
+
+    def walk_toward(self, mover: Creature, tgt: Creature, budget: int) -> Tuple[int, int]:
+        """Where mover ends up spending at most budget feet heading for tgt."""
+        here = self.s(mover).pos
+        dest, cost, path = self.route(mover, tgt)
+        occ = set(self.occupied(mover))
+        if dest is not None and path:
+            run = self.terrain.path_cost(here, path)
+            ok = [q for q, cst in zip(path, run) if cst <= budget and q not in occ]
+            return ok[-1] if ok else here
+        # no way to get adjacent (blocked): get as close as possible
+        costs, _ = self.terrain.costs(here, self.foe_squares(mover))
+        opts = [q for q, cst in costs.items() if cst <= budget and q not in occ] + [here]
+        tp = self.s(tgt).pos
+        return min(opts, key=lambda q: (grid.dist(q, tp), costs.get(q, 0)))
 
     def advance(self, cr: Creature, tgt: Creature, single: bool = False) -> bool:
         """AI movement: close in if one move gets there (True: can still attack once),
@@ -233,6 +294,10 @@ class Combat:
             return self.close_in(cr, tgt)
         self.close_in(cr, tgt, budget=sp if single else 2 * sp)
         return False
+
+    def clear_shot(self, a: Creature, b: Creature) -> bool:
+        """Line of effect (walls block arrows and spells)."""
+        return self.terrain.line_of_effect(self.s(a).pos, self.s(b).pos)
 
     def range_penalty(self, attacker: Creature, target: Creature, w: dict):
         """(-penalty, out_of_range) for a ranged weapon at this distance."""
@@ -249,7 +314,7 @@ class Combat:
         """Everyone inside the template. aim is a creature or a square."""
         kind, size = shape or grid.AREAS[spell]
         at = aim if isinstance(aim, tuple) else self.s(aim).pos
-        sq = set(grid.area_squares(kind, size, self.s(caster).pos, at))
+        sq = set(grid.area_squares(kind, size, self.s(caster).pos, at, self.terrain))
         return [x.c for x in self.st.values()
                 if self.active(x.c) and x.pos in sq and not (kind != "burst" and x.c is caster)]
 
@@ -339,7 +404,11 @@ class Combat:
 
     def battle_state(self) -> dict:
         return {"w": grid.W, "h": grid.H, "round": self.round, "title": self.title,
-                "dark": self.dark, "tokens": self.battle_tokens()}
+                "dark": self.dark, "tokens": self.battle_tokens(),
+                "terrain": [{"x": q[0], "y": q[1], "k": k} for q, k in self.terrain.cells.items()],
+                "legend": [{"k": k, "name": grid.KINDS[k][1], "slow": grid.KINDS[k][5]}
+                           for k in sorted(set(self.terrain.cells.values()),
+                                           key=list(grid.KINDS).index)]}
 
     def sync_map(self, inline: bool = False) -> None:
         """Push token positions to a graphical client (the web page), if any."""
@@ -360,10 +429,12 @@ class Combat:
         for t in toks:
             extra = " (down)" if t["down"] else (" (flying)" if t["flying"] else "")
             legend.append(f"{t['label']}={t['name']}{extra}")
-        lines = grid.render(cells, [])
+        lines = grid.render(cells, [], self.terrain)
         for ln in lines:
             self.ui.out("  " + ln, ("dim",) if ln is lines[0] else ())
         self.ui.out("  " + "   ".join(legend) + "   (each square is 5 ft)", ("dim",))
+        if self.terrain.cells:
+            self.ui.out("  " + "   ".join(self.terrain.legend()), ("dim",))
 
     def is_flat_footed(self, cr: Creature) -> bool:
         return self.s(cr).flat and not cr.has_uncanny_dodge()
@@ -455,6 +526,8 @@ class Combat:
         ui.header(self.title)
         for m in self.monsters:
             ui.out(f"  {m.name}: {m.block.get('desc', '')}", ("red",))
+        if self.terrain.cells:
+            ui.out(f"  The ground: {self.terrain.describe()}.", ("dim",))
         self.roll_initiative()
         self.start_auras()
         if self.surprised:
@@ -676,6 +749,8 @@ class Combat:
             if self.shooting_into_melee(attacker, target) and not attacker.has_feat("Precise Shot"):
                 sit.append(("untyped", -4, "firing into melee"))
             if target.uid in self.st and attacker.uid in self.st:
+                if self.terrain.cover(self.s(attacker).pos, self.s(target).pos):
+                    sit.append(("untyped", -4, "target behind cover"))
                 pen, _ = self.range_penalty(attacker, target, w)
                 if pen:
                     sit.append(("untyped", pen, f"range {self.distance(attacker, target)} ft"))
@@ -1462,16 +1537,22 @@ class Combat:
         self.fell_short = False
         if not self.is_engaged(mover, tgt):
             budget = self.speed_of(mover) if budget is None else budget
-            dest = self.melee_square(mover, tgt)
+            dest, cost, _ = self.route(mover, tgt)
             start = self.s(mover).pos
-            if not grid.adjacent(start, self.s(tgt).pos) and grid.dist(start, dest) > budget:
-                end = grid.step_path(start, self.s(tgt).pos, self.occupied(mover), budget)
+            if dest is None or cost > budget:
+                end = self.walk_toward(mover, tgt, budget)
                 self.s(mover).pos = end
                 self.fell_short = True
-                moved = grid.dist(start, end)
-                self.ui.out(f"{mover.name} moves {moved} ft toward {tgt.name} "
-                            f"(now {self.distance(mover, tgt)} ft away).")
+                if end == start:
+                    self.ui.out(f"{mover.name} can't find a way through to {tgt.name}.")
+                else:
+                    slow = " through rough ground" if any(
+                        self.terrain.difficult(q) for q in self.terrain.line(start, end) +
+                        [end]) else ""
+                    self.ui.out(f"{mover.name} moves toward {tgt.name}{slow} "
+                                f"(now {self.distance(mover, tgt)} ft away).")
                 return False
+            self.s(mover).pos = dest
         if self.has_reach(tgt) and not self.has_reach(mover) and not self.is_engaged(mover, tgt):
             w = self.reach_weapon(tgt)
             if w:
@@ -1925,6 +2006,9 @@ class Combat:
             tgt = self._pick_target(p, foes)
             if not tgt:
                 return
+            if not self.clear_shot(p, tgt):
+                ui.bad(f"There's no clear shot at {tgt.name}: a wall is in the way.")
+                return
             if self.range_penalty(p, tgt, w)[1]:
                 ui.bad(f"{tgt.name} is {self.distance(p, tgt)} ft away, beyond the "
                        f"{w['name']}'s maximum range.")
@@ -1945,7 +2029,8 @@ class Combat:
                 return
             if not self._ready_weapon(x, w):
                 return
-            reach_ok = w.get("reach") and self.distance(p, tgt) <= 10
+            reach_ok = w.get("reach") and self.distance(p, tgt) <= 10 and \
+                self.clear_shot(p, tgt)
             if reach_ok and not self.is_engaged(p, tgt):
                 ui.out(f"{p.name} strikes at {tgt.name} from behind the front line with "
                        f"{w['name']} (reach).")
@@ -1972,7 +2057,8 @@ class Combat:
                     ui.warn(f"{tgt.name} is {self.distance(p, tgt)} ft away; you can move "
                             f"{sp} ft and still attack.")
                     if (need <= 2 * sp and not x.moved and not p.has_tag("fatigued")
-                            and not mode and not p.has_tag("prone")):
+                            and not mode and not p.has_tag("prone")
+                            and self.clear_charge(p, tgt)):
                         if ui.confirm(f"Charge {tgt.name} instead (+2 attack, -2 AC)?", True):
                             self.act_charge(x, tgt)
                         return
@@ -2227,6 +2313,10 @@ class Combat:
         if self.feet_to_melee(p, tgt) > 2 * self.speed_of(p):
             self.ui.bad(f"{tgt.name} is {self.distance(p, tgt)} ft away: too far to charge "
                         f"(you can charge up to {2 * self.speed_of(p)} ft).")
+            return
+        if not self.clear_charge(p, tgt):
+            self.ui.bad(f"There's no clear run at {tgt.name}: rough ground or obstacles in "
+                        f"the way. Move toward it instead.")
             return
         x.std = x.move = False
         x.moved = True
@@ -2606,7 +2696,11 @@ class Combat:
             t = self._pick_target(p, pool, "Target (friend or foe)")
             return [t] if t else None
         if kind == "enemy":
-            t = self._pick_target(p, self.enemies(p))
+            pool = [f for f in self.enemies(p) if p.uid not in self.st or self.clear_shot(p, f)]
+            if not pool:
+                ui.bad("No foe is in sight: walls block every line.")
+                return None
+            t = self._pick_target(p, pool)
             return [t] if t else None
         if kind == "enemies":
             foes = self.enemies(p)
@@ -2875,10 +2969,11 @@ class Combat:
             return
         # ranged option
         far = all(self.feet_to_melee(m, p) > self.speed_of(m) for p in targets)
-        use_ranged = ranged and (block.get("prefers_ranged") or not melee or far or
-                                 (dice.percent() <= 30 and self.round <= 2))
+        shots = [p for p in targets if self.clear_shot(m, p)]
+        use_ranged = ranged and shots and (block.get("prefers_ranged") or not melee or far or
+                                           (dice.percent() <= 30 and self.round <= 2))
         if use_ranged:
-            tgt = min(targets, key=lambda p: (p.ac(), p.hp, self.distance(m, p)))
+            tgt = min(shots, key=lambda p: (p.ac(), p.hp, self.distance(m, p)))
             w = ranged[0]
             ui.out(f"{m.name} {'fires' if not w.get('thrown') else 'hurls'} at {tgt.name}!")
             self.make_attack(m, tgt, w, m.bab())
@@ -2902,7 +2997,8 @@ class Combat:
             if surprise or single:
                 return
             self.monster_melee(m, tgt, full=False)
-        elif need <= 2 * sp and not (surprise or single) and not m.has_tag("fatigued"):
+        elif need <= 2 * sp and not (surprise or single) and not m.has_tag("fatigued") \
+                and self.clear_charge(m, tgt):
             ui.out(f"{m.name} CHARGES {tgt.name}!")
             m.add_effect(Effect("Charging", 1, tags=["charging"]))
             if not self.close_in(m, tgt, budget=2 * sp):
@@ -2923,9 +3019,14 @@ class Combat:
                             source=caster.name, hidden=True))
         x = CState(m, self.s(caster).side)
         x.flat = False
-        x.pos = grid.nearest_free(self.s(caster).pos, self.occupied(),
-                                  prefer=self.s(self.enemies(caster)[0]).pos
-                                  if self.enemies(caster) else None)
+        occ = set(self.occupied())
+        cp = self.s(caster).pos
+        foes = self.enemies(caster)
+        spots = [q for q in grid.neighbors(cp) if q not in occ and self.terrain.walkable(q)] or \
+            [q for q in ((xx, yy) for xx in range(grid.W) for yy in range(grid.H))
+             if q not in occ and self.terrain.walkable(q)] or [cp]
+        x.pos = min(spots, key=lambda q: (grid.dist(q, cp) > 5,
+                                          grid.dist(q, self.s(foes[0]).pos) if foes else 0))
         self.st[m.uid] = x
         self.companions.append(m)
         idx = self.order.index(self.s(caster)) + 1 if self.s(caster) in self.order else len(

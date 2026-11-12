@@ -160,6 +160,7 @@ ROOMS = {
     },
     # ================================================================ the pass
     "pass_road": {
+        "terrain": "open",
         "name": "The Pass Road", "travel_minutes": 120, "flee_to": "highcairn",
         "first": "The road climbs through pine and then bare rock. A burned wagon lies on "
                  "its side, its oxen long gone. Claw marks score the wood.",

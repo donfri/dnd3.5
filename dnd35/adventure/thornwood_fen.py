@@ -320,6 +320,7 @@ ROOMS = {
         },
     },
     "barrow_isle": {
+        "terrain": "dungeon",
         "dark": True, "name": "The Fen Knight's Barrow", "flee_to": "lizard_village",
         "desc": "A grassy mound on a reed island, its stone door cracked open. Inside, "
                 "burial niches line a short passage to a knight's tomb.",

@@ -166,5 +166,86 @@ class TestGridCombat(unittest.TestCase):
             self.assertIn(res, ("victory", "defeat", "fled"))
 
 
+class TestTerrain(unittest.TestCase):
+    def test_difficult_ground_costs_double(self):
+        t = grid.Terrain("open", {(1, 0): "rubble"})
+        self.assertEqual(t.costs((0, 0))[0][(1, 0)], 10)
+        self.assertEqual(t.costs((0, 0))[0][(2, 0)], 15)
+
+    def test_walls_block_and_corners_cant_be_cut(self):
+        t = grid.Terrain("dungeon", {(1, 0): "wall", (0, 1): "wall"})
+        self.assertNotIn((1, 1), t.costs((0, 0))[0])     # boxed in: no diagonal squeeze
+        t = grid.Terrain("dungeon", {(1, y): "wall" for y in range(grid.H - 1)})
+        self.assertEqual(t.costs((0, 0))[0][(2, 0)], 90)  # around the end of the wall
+
+    def test_line_of_effect_and_cover(self):
+        t = grid.Terrain("dungeon", {(3, 4): "wall", (6, 2): "tree"})
+        self.assertFalse(t.line_of_effect((1, 4), (5, 4)))
+        self.assertTrue(t.line_of_effect((1, 2), (8, 2)))
+        self.assertTrue(t.cover((1, 2), (8, 2)))          # trees give cover, not a wall
+
+    def test_walls_stop_a_fireball(self):
+        t = grid.Terrain("dungeon", {(6, y): "wall" for y in range(grid.H)})
+        sq = grid.area_squares("burst", 20, (0, 0), (4, 4), t)
+        self.assertIn((5, 4), sq)
+        self.assertNotIn((7, 4), sq)
+
+    def test_every_theme_is_connected(self):
+        for theme in grid.THEME_TEXT:
+            for seed in range(15):
+                dice.seed(seed)
+                t = grid.generate(theme)
+                self.assertTrue(t.connected(), (theme, seed))
+
+    def test_room_themes(self):
+        self.assertEqual(grid.theme_for({"name": "The Old Stone Bridge"}), "bridge")
+        self.assertEqual(grid.theme_for({"name": "The Crypt"}), "dungeon")
+        self.assertEqual(grid.theme_for({"name": "X", "desc": "dense, thorny woods"}), "forest")
+        self.assertEqual(grid.theme_for({"name": "X", "terrain": "marsh"}), "marsh")
+
+    def test_tokens_start_on_open_ground(self):
+        for theme in ("bridge", "cave", "forest", "marsh", "ledge"):
+            dice.seed(4)
+            party = [build_pregen(k, "a", level=5) for k in ("thorgar", "lyra", "moss")]
+            cb = Combat(AutoUI(), party, [Monster("orc") for _ in range(5)], terrain=theme)
+            spots = [x.pos for x in cb.st.values()]
+            self.assertEqual(len(spots), len(set(spots)))
+            self.assertTrue(all(cb.terrain.walkable(q) for q in spots), theme)
+
+    def test_blocked_bridge_means_no_way_through(self):
+        cb, (a, b), (o1, o2) = fight("orc", "orc", heroes=("thorgar", "aldric"))
+        cb.terrain = grid.Terrain("bridge", {(x, y): "deep" for x in range(grid.W)
+                                             for y in range(grid.H) if y != 4})
+        cb.s(a).pos, cb.s(b).pos, cb.s(o2).pos, cb.s(o1).pos = (2, 4), (5, 4), (9, 4), (12, 4)
+        self.assertEqual(cb.feet_to_melee(o2, a), grid.INF)   # Aldric holds the bridge
+        self.assertEqual(cb.feet_to_melee(o1, b), 30)         # allies can pass each other
+        cb.close_in(o2, a, budget=60)
+        self.assertEqual(cb.s(o2).pos, (6, 4))                # as close as it can get
+
+    def test_rough_ground_stops_a_charge(self):
+        cb, (p,), (orc,) = fight("orc")
+        cb.terrain = grid.Terrain("forest", {(x, y): "brush" for x in (4, 5, 6)
+                                             for y in range(grid.H)})
+        cb.s(p).pos, cb.s(orc).pos = (2, 4), (8, 4)
+        self.assertFalse(cb.clear_charge(p, orc))
+        x = cb.s(p)
+        cb.act_charge(x, orc)
+        self.assertTrue(x.std and x.move)
+
+    def test_no_clear_shot_through_a_wall(self):
+        cb, (p,), (orc,) = fight("orc", heroes=("lyra",))
+        cb.terrain = grid.Terrain("dungeon", {(5, y): "wall" for y in range(grid.H)})
+        cb.s(p).pos, cb.s(orc).pos = (2, 4), (8, 4)
+        self.assertFalse(cb.clear_shot(p, orc))
+
+    def test_terrain_fights_finish(self):
+        for i, theme in enumerate(grid.THEME_TEXT):
+            dice.seed(i)
+            party = [build_pregen(k, "a", level=4) for k in ("thorgar", "lyra", "moss")]
+            res = Combat(AutoUI(seed=i), party, [Monster("orc"), Monster("goblin"),
+                                                  Monster("wolf")], terrain=theme).run()
+            self.assertIn(res, ("victory", "defeat", "fled"))
+
+
 if __name__ == "__main__":
     unittest.main()

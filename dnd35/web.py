@@ -513,7 +513,7 @@ class Handler(BaseHTTPRequestHandler):
         if not pw:
             return True
         given = self.headers.get("X-Password") or qs.get("pw", [""])[0]
-        return given == pw
+        return given.strip() == pw.strip()
 
     def _json(self, obj, code=200):
         data = json.dumps(obj).encode()
