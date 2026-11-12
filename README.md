@@ -125,6 +125,17 @@ python3 -m dnd35.web --port 8080
 Then share `http://<your-ip>:8080` with your friend. This needs port forwarding,
 or a tunnel such as Tailscale, `cloudflared tunnel`, or `ngrok http 8080`.
 
+### Stepping away (AFK)
+
+Press **☕ AFK** at the top of the page when you step away. Everyone sees you're
+away, the computer plays your heroes' turns in fights (closing in, attacking,
+stabilizing a dying friend), and anyone at the table can answer your other
+questions so the game keeps moving. Press **I'm back** (or just answer a
+question) to take over again. If your page sees no mouse, keyboard or touch for
+5 minutes you're marked away automatically, and moving the mouse or tapping
+brings you back. A player whose page has been closed for 5 minutes is treated
+as away too.
+
 ## Quick start for two players
 
 1. Run `python3 play.py`.

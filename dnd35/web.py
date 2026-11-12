@@ -30,6 +30,8 @@ from .ui import UI, Color, QuitGame, c
 
 MAX_EVENTS = 4000
 POLL_SECONDS = 25
+IDLE_SECONDS = 300      # page gone this long: treat the player as away
+AUTOPILOT_DELAY = 1.5   # seconds before the computer answers for an away player
 ANSI_RE = re.compile(r"\033\[[0-9;]*m")
 SPEECH_RE = re.compile(r"^([A-Z][\w' .-]{0,30}): \u201c(.*)\u201d$")
 
@@ -89,6 +91,8 @@ class WebUI(UI):
         self.last_who = ""
         self._explore = False
         self.battle_now: Optional[dict] = None
+        self._pending_default = None
+        self._auto_counts: Dict[tuple, int] = {}
 
     # ownership: only the hero's player may answer prompts inside acting()
     @contextmanager
@@ -161,7 +165,13 @@ class WebUI(UI):
         self.table.explore_idle = self._explore
         self.table.emit({"t": "prompt", "text": ANSI_RE.sub("", prompt), "options": opts,
                          "kind": kind, "groups": groups, "owner": owner})
-        text, who = self.table.wait_input(owner)
+        plain = ANSI_RE.sub("", prompt)
+        default = self._pending_default
+        auto = None
+        if owner and self.battle_now is not None:
+            # in a fight, an away player's hero is played by the computer
+            auto = (lambda: self.autopick(plain, opts, kind, default))
+        text, who = self.table.wait_input(owner, auto)
         self.table.explore_idle = False
         self.last_who = who
         shown = text if text else "(enter)"
@@ -179,6 +189,54 @@ class WebUI(UI):
             return ""  # nobody can kill the shared table from a browser
         return text
 
+    def autopick(self, prompt: str, opts: Optional[List[str]], kind: str, default) -> str:
+        """What the computer answers for a hero whose player is away (combat only):
+        fight the nearest foe, say yes to sensible offers, never back out."""
+        if kind == "confirm":
+            return "y" if default is not False else "n"
+        if not opts or kind != "choose":
+            return ""
+        real = [o for o in opts if o != "(back)"]
+
+        def pick(*starts):
+            for st in starts:
+                for i, o in enumerate(real):
+                    if o.startswith(st):
+                        return str(i + 1)
+            return None
+        prompt = prompt.strip().rstrip(":").strip()
+        low = prompt.lower()
+        if low.endswith("what do you do?"):
+            rnd = (self.battle_now or {}).get("round", 0)
+            key = (rnd, prompt)
+            n = self._auto_counts.get(key, 0) + 1
+            self._auto_counts = {key: n}
+            in_melee = any(o.startswith(("Trip a foe", "Feint", "Bull rush")) for o in real)
+            if n <= 4:
+                ans = pick("Stabilize a dying ally") if n == 1 else None
+                if not ans and in_melee:
+                    ans = pick("Full attack", "Attack")
+                elif not ans:
+                    # out of reach: attack (it offers a charge or a move) the first time,
+                    # then just keep closing the distance
+                    ans = (pick("Attack") if n == 1 else None) or \
+                        pick("Move toward a foe (", "Move toward a foe again", "Attack")
+                if ans:
+                    return ans
+            return pick("End turn") or str(len(real))
+        if any("in melee with you" in o for o in real):
+            return str(next(i for i, o in enumerate(real) if "in melee with you" in o) + 1)
+        feet = []
+        for i, o in enumerate(real):
+            m = re.search(r"(\d+) ft\)", o) or re.search(r"(\d+) ft;", o)
+            if m:
+                feet.append((int(m.group(1)), i))
+        if feet:
+            return str(min(feet)[1] + 1)
+        if default is not None and isinstance(default, int) and 0 <= default < len(real):
+            return str(default + 1)
+        return "1"
+
     def choose(self, prompt, options, allow_cancel=False, default=None, groups=None):
         if options:
             opts = [ANSI_RE.sub("", o) for o in options]
@@ -188,6 +246,7 @@ class WebUI(UI):
                 if grp:
                     grp.append("Game")
             prev = (self._pending_groups, self._explore)
+            self._pending_default = default
             self._pending_groups = grp
             self._explore = prompt == "What do you do?" and bool(groups)
             try:
@@ -198,6 +257,7 @@ class WebUI(UI):
         return super().choose(prompt, options, allow_cancel, default)
 
     def confirm(self, prompt, default=True):
+        self._pending_default = default
         return self._with_options(["Yes", "No"], "confirm", super().confirm, prompt, default)
 
     def pause(self):
@@ -248,6 +308,7 @@ class Table:
         self.explore_idle = False
         self.item_lock = threading.Lock()
         self.presence: Dict[str, float] = {}
+        self.afk: Dict[str, str] = {}      # normalized name -> "manual" / "idle"
         self.ui = WebUI(self)
         self.ui.autosave_name = f"autosave-{name}"
         self.thread = threading.Thread(target=self._run, daemon=True)
@@ -264,15 +325,67 @@ class Table:
                 self.first_seq = self.events[0]["seq"]
             self.cond.notify_all()
 
-    def wait_input(self, owner: str = ""):
+    def wait_input(self, owner: str = "", auto=None):
+        """Wait for an answer. If the hero's player is away and auto is given, the
+        computer answers for them after a short pause (so others can follow along)."""
         with self.cond:
             self.waiting = True
             self.owner = owner
+            since = None
             while not self.inputs:
-                self.cond.wait()
+                if auto is not None and owner and self.is_afk(owner):
+                    since = since or time.time()
+                    left = AUTOPILOT_DELAY - (time.time() - since)
+                    if left <= 0:
+                        ans = auto()
+                        self.waiting = False
+                        self.owner = ""
+                        return ans, f"autopilot for {owner}"
+                    self.cond.wait(timeout=left)
+                    continue
+                since = None
+                self.cond.wait(timeout=5 if auto is not None else None)
             self.waiting = False
             self.owner = ""
             return self.inputs.pop(0)
+
+    def is_afk(self, name: str) -> bool:
+        """Marked away, or their page has been gone for over 5 minutes."""
+        key = self._norm(name)
+        if key in getattr(self, "afk", {}):
+            return True
+        seen = [t for n, t in self.presence.items() if self._norm(n) == key]
+        return bool(seen) and time.time() - max(seen) > IDLE_SECONDS
+
+    def set_afk(self, who: str, away: bool, auto: bool = False) -> None:
+        key = self._norm(who)
+        if not key:
+            return
+        heroes = []
+        gs = self.ui.game_state
+        if gs is not None:
+            heroes = [p.name for p in gs.party if self._norm(p.player or "") == key and not p.dead]
+        with self.cond:
+            was = key in self.afk
+            if away and not was:
+                self.afk[key] = "idle" if auto else "manual"
+            elif not away and was:
+                del self.afk[key]
+            else:
+                if away:
+                    self.afk[key] = "idle" if auto else "manual"
+                return
+            self.cond.notify_all()
+        name = " ".join(who.split())
+        if away:
+            mine = ", ".join(heroes)
+            why = " (no activity for 5 minutes)" if auto else ""
+            self.emit({"t": "line", "text": c(
+                f"\u23f8 {name} is away{why}." + (f" The computer will play {mine} in fights; "
+                                                  f"anyone can answer for them otherwise."
+                                                  if mine else ""), "dim")})
+        else:
+            self.emit({"t": "line", "text": c(f"\u25b6 {name} is back.", "dim")})
 
     def present(self) -> List[str]:
         now = time.time()
@@ -287,6 +400,8 @@ class Table:
         (or the hero isn't claimed by anyone here), anyone may answer."""
         owner = self.owner
         if not owner:
+            return True
+        if self.is_afk(owner) and self._norm(who) != self._norm(owner):
             return True
         here = {self._norm(n) for n in self.present()}
         if self._norm(owner) not in here:
@@ -456,6 +571,8 @@ class Table:
             return {"events": evs, "next": self.seq, "here": here, "waiting": self.waiting,
                     "owner": self.owner if self.waiting else "",
                     "may_answer": self.may_answer(who) if self.waiting else False,
+                    "away": [n for n in here if self._norm(n) in self.afk],
+                    "me_away": self.afk.get(self._norm(who), ""),
                     "reset": since < self.first_seq}
 
     def _run(self) -> None:
@@ -610,6 +727,9 @@ class Handler(BaseHTTPRequestHandler):
             except (TypeError, ValueError):
                 ok, why = False, "bad request"
             self._json({"ok": ok, "why": why})
+        elif u.path == "/api/afk":
+            t.set_afk(who, bool(body.get("away")), bool(body.get("auto")))
+            self._json({"ok": True})
         elif u.path == "/api/chat":
             t.chat(str(body.get("text", "")), who)
             self._json({"ok": True})
