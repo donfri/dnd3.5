@@ -1745,7 +1745,8 @@ class Combat:
                     self.act_coup, x)
             if x.move and p.has_feat("Improved Feint") and eng and x.std is False:
                 add("Feint as a move action (Improved Feint)", self.act_feint, x, True)
-            elif x.std and eng:
+            if x.std and eng and p.wild_form() and partner is None:
+                # an animal form can't disarm or wrestle, but it can still bowl foes over
                 add("Trip a foe (knock them prone)", self.act_trip, x)
                 add("Bull rush a foe (shove them out of melee)", self.act_bull_rush, x)
             lightning = next((e for e in p.effects if "_lightning" in e.tags), None)
@@ -1918,8 +1919,16 @@ class Combat:
                 w.get("wielded")]
             opts.append(f"{w['name']}{state}  {ab:+d}  {d}{db:+d}" if db else
                         f"{w['name']}{state}  {ab:+d}  {d}")
-        i = self.ui.choose("With which weapon?", opts, allow_cancel=True)
-        return None if i is None else usable[i]
+        # a pair of identical natural weapons (two claws) is one choice
+        seen, keep = set(), []
+        for o, w in zip(opts, usable):
+            if o not in seen:
+                seen.add(o)
+                keep.append((o, w))
+        if len(keep) == 1:
+            return keep[0][1]
+        i = self.ui.choose("With which weapon?", [o for o, _ in keep], allow_cancel=True)
+        return None if i is None else keep[i][1]
 
     def _ready_weapon(self, x: CState, w: dict) -> bool:
         """Draw a stowed weapon if needed. Returns False if no action left."""

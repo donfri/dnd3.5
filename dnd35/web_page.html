@@ -277,6 +277,8 @@ function handle(ev){
  narrateEvent(ev);
  if(ev.t=='battle'){lastBattle=ev.b;
   if(ev.inline&&ev.b)add('story',battleHtml(ev.b,true),'bmap');
+  else if(ev.b){const maps=$('story').querySelectorAll('.bmap');   // keep the newest map current
+   if(maps.length)maps[maps.length-1].innerHTML=battleHtml(ev.b,true)}
   if(tab=='map'&&lastState)renderMap(lastState);return}
  if(ev.t=='line'){const t=ev.text;add('full',ansi(t));
   if(isRoll(t)){add('dicelog',ansi(t));if($('showrolls').checked)add('story',ansi(t));return}
