@@ -125,6 +125,13 @@ python3 -m dnd35.web --port 8080
 Then share `http://<your-ip>:8080` with your friend. This needs port forwarding,
 or a tunnel such as Tailscale, `cloudflared tunnel`, or `ngrok http 8080`.
 
+### Hearing a line again
+
+Every line in the story has a small speaker button (on a computer it appears
+when you point at the line; on a phone it's always there, faintly). Click or tap
+it to hear that paragraph again, even with the narrator switched off. Characters'
+speech uses the character voice.
+
 ### Stepping away (AFK)
 
 Press **☕ AFK** at the top of the page when you step away. Everyone sees you're
