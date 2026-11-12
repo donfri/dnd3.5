@@ -35,7 +35,10 @@ main{flex:1;min-height:0;position:relative}
 .sheetlink{color:var(--gold);text-decoration:underline;cursor:pointer}
 /* choices */
 #bottom{border-top:1px solid var(--line);padding:8px 14px 10px;background:var(--panel);max-height:46vh;overflow-y:auto}
-#prompt{color:var(--gold);margin-bottom:6px;font-weight:bold}
+#prompt{color:var(--gold);font-weight:bold}
+#phead{display:flex;align-items:baseline;gap:8px;margin-bottom:6px}
+#ptog{display:none;margin-left:auto;color:var(--dim);font-size:12px;white-space:nowrap;border:1px solid var(--line);border-radius:6px;padding:1px 8px}
+.opt .hint{color:var(--dim);font-size:.92em}
 .grp{margin-bottom:6px}
 .grp .gl{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px}
 .grp .row{display:flex;flex-wrap:wrap;gap:6px}
@@ -138,9 +141,25 @@ table.sh tr.dim td{color:var(--dim)}
  nav button{padding:8px 9px;font-size:13px}
  .pane{padding:10px}
  #story,#full,#dicelog{font-size:13px}
- #bottom{padding:6px 8px 8px;max-height:52vh}
- .grp .row{flex-direction:column}
- .opt{width:100%;padding:10px 12px;font-size:14px}
+ header{flex-wrap:nowrap}
+ header .long{display:none}
+ #here{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1}
+ #afkbtn{margin-left:0;padding:2px 7px;font-size:12px}
+ #gear{padding:2px 7px}
+ #bottom{padding:6px 8px 8px;max-height:40vh}
+ #ptog{display:inline-block;cursor:pointer}
+ #phead{cursor:pointer;margin-bottom:5px}
+ #bottom.closed{max-height:none;overflow:hidden}
+ #bottom.closed #opts,#bottom.closed #textrow,#bottom.closed #status{display:none}
+ #bottom.closed #phead{margin-bottom:0}
+ #bottom.hasopts #textrow{display:none}
+ .grp{margin-bottom:5px}
+ .grp .gl{font-size:10px;margin-bottom:2px}
+ .grp .row{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+ .grp .opt .hint{display:none}
+ .opt{width:100%;padding:7px 9px;font-size:13px;line-height:1.3}
+ #opts>.row .opt{width:100%}
+ #owner{padding:3px 8px;font-size:12px;margin-bottom:4px}
  #prompt{font-size:14px}
  #textrow input{font-size:16px}
  #settings{left:6px;right:6px;width:auto;top:40px;max-height:80vh;overflow-y:auto}
@@ -174,7 +193,7 @@ table.sh tr.dim td{color:var(--dim)}
 <button type="submit" class="go" style="width:100%;padding:9px">Join</button>
 </form></div>
 
-<header><b>D&amp;D 3.5 &mdash; <span id="tname"></span></b><span id="here"></span>
+<header><b><span class="long">D&amp;D 3.5 &mdash; </span><span id="tname"></span></b><span id="here"></span>
 <span id="where" style="color:var(--dim);font-size:13px"></span>
 <button id="afkbtn" onclick="toggleAfk()" title="Step away: the computer plays your heroes in fights">&#9749; AFK</button>
 <button id="gear" onclick="toggleSettings()" title="Narrator & settings">&#128266; &#9881;</button></header>
@@ -224,7 +243,7 @@ table.sh tr.dim td{color:var(--dim)}
 <form id="chatbar" onsubmit="sendChat();return false"><input id="chatin" placeholder="talk to the table..."><button class="go">Send</button></form></div>
 <div class="pane" id="full"></div>
 </main>
-<div id="bottom"><div id="owner"></div><div id="prompt"></div><div id="opts"></div>
+<div id="bottom"><div id="owner"></div><div id="phead" onclick="togglePanel()"><span id="prompt"></span><span id="ptog"></span></div><div id="opts"></div>
 <form id="textrow" onsubmit="send(inp.value);return false"><input id="inp" autocomplete="off" placeholder="or type an answer / number"><button class="go">Send</button></form>
 <div id="status"></div></div>
 
@@ -245,7 +264,7 @@ $('jname').value=me;$('jtable').value=table;$('jpw').value=pw;
 
 // ---------------------------------------------------------------- tabs
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
-function showTab(t){tab=t;document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab==t));
+function showTab(t){tab=t;panelOpen=(t=='story');applyPanel();document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab==t));
  document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on',p.id==t));
  if(t=='chat'){unreadChat=0;$('b-chat').style.display='none';$('chatin').focus()}
  if(t=='story')$('b-story').style.display='none';
@@ -333,9 +352,20 @@ const GROUP_LABEL={Actions:'Do something here',Fight:'Attack & magic',Travel:'Go
 let showMore=false;
 function optButton(ev,o,i){const b=document.createElement('button');b.className='opt';let val;
  if(ev.kind=='confirm')val=(i==0?'y':'n');else if(ev.kind=='pause')val='';else val=(o=='(back)'?'0':String(i+1));
- b.innerHTML=(ev.kind=='choose'?'<span class="n">'+(o=='(back)'?'0':(i+1))+'</span>':'')+esc(o);b.onclick=()=>send(val);return b}
+ // in the big action menus, the "(explanation)" part is a hint (hidden on phones)
+ let label=esc(o);const m=ev.groups&&o.match(/^(.+?) (\(.+\))$/);
+ if(m)label=esc(m[1])+' <span class="hint">'+esc(m[2])+'</span>';
+ b.title=o;
+ b.innerHTML=(ev.kind=='choose'?'<span class="n">'+(o=='(back)'?'0':(i+1))+'</span>':'')+label;b.onclick=()=>send(val);return b}
+// ---- the choice panel: on phones it folds away on every tab except the story
+let panelOpen=true;const phone=()=>window.matchMedia('(max-width:700px)').matches;
+function applyPanel(){const has=!!$('prompt').textContent;
+ $('bottom').classList.toggle('closed',phone()&&has&&!panelOpen);
+ $('ptog').textContent=panelOpen?'hide \u25be':'choose \u25b4';$('ptog').style.visibility=has?'visible':'hidden'}
+function togglePanel(){if(!phone())return;panelOpen=!panelOpen;applyPanel()}
+window.addEventListener('resize',applyPanel);
 function showPrompt(ev){$('prompt').textContent=ev.text.replace(/:\s*$/,'');const box=$('opts');box.innerHTML='';
- const opts=ev.options||[];
+ const opts=ev.options||[];$('bottom').classList.toggle('hasopts',opts.length>0);applyPanel();
  if(!ev.groups){const row=document.createElement('div');row.className='row';row.style.display='flex';row.style.flexWrap='wrap';row.style.gap='6px';
   opts.forEach((o,i)=>row.appendChild(optButton(ev,o,i)));box.appendChild(row);return}
  const by={};opts.forEach((o,i)=>{const g=ev.groups[i]||'Game';(by[g]=by[g]||[]).push([o,i])});
@@ -351,7 +381,7 @@ function setOwner(owner,may){const o=$('owner');o.className='';o.textContent='';
  if(owner.toLowerCase()==me.toLowerCase()){o.className='mine';o.textContent='\u2b50 Your decision, '+me+'!'}
  else if(!may){o.className='theirs';o.textContent='\u23f3 Waiting for '+owner+'\u2026';$('bottom').classList.add('locked')}
  else{o.className='theirs';o.textContent=owner+' isn\'t at the table, so anyone can answer for them.'}}
-function clearPrompt(){$('prompt').textContent='';$('opts').innerHTML='';showMore=false}
+function clearPrompt(){$('prompt').textContent='';$('opts').innerHTML='';showMore=false;$('bottom').classList.remove('hasopts');applyPanel()}
 async function send(text){inp.value='';clearPrompt();if(away)setAway(false);
  const r=await fetch('/api/input',{method:'POST',headers:{'Content-Type':'application/json','X-Password':pw},body:JSON.stringify({table,name:me,text})});
  const j=await r.json();if(!j.ok)$('status').textContent=j.why||'Not accepted.'}
@@ -405,7 +435,7 @@ function renderParty(s){const el=$('party');if(!s.active){el.innerHTML='<div cla
   <div style="font-size:13px;color:var(--dim)">${xp} • ${esc(p.money)}</div>
   ${p.can_level?'<div class="lvl">⬆ Can level up! (choose "Level up!" in More options)</div>':''}
   <div>${p.effects.map(e=>'<span class="chip">'+esc(e)+'</span>').join('')}</div>
-  <button onclick="openSheet(${i})">Full character sheet</button> <button onclick="openSheet(${i});setTimeout(()=>{const g=$('sh-gear');if(g)$('msheet').scrollTop=g.offsetTop-10},50)">&#127890; Inventory</button>
+  <button onclick="openSheet(${i})">Character sheet &amp; gear</button>
   ${(p.player||'').toLowerCase()==me.toLowerCase()?'<span class="chip" style="color:var(--green)">your hero</span>':(hereNow.includes((p.player||'').toLowerCase())?'':`<button onclick="claimHero(${i})">\ud83c\udfad Play this hero</button>`)}</div>`}).join('')+'</div>'}
 async function claimHero(i){const r=await fetch('/api/claim',{method:'POST',headers:{'Content-Type':'application/json','X-Password':pw},body:JSON.stringify({table,name:me,hero:i})});
  const j=await r.json();if(!j.ok)alert(j.why);refreshState()}

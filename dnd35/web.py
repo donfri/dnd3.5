@@ -80,6 +80,8 @@ def free_roll(expr: str) -> dict:
 class WebUI(UI):
     """A UI whose screen is an event log shared by every connected browser."""
 
+    has_party_tab = True   # gear is managed from the Party tab, so no Inventory menu item
+
     def __init__(self, table: "Table"):
         super().__init__()
         self.table = table
@@ -649,6 +651,7 @@ class Handler(BaseHTTPRequestHandler):
                                 else "false").encode()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache")   # always pick up new versions
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)

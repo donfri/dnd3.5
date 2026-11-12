@@ -75,7 +75,7 @@ campaign at the same time, give it a different table name.
 - **🗺 Map:** draws itself as you explore. It shows rooms you've visited,
   doorways you've seen but not walked through, where you are, locked doors, and
   traps you've found.
-- **Gear:** in the Party tab, **🎒 Inventory** (or the sheet's Equipment table)
+- **Gear:** in the Party tab, open **Character sheet & gear**: the Equipment table
   has buttons to Equip, Unequip, Off hand, Use (potions and scrolls, on yourself
   or a friend), Give and Drop. These work while exploring, between actions, and
   only for your own hero.
@@ -142,6 +142,13 @@ question) to take over again. If your page sees no mouse, keyboard or touch for
 5 minutes you're marked away automatically, and moving the mouse or tapping
 brings you back. A player whose page has been closed for 5 minutes is treated
 as away too.
+
+### On a phone
+
+The choices panel takes at most 40% of the screen, shows choices two to a row
+without their explanations (press and hold one to see it), and folds down to a
+single line on every tab except Story. Tap **choose ▴** to open it there, or
+**hide ▾** to fold it on the Story tab.
 
 ## Quick start for two players
 

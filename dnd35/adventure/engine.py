@@ -1378,8 +1378,11 @@ class GM:
                          f"entering new areas to gain surprise)", "sneak", None))
         if any(p.level < rules.MAX_LEVEL and p.can_level_up() for p in gs.living()):
             opts.append((c("Level up!", "bgreen", "bold"), "levelup", None))
-        opts += [("Character sheet", "sheet", None), ("Inventory & equipment", "inv", None),
-                 ("Cast a spell (healing, buffs)", "cast", None)]
+        opts.append(("Character sheet", "sheet", None))
+        if not getattr(ui, "has_party_tab", False):
+            # the web page manages gear from each hero's sheet in the Party tab
+            opts.append(("Inventory & equipment", "inv", None))
+        opts.append(("Cast a spell (healing, buffs)", "cast", None))
         if not room.get("town") and any(p.familiar and p.conscious for p in gs.living()) \
                 and self.exits():
             opts.append(("Send a familiar to scout ahead", "scout", None))
