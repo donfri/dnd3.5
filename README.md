@@ -145,10 +145,17 @@ as away too. In settings, **When someone steps away** can be switched (for the
 whole table) from "the computer plays their heroes in fights" to "the party
 controls their heroes", which turns the autopilot off.
 
+When anyone at the table may answer, a blue banner says so: "👥 Party
+decision", or "☕ Bob is away — the party plays for them". These alerts are on
+by default (settings → Turn alerts). Answers given for someone else show in the
+story as "> Alice (for Bob): Attack", and when Bob comes back he's told how many
+choices the party and the computer made for his heroes while he was away.
+
 ### On a phone
 
-The tabs, AFK and settings move into the **☰** menu at the top right (the
-button beside it shows which tab you're on). The choices panel takes at most
+The tabs, AFK and settings move into the menu at the top right: the button
+shows which tab you're on (for example **📖 Story ▾**) and a red dot means
+there's something new on another tab. The choices panel takes at most
 about a third of the screen, shows choices two to a row without their
 explanations (press and hold one to see it), and folds down to a single line on
 every tab except Story. Tap **choose ▴** to open it there, or **hide ▾** to fold

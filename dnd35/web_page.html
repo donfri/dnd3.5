@@ -19,9 +19,8 @@ header b{color:var(--gold)}
 #afkbtn.on{background:#3a2f16;border-color:var(--gold);color:var(--gold)}
 #afkbar{display:none;background:#3a2f16;border-bottom:1px solid var(--gold);color:var(--gold);padding:8px 14px;font-size:14px;white-space:normal}
 #afkbar button{margin-left:10px;background:var(--gold);color:#111;border:0;border-radius:6px;padding:4px 12px;font:inherit;font-weight:bold;cursor:pointer}
-#curtab,#menubtn{display:none;background:none;border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:2px 9px;font-size:13px;position:relative}
-#menubtn{font-size:17px;line-height:1.2;padding:1px 10px}
-#mdot{display:none;position:absolute;top:2px;right:3px;width:8px;height:8px;border-radius:50%;background:var(--red)}
+#curtab{display:none;background:none;border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:2px 9px;font-size:13px;position:relative}
+#mdot{display:none;position:absolute;top:-3px;right:-3px;width:9px;height:9px;border-radius:50%;background:var(--red);border:1px solid var(--bg)}
 #menu{display:none;position:absolute;right:6px;top:42px;z-index:25;background:var(--panel);border:1px solid var(--gold);border-radius:10px;padding:6px;min-width:210px;box-shadow:0 8px 24px #000a}
 #menu button{display:flex;justify-content:space-between;align-items:center;width:100%;background:none;border:0;color:var(--ink);padding:10px 12px;border-radius:7px;font-size:15px;text-align:left}
 #menu button.on{color:var(--gold);background:#2a2216}
@@ -62,6 +61,7 @@ main{flex:1;min-height:0;position:relative}
 #owner{display:none;margin-bottom:6px;padding:5px 9px;border-radius:7px;font-size:13px}
 #owner.mine{display:block;background:#2c3a22;color:var(--green)}
 #owner.theirs{display:block;background:#3a2c22;color:#f4b45e}
+#owner.party{display:block;background:#1f2c3a;color:#8ec5ff;border:1px solid #3d5f85}
 .locked .opt{opacity:.45;pointer-events:none}
 /* party */
 .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
@@ -152,7 +152,7 @@ table.sh tr.dim td{color:var(--dim)}
  header{flex-wrap:nowrap}
  nav#tabs{display:none}
  #afkbtn,#gear{display:none}
- #curtab,#menubtn{display:inline-block}
+ #curtab{display:inline-block}
  #curtab{margin-left:auto}
  header .long{display:none}
  #here{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1}
@@ -209,7 +209,7 @@ table.sh tr.dim td{color:var(--dim)}
 <span id="where" style="color:var(--dim);font-size:13px"></span>
 <button id="afkbtn" onclick="toggleAfk()" title="Step away: the computer plays your heroes in fights">&#9749; AFK</button>
 <button id="gear" onclick="toggleSettings()" title="Narrator & settings">&#128266; &#9881;</button>
-<button id="curtab" onclick="toggleMenu()"></button><button id="menubtn" onclick="toggleMenu()" title="Menu">&#9776;<span id="mdot"></span></button></header>
+<button id="curtab" onclick="toggleMenu()" title="Menu"><span id="curlabel"></span><span id="mdot"></span></button></header>
 <div id="menu"></div>
 <div id="afkbar"><span id="afktext"></span><button onclick="setAway(false)">I'm back</button></div>
 <div id="settings">
@@ -300,9 +300,9 @@ function toggleMenu(){const m=$('menu');if(m.style.display=='block'){m.style.dis
  h+='<hr><button onclick="toggleMenu();toggleAfk()"><span>&#9749; '+(away?"I'm back":'Step away (AFK)')+'</span></button>';
  h+='<button onclick="toggleMenu();toggleSettings()"><span>&#128266; Narrator &amp; settings</span></button>';
  m.innerHTML=h;m.style.display='block'}
-document.addEventListener('click',e=>{const m=$('menu');if(m.style.display=='block'&&!m.contains(e.target)&&e.target.id!='menubtn'&&e.target.id!='curtab'&&!$('menubtn').contains(e.target))m.style.display='none'});
+document.addEventListener('click',e=>{const m=$('menu');if(m.style.display=='block'&&!m.contains(e.target)&&!$('curtab').contains(e.target))m.style.display='none'});
 function updateMenuBar(){const b=document.querySelector(`nav#tabs button[data-tab="${tab}"]`);
- if(b)$('curtab').textContent=b.childNodes[0].textContent.trim()+' \u25be';
+ if(b)$('curlabel').textContent=b.childNodes[0].textContent.trim()+' \u25be';
  $('mdot').style.display=[...document.querySelectorAll('nav#tabs .badge')].some(x=>x.style.display!='none')?'block':'none'}
 setInterval(updateMenuBar,800);
 function toggleSettings(){const s=$('settings');s.style.display=s.style.display=='block'?'none':'block'}
@@ -376,7 +376,7 @@ async function poll(){if(polling)return;polling=true;
   flushSpeech();
   const got=j.events.length;next=j.next;primed=true;
   if(j.waiting){const ps=j.events.filter(e=>e.t=='prompt');if(ps.length){showPrompt(ps[ps.length-1]);maybeAlert(j,ps[ps.length-1])}
-   setOwner(j.owner,j.may_answer);
+   setOwner(j.owner,j.may_answer,j);
    if(tab!='story'&&tab!='chat'&&got)$('b-story').style.display='inline'}else{clearPrompt();setOwner('',false)}
   hereNow=j.here.map(x=>x.toLowerCase());$('here').textContent='• '+j.here.map(n=>(j.away||[]).includes(n)?n+' (away)':n).join(', ');
   if(j.me_away!==undefined&&!afkPending&&j.me_away!==away){away=j.me_away;renderAfk()}
@@ -415,11 +415,14 @@ function showPrompt(ev){$('prompt').textContent=ev.text.replace(/:\s*$/,'');cons
   if(GROUP_LABEL[g])d.innerHTML='<div class="gl">'+esc(GROUP_LABEL[g]||g)+'</div>';
   const row=document.createElement('div');row.className='row';by[g].forEach(([o,i])=>{const b=optButton(ev,o,i);if(g=='Actions'||g=='Fight')b.classList.add('primary');row.appendChild(b)});
   d.appendChild(row);box.appendChild(d)}}
-function setOwner(owner,may){const o=$('owner');o.className='';o.textContent='';$('bottom').classList.remove('locked');
- if(!owner)return;
+function setOwner(owner,may,j){const o=$('owner');o.className='';o.textContent='';$('bottom').classList.remove('locked');
+ if(!owner){if(j){o.className='party';o.textContent='\ud83d\udc65 Party decision \u2014 anyone at the table can answer.'}return}
  if(owner.toLowerCase()==me.toLowerCase()){o.className='mine';o.textContent='\u2b50 Your decision, '+me+'!'}
  else if(!may){o.className='theirs';o.textContent='\u23f3 Waiting for '+owner+'\u2026';$('bottom').classList.add('locked')}
- else{o.className='theirs';o.textContent=owner+' isn\'t at the table, so anyone can answer for them.'}}
+ else if(j&&(j.away||[]).map(x=>x.toLowerCase()).includes(owner.toLowerCase())){o.className='party';
+  o.textContent='\u2615 '+owner+' is away \u2014 '+(j.afk_mode=='party'?'the party plays for them. Anyone can answer.':
+   'anyone can answer; in a fight the computer answers after a moment.')}
+ else{o.className='party';o.textContent='\ud83d\udc65 '+owner+' isn\'t at the table \u2014 the party plays for them. Anyone can answer.'}}
 function clearPrompt(){$('prompt').textContent='';$('opts').innerHTML='';showMore=false;$('bottom').classList.remove('hasopts');applyPanel()}
 async function send(text){inp.value='';clearPrompt();if(away)setAway(false);
  const r=await fetch('/api/input',{method:'POST',headers:hdr(true),body:JSON.stringify({table,name:me,text})});
@@ -428,7 +431,7 @@ async function sendChat(){const t=$('chatin');if(!t.value.trim())return;
  await fetch('/api/chat',{method:'POST',headers:hdr(true),body:JSON.stringify({table,name:me,text:t.value})});t.value=''}
 
 // ---------------------------------------------------------------- turn alerts
-const AL={mine:localStorage.getItem('amine')!='0',party:localStorage.getItem('aparty')=='1',sound:localStorage.getItem('asound')!='0'};
+const AL={mine:localStorage.getItem('amine')!='0',party:localStorage.getItem('aparty')!='0',sound:localStorage.getItem('asound')!='0'};
 let lastAlertSeq=-1,flashTimer=null;const baseTitle=document.title;
 for(const [id,k] of [['amine','mine'],['aparty','party'],['asound','sound']]){const el=$(id);el.checked=AL[k];
  el.onchange=()=>{AL[k]=el.checked;localStorage.setItem(id,el.checked?'1':'0');if(k=='sound'&&el.checked)chime()}}
@@ -444,9 +447,10 @@ function stopFlash(){if(flashTimer){clearInterval(flashTimer);flashTimer=null}do
 window.addEventListener('focus',stopFlash);document.addEventListener('visibilitychange',()=>{if(!document.hidden)stopFlash()});
 function maybeAlert(j,ev){if(!primed||ev.seq<=lastAlertSeq)return;lastAlertSeq=ev.seq;
  const mineTurn=j.owner&&j.owner.toLowerCase()==me.toLowerCase();
- if(!(mineTurn&&AL.mine)&&!(!j.owner&&AL.party))return;
+ const partyTurn=!mineTurn&&(!j.owner||j.may_answer);
+ if(!(mineTurn&&AL.mine)&&!(partyTurn&&AL.party))return;
  if(!document.hidden&&document.hasFocus())return;
- const msg=mineTurn?'\u2b50 Your turn!':'\u2753 Party decision';
+ const msg=mineTurn?'\u2b50 Your turn!':(j.owner?'\ud83d\udc65 Play for '+j.owner:'\ud83d\udc65 Party decision');
  flashTitle(msg+' \u2014 D&D');
  if(AL.sound)chime();
  if('Notification' in window&&Notification.permission=='granted'){

@@ -192,8 +192,15 @@ class WebUI(UI):
                 shown = "back"
         elif kind == "confirm":
             shown = {"y": "Yes", "n": "No"}.get(text.strip().lower()[:1], shown)
+        by = who
+        if owner and who and not who.startswith("autopilot") and \
+                self.table._norm(who) != self.table._norm(owner):
+            by = f"{who} (for {owner})"      # someone played an absent friend's hero
+            self.table.note_cover(owner, "party")
+        elif who.startswith("autopilot"):
+            self.table.note_cover(owner, "computer")
         self.table.emit({"t": "line", "kind": "echo",
-                         "text": c(f"> {who + ': ' if who else ''}{shown}", "bold")})
+                         "text": c(f"> {by + ': ' if by else ''}{shown}", "bold")})
         if text.strip().lower() in ("/quit", "/exit"):
             return ""  # nobody can kill the shared table from a browser
         return text
@@ -320,6 +327,7 @@ class Table:
         self.afk: Dict[str, str] = {}      # normalized name -> "manual" / "idle"
         self.afk_mode = "computer"         # or "party": friends answer for away players
         self.tokens: Dict[str, list] = {}  # normalized name -> [browser token, last seen]
+        self.covered: Dict[str, list] = {}  # away player -> [party answers, computer answers]
         self.ui = WebUI(self)
         self.ui.autosave_name = f"autosave-{name}"
         self.thread = threading.Thread(target=self._run, daemon=True)
@@ -361,6 +369,12 @@ class Table:
             self.owner = ""
             return self.inputs.pop(0)
 
+    def note_cover(self, owner: str, by: str) -> None:
+        if not hasattr(self, "covered"):
+            self.covered = {}
+        n = self.covered.setdefault(self._norm(owner), [0, 0])
+        n[0 if by == "party" else 1] += 1
+
     def is_afk(self, name: str) -> bool:
         """Marked away, or their page has been gone for over 5 minutes."""
         key = self._norm(name)
@@ -381,6 +395,7 @@ class Table:
             was = key in self.afk
             if away and not was:
                 self.afk[key] = "idle" if auto else "manual"
+                getattr(self, "covered", {}).pop(key, None)   # count from now
             elif not away and was:
                 del self.afk[key]
             else:
@@ -397,7 +412,15 @@ class Table:
                    f" Anyone at the table can answer for {mine}.") if mine else ""
             self.emit({"t": "line", "text": c(f"\u23f8 {name} is away{why}.{how}", "yellow")})
         else:
-            self.emit({"t": "line", "text": c(f"\u25b6 {name} is back.", "yellow")})
+            party, comp = (getattr(self, "covered", {}).pop(key, None) or [0, 0])
+            done = []
+            if party:
+                done.append(f"the party made {party} choice{'s' if party != 1 else ''}")
+            if comp:
+                done.append(f"the computer made {comp}")
+            extra = (" While you were away, " + " and ".join(done) + " for your heroes."
+                     ) if done else ""
+            self.emit({"t": "line", "text": c(f"\u25b6 {name} is back.{extra}", "yellow")})
 
     def set_afk_mode(self, mode: str, who: str) -> None:
         if mode not in ("computer", "party") or mode == self.afk_mode:

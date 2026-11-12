@@ -99,6 +99,17 @@ class TestAway(unittest.TestCase):
         t.set_afk("Bob", False)
         self.assertFalse(t.may_answer("Alice"))
 
+    def test_back_summary_counts_cover(self):
+        t = self.bare_table()
+        t.set_afk("Bob", True)
+        t.note_cover("Bob", "party")
+        t.note_cover("bob", "party")
+        t.note_cover("Bob", "computer")
+        t.set_afk("Bob", False)
+        last = t.events[-1]["text"]
+        self.assertIn("the party made 2 choices", last)
+        self.assertIn("the computer made 1", last)
+
     def test_page_gone_five_minutes_counts_as_away(self):
         t = self.bare_table()
         t.presence["Bob"] = time.time() - web.IDLE_SECONDS - 5
