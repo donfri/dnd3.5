@@ -1,4 +1,6 @@
 import json
+import os
+import urllib.error
 import threading
 import time
 import unittest
@@ -15,13 +17,16 @@ class TestWeb(unittest.TestCase):
         base = f"http://127.0.0.1:{srv.server_address[1]}"
 
         def poll(name, since=0):
-            with urllib.request.urlopen(f"{base}/api/poll?table=test&since={since}&name={name}"
-                                        ) as r:
+            req = urllib.request.Request(
+                f"{base}/api/poll?table=test&since={since}&name={name}",
+                headers={"X-Player-Token": "tok-" + name})
+            with urllib.request.urlopen(req) as r:
                 return json.load(r)
 
         def post(path, body):
             req = urllib.request.Request(base + path, json.dumps(body).encode(),
-                                         {"Content-Type": "application/json"})
+                                         {"Content-Type": "application/json",
+                                          "X-Player-Token": "tok-" + body.get("name", "")})
             with urllib.request.urlopen(req) as r:
                 return json.load(r)
 
@@ -46,10 +51,6 @@ class TestWeb(unittest.TestCase):
         srv.shutdown()
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TestOwnership(unittest.TestCase):
     def test_only_owner_answers_when_present(self):
         t = web.Table.__new__(web.Table)  # no game thread needed
@@ -58,6 +59,8 @@ class TestOwnership(unittest.TestCase):
         t.waiting = True
         t.inputs = []
         t.cond = threading.Condition()
+        t.item_lock = threading.Lock()
+        t.afk = {}
         ok, why = t.submit("1", "Alice")
         self.assertFalse(ok)
         self.assertIn("Bob", why)
@@ -74,6 +77,8 @@ class TestAway(unittest.TestCase):
         t = web.Table.__new__(web.Table)  # no game thread needed
         t.presence = {"Alice": time.time(), "Bob": time.time()}
         t.afk = {}
+        t.afk_mode = "computer"
+        t.item_lock = threading.Lock()
         t.owner = ""
         t.waiting = False
         t.inputs = []
@@ -157,3 +162,91 @@ class TestFreeRoll(unittest.TestCase):
         for bad in ("banana", "", "1000d6", "d1", "2d6+"):
             with self.assertRaises(ValueError):
                 web.free_roll(bad)
+
+
+class TestSecurity(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.srv = ThreadingHTTPServer(("127.0.0.1", 0), web.Handler)
+        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+        cls.base = f"http://127.0.0.1:{cls.srv.server_address[1]}"
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.shutdown()
+
+    def req(self, path, body=None, headers=None):
+        h = {"Content-Type": "application/json", **(headers or {})}
+        data = json.dumps(body).encode() if body is not None else None
+        r = urllib.request.Request(self.base + path, data, h)
+        try:
+            with urllib.request.urlopen(r) as resp:
+                return resp.status, dict(resp.headers), resp.read()
+        except urllib.error.HTTPError as e:
+            return e.code, dict(e.headers), e.read()
+
+    def test_security_headers(self):
+        code, h, _ = self.req("/")
+        self.assertEqual(code, 200)
+        self.assertIn("frame-ancestors 'none'", h["Content-Security-Policy"])
+        self.assertEqual(h["X-Frame-Options"], "DENY")
+        self.assertEqual(h["X-Content-Type-Options"], "nosniff")
+
+    def test_name_bound_to_one_browser(self):
+        body = {"table": "sec", "name": "Chris", "text": "hi"}
+        self.assertEqual(self.req("/api/chat", body, {"X-Player-Token": "a"})[0], 200)
+        code, _, out = self.req("/api/chat", body, {"X-Player-Token": "b"})
+        self.assertEqual(code, 409)
+        self.assertIn(b"already using", out)
+        self.assertEqual(self.req("/api/chat", body)[0], 400)          # no token
+        self.assertEqual(self.req("/api/chat", dict(body, name="Dana"),
+                                  {"X-Player-Token": "b"})[0], 200)
+
+    def test_bad_bodies_rejected(self):
+        r = urllib.request.Request(self.base + "/api/chat", b"[1,2]",
+                                   {"Content-Type": "application/json"})
+        with self.assertRaises(urllib.error.HTTPError) as cm:
+            urllib.request.urlopen(r)
+        self.assertEqual(cm.exception.code, 400)
+
+    def test_password_and_lockout(self):
+        old = os.environ.get("TABLE_PASSWORD")
+        os.environ["TABLE_PASSWORD"] = "sesame"
+        web.FAILS.clear()
+        try:
+            ok = self.req("/api/chat", {"table": "sec", "name": "Eve", "text": "x"},
+                          {"X-Password": "sesame", "X-Player-Token": "e"})
+            self.assertEqual(ok[0], 200)
+            for _ in range(web.FAIL_LIMIT):
+                self.assertEqual(self.req("/api/chat", {"table": "sec"},
+                                          {"X-Password": "nope"})[0], 403)
+            # locked out now, even with the right password
+            self.assertEqual(self.req("/api/chat", {"table": "sec", "name": "Eve"},
+                                      {"X-Password": "sesame", "X-Player-Token": "e"})[0], 429)
+        finally:
+            web.FAILS.clear()
+            if old is None:
+                os.environ.pop("TABLE_PASSWORD", None)
+            else:
+                os.environ["TABLE_PASSWORD"] = old
+
+    def test_table_limit(self):
+        old = web.MAX_TABLES
+        web.MAX_TABLES = len(web.TABLES)
+        try:
+            code, _, _ = self.req("/api/chat", {"table": "brand-new-table", "name": "Z"},
+                                  {"X-Player-Token": "z"})
+            self.assertEqual(code, 503)
+        finally:
+            web.MAX_TABLES = old
+
+    def test_party_mode_turns_off_autopilot(self):
+        t = TestAway().bare_table()
+        t.afk_mode = "party"
+        t.set_afk("Bob", True)
+        t.inputs.append(("3", "Alice"))
+        self.assertEqual(t.wait_input("Bob", lambda: "1"), ("3", "Alice"))
+
+
+if __name__ == "__main__":
+    unittest.main()

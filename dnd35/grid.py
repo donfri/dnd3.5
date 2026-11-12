@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import heapq
 import math
-from typing import Dict, Iterable, List, Optional, Set, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from . import dice
 

@@ -1442,7 +1442,8 @@ class GM:
         elif kind == "save":
             name = ui.ask("Save name", "save1")
             safe = "".join(ch for ch in name if ch.isalnum() or ch in "-_") or "save1"
-            ui.good(f"Saved to {save_game(gs, safe)}")
+            save_game(gs, safe)
+            ui.good(f"Saved as '{safe}'.")
         elif kind == "help":
             from ..game import HELP_TEXT
             ui.para(HELP_TEXT)

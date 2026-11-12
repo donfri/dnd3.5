@@ -19,6 +19,14 @@ header b{color:var(--gold)}
 #afkbtn.on{background:#3a2f16;border-color:var(--gold);color:var(--gold)}
 #afkbar{display:none;background:#3a2f16;border-bottom:1px solid var(--gold);color:var(--gold);padding:8px 14px;font-size:14px;white-space:normal}
 #afkbar button{margin-left:10px;background:var(--gold);color:#111;border:0;border-radius:6px;padding:4px 12px;font:inherit;font-weight:bold;cursor:pointer}
+#curtab,#menubtn{display:none;background:none;border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:2px 9px;font-size:13px;position:relative}
+#menubtn{font-size:17px;line-height:1.2;padding:1px 10px}
+#mdot{display:none;position:absolute;top:2px;right:3px;width:8px;height:8px;border-radius:50%;background:var(--red)}
+#menu{display:none;position:absolute;right:6px;top:42px;z-index:25;background:var(--panel);border:1px solid var(--gold);border-radius:10px;padding:6px;min-width:210px;box-shadow:0 8px 24px #000a}
+#menu button{display:flex;justify-content:space-between;align-items:center;width:100%;background:none;border:0;color:var(--ink);padding:10px 12px;border-radius:7px;font-size:15px;text-align:left}
+#menu button.on{color:var(--gold);background:#2a2216}
+#menu hr{border:0;border-top:1px solid var(--line);margin:4px 6px}
+#menu .badge{background:var(--red);color:#fff;border-radius:9px;padding:0 6px;font-size:11px}
 #gear{background:none;border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:3px 9px}
 #settings{display:none;position:absolute;right:12px;top:44px;background:var(--panel);border:1px solid var(--gold);border-radius:10px;padding:14px;z-index:20;width:300px}
 #settings label{display:block;color:var(--dim);font-size:12px;margin-top:8px}
@@ -142,11 +150,15 @@ table.sh tr.dim td{color:var(--dim)}
  .pane{padding:10px}
  #story,#full,#dicelog{font-size:13px}
  header{flex-wrap:nowrap}
+ nav#tabs{display:none}
+ #afkbtn,#gear{display:none}
+ #curtab,#menubtn{display:inline-block}
+ #curtab{margin-left:auto}
  header .long{display:none}
  #here{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1}
  #afkbtn{margin-left:0;padding:2px 7px;font-size:12px}
  #gear{padding:2px 7px}
- #bottom{padding:6px 8px 8px;max-height:40vh}
+ #bottom{padding:6px 8px 8px;max-height:36vh}
  #ptog{display:inline-block;cursor:pointer}
  #phead{cursor:pointer;margin-bottom:5px}
  #bottom.closed{max-height:none;overflow:hidden}
@@ -196,7 +208,9 @@ table.sh tr.dim td{color:var(--dim)}
 <header><b><span class="long">D&amp;D 3.5 &mdash; </span><span id="tname"></span></b><span id="here"></span>
 <span id="where" style="color:var(--dim);font-size:13px"></span>
 <button id="afkbtn" onclick="toggleAfk()" title="Step away: the computer plays your heroes in fights">&#9749; AFK</button>
-<button id="gear" onclick="toggleSettings()" title="Narrator & settings">&#128266; &#9881;</button></header>
+<button id="gear" onclick="toggleSettings()" title="Narrator & settings">&#128266; &#9881;</button>
+<button id="curtab" onclick="toggleMenu()"></button><button id="menubtn" onclick="toggleMenu()" title="Menu">&#9776;<span id="mdot"></span></button></header>
+<div id="menu"></div>
 <div id="afkbar"><span id="afktext"></span><button onclick="setAway(false)">I'm back</button></div>
 <div id="settings">
 <b style="color:var(--gold)">Narrator (read aloud)</b>
@@ -215,6 +229,9 @@ table.sh tr.dim td{color:var(--dim)}
 <label style="color:var(--ink)"><input type="checkbox" id="asound" style="width:auto"> Play a chime</label>
 <button class="opt" style="margin-top:6px" id="anotify" onclick="enableNotify()">Enable desktop notifications</button>
 <div class="why" style="margin-top:4px">Alerts fire only when this tab is in the background.</div>
+<b style="color:var(--gold);display:block;margin-top:14px">When someone steps away</b>
+<select id="afkmode" onchange="setAfkMode(this.value)" style="margin-top:6px"><option value="computer">The computer plays their heroes in fights</option><option value="party">The party controls their heroes</option></select>
+<div class="why" style="margin-top:4px">This is shared by everyone at the table.</div>
 <label style="margin-top:12px">Story tab</label>
 <label style="color:var(--ink)"><input type="checkbox" id="showrolls" style="width:auto"> Show dice rolls in the story too</label>
 </div>
@@ -256,6 +273,10 @@ const NEEDPW=__NEEDPW__;
 let me=localStorage.getItem('dndname')||'', table=new URLSearchParams(location.search).get('table')||localStorage.getItem('dndtable')||'main', pw=localStorage.getItem('dndpw')||'';
 let hereNow=[];
 let primedBattle=false;
+// a random id for this browser: the server binds your name to it so nobody else can answer as you
+let ptoken=localStorage.getItem('dndtoken');
+if(!ptoken){ptoken=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():String(Math.random()).slice(2)+Date.now();localStorage.setItem('dndtoken',ptoken)}
+function hdr(json){const h={'X-Password':pw,'X-Player-Token':ptoken};if(json)h['Content-Type']='application/json';return h}
 let next=0, polling=false, tab='story', unreadChat=0, lastState=null, stateTimer=null, primed=false;
 const $=id=>document.getElementById(id), inp=$('inp');
 const blocks={};
@@ -264,13 +285,26 @@ $('jname').value=me;$('jtable').value=table;$('jpw').value=pw;
 
 // ---------------------------------------------------------------- tabs
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
-function showTab(t){tab=t;panelOpen=(t=='story');applyPanel();document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab==t));
+function showTab(t){tab=t;panelOpen=(t=='story');applyPanel();setTimeout(updateMenuBar,0);document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab==t));
  document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on',p.id==t));
  if(t=='chat'){unreadChat=0;$('b-chat').style.display='none';$('chatin').focus()}
  if(t=='story')$('b-story').style.display='none';
  if(t=='party'||t=='journal'||t=='map')refreshState();
  $('bottom').style.display=(t=='chat')?'none':'block';
  const p=$(t);p.scrollTop=(t=='map')?0:p.scrollHeight}
+// ---- phone menu (replaces the tab bar on small screens)
+function toggleMenu(){const m=$('menu');if(m.style.display=='block'){m.style.display='none';return}
+ let h='';document.querySelectorAll('nav#tabs button').forEach(b=>{const bd=b.querySelector('.badge');
+  const label=b.childNodes[0].textContent.trim();
+  h+=`<button class="${b.dataset.tab==tab?'on':''}" onclick="toggleMenu();showTab('${b.dataset.tab}')"><span>${label}</span>${bd&&bd.style.display!='none'?'<span class="badge">'+esc(bd.textContent)+'</span>':''}</button>`});
+ h+='<hr><button onclick="toggleMenu();toggleAfk()"><span>&#9749; '+(away?"I'm back":'Step away (AFK)')+'</span></button>';
+ h+='<button onclick="toggleMenu();toggleSettings()"><span>&#128266; Narrator &amp; settings</span></button>';
+ m.innerHTML=h;m.style.display='block'}
+document.addEventListener('click',e=>{const m=$('menu');if(m.style.display=='block'&&!m.contains(e.target)&&e.target.id!='menubtn'&&e.target.id!='curtab'&&!$('menubtn').contains(e.target))m.style.display='none'});
+function updateMenuBar(){const b=document.querySelector(`nav#tabs button[data-tab="${tab}"]`);
+ if(b)$('curtab').textContent=b.childNodes[0].textContent.trim()+' \u25be';
+ $('mdot').style.display=[...document.querySelectorAll('nav#tabs .badge')].some(x=>x.style.display!='none')?'block':'none'}
+setInterval(updateMenuBar,800);
 function toggleSettings(){const s=$('settings');s.style.display=s.style.display=='block'?'none':'block'}
 
 // ---------------------------------------------------------------- text helpers
@@ -318,20 +352,24 @@ function handle(ev){
   if(tab!='chat'&&primed&&ev.who!=me){unreadChat++;$('b-chat').textContent=unreadChat;$('b-chat').style.display='inline'}}}
 // ---------------------------------------------------------------- away from keyboard
 const IDLE_MS=(+new URLSearchParams(location.search).get('idlesec')||300)*1000;let away='',afkPending=false,lastAct=Date.now(),joined=false;
-function renderAfk(){$('afkbtn').classList.toggle('on',!!away);$('afkbtn').innerHTML=away?'&#9749; Away':'&#9749; AFK';
+function renderAfk(){const pm=$('afkmode')&&$('afkmode').value=='party';$('afkbtn').classList.toggle('on',!!away);$('afkbtn').innerHTML=away?'&#9749; Away':'&#9749; AFK';
  $('afkbar').style.display=away?'block':'none';
- $('afktext').textContent=away=='idle'?"You've been idle for 5 minutes, so you're marked away. The computer plays your heroes in fights and others can answer for them. Move the mouse or tap to come back.":
-  "You're away. The computer plays your heroes in fights, and others can answer for them otherwise."}
+ $('afktext').textContent=away=='idle'?"You've been idle for 5 minutes, so you're marked away. "+(pm?"The party can answer for your heroes.":"The computer plays your heroes in fights and others can answer for them.")+" Move the mouse or tap to come back.":
+  "You're away. "+(pm?"The party can answer for your heroes.":"The computer plays your heroes in fights, and others can answer for them otherwise.")}
 async function setAway(a,auto){if(!joined)return;afkPending=true;away=a?(auto?'idle':'manual'):'';renderAfk();
- try{await fetch('/api/afk',{method:'POST',headers:{'Content-Type':'application/json','X-Password':pw},body:JSON.stringify({table,name:me,away:a,auto:!!auto})})}catch(e){}
+ try{await fetch('/api/afk',{method:'POST',headers:hdr(true),body:JSON.stringify({table,name:me,away:a,auto:!!auto})})}catch(e){}
  afkPending=false}
 function toggleAfk(){setAway(!away,false)}
+async function setAfkMode(m){await fetch('/api/afkmode',{method:'POST',headers:hdr(true),body:JSON.stringify({table,name:me,mode:m})}).catch(()=>{})}
 function activity(){lastAct=Date.now();if(away=='idle'&&!afkPending)setAway(false)}
 ['mousemove','mousedown','keydown','touchstart','wheel'].forEach(ev=>window.addEventListener(ev,activity,{passive:true,capture:true}));
 setInterval(()=>{if(joined&&!away&&Date.now()-lastAct>IDLE_MS)setAway(true,true)},10000);
 async function poll(){if(polling)return;polling=true;
- while(true){try{const r=await fetch('/api/poll?table='+encodeURIComponent(table)+'&since='+next+'&name='+encodeURIComponent(me),{headers:{'X-Password':pw}});
+ while(true){try{const r=await fetch('/api/poll?table='+encodeURIComponent(table)+'&since='+next+'&name='+encodeURIComponent(me),{headers:hdr()});
   if(r.status==403){alert('Wrong password');localStorage.removeItem('dndpw');location.reload();return}
+  if(r.status==429||r.status==409||r.status==503){const e=await r.json().catch(()=>({}));polling=false;joined=false;
+   alert(e.why||e.error||'The server refused to join.');$('join').style.display='flex';return}
+  if(r.status==400){location.reload();return}
   const j=await r.json();
   if(j.reset){['story','dicelog','full','chatlog'].forEach(id=>$(id).innerHTML='')}
   for(const ev of j.events){if(ev.seq<next&&!j.reset)continue;handle(ev)}
@@ -342,6 +380,7 @@ async function poll(){if(polling)return;polling=true;
    if(tab!='story'&&tab!='chat'&&got)$('b-story').style.display='inline'}else{clearPrompt();setOwner('',false)}
   hereNow=j.here.map(x=>x.toLowerCase());$('here').textContent='• '+j.here.map(n=>(j.away||[]).includes(n)?n+' (away)':n).join(', ');
   if(j.me_away!==undefined&&!afkPending&&j.me_away!==away){away=j.me_away;renderAfk()}
+  if(j.afk_mode&&$('afkmode').value!==j.afk_mode)$('afkmode').value=j.afk_mode;
   $('status').textContent=!j.waiting?'The GM is thinking…':(j.owner&&!j.may_answer?'Only '+j.owner+' can answer this one.':(j.owner?'':'Party decision — anyone at the table can answer.'));
   if(got){for(const id of ['story','dice','full']){const p=$(id);p.scrollTop=p.scrollHeight}scheduleState()}
  }catch(e){$('status').textContent='Connection lost, retrying…';await new Promise(r=>setTimeout(r,2000))}}}
@@ -383,10 +422,10 @@ function setOwner(owner,may){const o=$('owner');o.className='';o.textContent='';
  else{o.className='theirs';o.textContent=owner+' isn\'t at the table, so anyone can answer for them.'}}
 function clearPrompt(){$('prompt').textContent='';$('opts').innerHTML='';showMore=false;$('bottom').classList.remove('hasopts');applyPanel()}
 async function send(text){inp.value='';clearPrompt();if(away)setAway(false);
- const r=await fetch('/api/input',{method:'POST',headers:{'Content-Type':'application/json','X-Password':pw},body:JSON.stringify({table,name:me,text})});
+ const r=await fetch('/api/input',{method:'POST',headers:hdr(true),body:JSON.stringify({table,name:me,text})});
  const j=await r.json();if(!j.ok)$('status').textContent=j.why||'Not accepted.'}
 async function sendChat(){const t=$('chatin');if(!t.value.trim())return;
- await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json','X-Password':pw},body:JSON.stringify({table,name:me,text:t.value})});t.value=''}
+ await fetch('/api/chat',{method:'POST',headers:hdr(true),body:JSON.stringify({table,name:me,text:t.value})});t.value=''}
 
 // ---------------------------------------------------------------- turn alerts
 const AL={mine:localStorage.getItem('amine')!='0',party:localStorage.getItem('aparty')=='1',sound:localStorage.getItem('asound')!='0'};
@@ -416,12 +455,12 @@ function maybeAlert(j,ev){if(!primed||ev.seq<=lastAlertSeq)return;lastAlertSeq=e
 // ---------------------------------------------------------------- free rolls
 ['d4','d6','d8','d10','d12','d20','d100','2d6','4d6kh3'].forEach(d=>{const b=document.createElement('button');b.type='button';b.className='q';b.textContent=d;b.onclick=()=>freeRoll(d);$('quick').appendChild(b)});
 async function freeRoll(expr){if(!expr.trim())return;
- const r=await fetch('/api/roll',{method:'POST',headers:{'Content-Type':'application/json','X-Password':pw},body:JSON.stringify({table,name:me,expr,label:$('rlabel').value})});
+ const r=await fetch('/api/roll',{method:'POST',headers:hdr(true),body:JSON.stringify({table,name:me,expr,label:$('rlabel').value})});
  const j=await r.json();$('rmsg').textContent=j.ok?'':j.why;if(j.ok)$('rexpr').value=''}
 
 // ---------------------------------------------------------------- party & journal
 function scheduleState(){clearTimeout(stateTimer);stateTimer=setTimeout(refreshState,700)}
-async function refreshState(){try{const r=await fetch('/api/state?table='+encodeURIComponent(table),{headers:{'X-Password':pw}});
+async function refreshState(){try{const r=await fetch('/api/state?table='+encodeURIComponent(table),{headers:hdr()});
  const s=await r.json();if(s.busy)return;lastState=s;if(s.battle!==undefined&&!primedBattle){lastBattle=s.battle;primedBattle=true}renderParty(s);renderJournal(s);renderMap(s);
  $('where').textContent=s.active?('📍 '+s.location+' • '+s.time):''}catch(e){}}
 function renderParty(s){const el=$('party');if(!s.active){el.innerHTML='<div class="empty">Start or load a game to see your party.</div>';return}
@@ -437,7 +476,7 @@ function renderParty(s){const el=$('party');if(!s.active){el.innerHTML='<div cla
   <div>${p.effects.map(e=>'<span class="chip">'+esc(e)+'</span>').join('')}</div>
   <button onclick="openSheet(${i})">Character sheet &amp; gear</button>
   ${(p.player||'').toLowerCase()==me.toLowerCase()?'<span class="chip" style="color:var(--green)">your hero</span>':(hereNow.includes((p.player||'').toLowerCase())?'':`<button onclick="claimHero(${i})">\ud83c\udfad Play this hero</button>`)}</div>`}).join('')+'</div>'}
-async function claimHero(i){const r=await fetch('/api/claim',{method:'POST',headers:{'Content-Type':'application/json','X-Password':pw},body:JSON.stringify({table,name:me,hero:i})});
+async function claimHero(i){const r=await fetch('/api/claim',{method:'POST',headers:hdr(true),body:JSON.stringify({table,name:me,hero:i})});
  const j=await r.json();if(!j.ok)alert(j.why);refreshState()}
 function wrapName(name,max){const words=name.split(' ');const lines=[];let cur='';
  for(const w of words){if((cur+' '+w).trim().length>max&&cur){lines.push(cur);cur=w}else cur=(cur+' '+w).trim()}
@@ -524,7 +563,7 @@ function itemButtons(e,others){const b=[];const h=sheetIdx;
  b.push(`<button class="danger" onclick="if(confirm('Drop ${esc(e.name).replace(/'/g,'')}?'))itemAct(${h},${e.idx},'drop')">Drop</button>`);
  return '<div class="ia">'+b.join('')+'</div>'}
 async function itemAct(hero,item,action,target){
- const r=await fetch('/api/item',{method:'POST',headers:{'Content-Type':'application/json','X-Password':pw},body:JSON.stringify({table,name:me,hero,item,action,target:target==null?-1:target})});
+ const r=await fetch('/api/item',{method:'POST',headers:hdr(true),body:JSON.stringify({table,name:me,hero,item,action,target:target==null?-1:target})});
  const j=await r.json();if(!j.ok){alert(j.why);return}
  await refreshState();if($('modal').style.display=='flex'&&sheetIdx!=null){const sc=$('msheet').scrollTop;openSheet(sheetIdx);$('msheet').scrollTop=sc}}
 function why(parts){return parts&&parts.length?esc(parts.join(', ')):''}
@@ -613,7 +652,7 @@ function stopSpeech(){epoch++;for(const s of sources){try{s.stop()}catch(e){}}so
  if('speechSynthesis' in window)speechSynthesis.cancel()}
 function serverSay(text,role){const ctx=audioCtx();if(!ctx){browserSay(text,role);return}
  const my=epoch;
- const audio=fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json','X-Password':pw},
+ const audio=fetch('/api/tts',{method:'POST',headers:hdr(true),
    body:JSON.stringify({table,text,role,speed:N.rate})})
   .then(r=>{if(!r.ok)throw new Error('tts '+r.status);return r.arrayBuffer()})
   .then(b=>new Promise((ok,bad)=>ctx.decodeAudioData(b,ok,bad)));

@@ -14,6 +14,7 @@ Environment variables:
 from __future__ import annotations
 
 import argparse
+import hmac
 import json
 import os
 import random
@@ -26,10 +27,16 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Dict, List, Optional, Sequence
 from urllib.parse import parse_qs, urlparse
 
+from .rules import MAX_LEVEL
 from .ui import UI, Color, QuitGame, c
 
 MAX_EVENTS = 4000
 POLL_SECONDS = 25
+MAX_TABLES = 8          # each table runs its own game thread
+MAX_PRESENCE = 40       # names remembered per table
+NAME_HOLD = 90          # seconds a name stays bound to the browser that used it
+FAIL_LIMIT, FAIL_WINDOW = 8, 600   # wrong passwords per IP before a 10-minute lockout
+TTS_SLOTS = threading.BoundedSemaphore(2)   # voice synthesis is CPU-heavy
 IDLE_SECONDS = 300      # page gone this long: treat the player as away
 AUTOPILOT_DELAY = 1.5   # seconds before the computer answers for an away player
 ANSI_RE = re.compile(r"\033\[[0-9;]*m")
@@ -311,6 +318,8 @@ class Table:
         self.item_lock = threading.Lock()
         self.presence: Dict[str, float] = {}
         self.afk: Dict[str, str] = {}      # normalized name -> "manual" / "idle"
+        self.afk_mode = "computer"         # or "party": friends answer for away players
+        self.tokens: Dict[str, list] = {}  # normalized name -> [browser token, last seen]
         self.ui = WebUI(self)
         self.ui.autosave_name = f"autosave-{name}"
         self.thread = threading.Thread(target=self._run, daemon=True)
@@ -335,7 +344,8 @@ class Table:
             self.owner = owner
             since = None
             while not self.inputs:
-                if auto is not None and owner and self.is_afk(owner):
+                if auto is not None and owner and self.afk_mode == "computer" \
+                        and self.is_afk(owner):
                     since = since or time.time()
                     left = AUTOPILOT_DELAY - (time.time() - since)
                     if left <= 0:
@@ -356,7 +366,7 @@ class Table:
         key = self._norm(name)
         if key in getattr(self, "afk", {}):
             return True
-        seen = [t for n, t in self.presence.items() if self._norm(n) == key]
+        seen = [t for n, t in list(self.presence.items()) if self._norm(n) == key]
         return bool(seen) and time.time() - max(seen) > IDLE_SECONDS
 
     def set_afk(self, who: str, away: bool, auto: bool = False) -> None:
@@ -382,16 +392,44 @@ class Table:
         if away:
             mine = ", ".join(heroes)
             why = " (no activity for 5 minutes)" if auto else ""
-            self.emit({"t": "line", "text": c(
-                f"\u23f8 {name} is away{why}." + (f" The computer will play {mine} in fights; "
-                                                  f"anyone can answer for them otherwise."
-                                                  if mine else ""), "dim")})
+            how = (f" The computer will play {mine} in fights; anyone can answer for them "
+                   f"otherwise." if self.afk_mode == "computer" else
+                   f" Anyone at the table can answer for {mine}.") if mine else ""
+            self.emit({"t": "line", "text": c(f"\u23f8 {name} is away{why}.{how}", "yellow")})
         else:
-            self.emit({"t": "line", "text": c(f"\u25b6 {name} is back.", "dim")})
+            self.emit({"t": "line", "text": c(f"\u25b6 {name} is back.", "yellow")})
+
+    def set_afk_mode(self, mode: str, who: str) -> None:
+        if mode not in ("computer", "party") or mode == self.afk_mode:
+            return
+        with self.cond:
+            self.afk_mode = mode
+            self.cond.notify_all()
+        name = " ".join(who.split()) or "Someone"
+        text = ("the computer plays away players' heroes in fights" if mode == "computer"
+                else "the party controls away players' heroes")
+        self.emit({"t": "line", "text": c(f"{name} changed a table setting: {text}.", "yellow")})
+
+    def bind_name(self, who: str, token: str) -> bool:
+        """One browser per name: stops someone else at the table answering as you.
+        A name is free again once its browser has been quiet for NAME_HOLD seconds."""
+        key = self._norm(who)
+        if not key:
+            return True
+        now = time.time()
+        with self.cond:
+            cur = self.tokens.get(key)
+            if cur and cur[0] != token and now - cur[1] < NAME_HOLD:
+                return False
+            self.tokens[key] = [token, now]
+            if len(self.tokens) > MAX_PRESENCE:
+                for k in sorted(self.tokens, key=lambda k: self.tokens[k][1])[:10]:
+                    self.tokens.pop(k, None)
+            return True
 
     def present(self) -> List[str]:
         now = time.time()
-        return [n for n, t in self.presence.items() if now - t < POLL_SECONDS + 15]
+        return [n for n, t in list(self.presence.items()) if now - t < POLL_SECONDS + 15]
 
     @staticmethod
     def _norm(name: str) -> str:
@@ -411,7 +449,7 @@ class Table:
         return self._norm(who) == self._norm(owner)
 
     def submit(self, text: str, who: str):
-        with self.cond:
+        with self.item_lock, self.cond:   # never resume the game mid gear-change
             if not self.waiting:
                 return False, "The GM is not waiting for input right now."
             if not self.may_answer(who):
@@ -537,7 +575,7 @@ class Table:
         from .sheet import render, sheet_data
         party = []
         for p in list(gs.party):
-            nxt = p.xp_next() if p.level < 5 else None
+            nxt = p.xp_next() if p.level < MAX_LEVEL else None
             party.append({
                 "name": p.name, "player": p.player, "race": p.race_data["name"],
                 "classes": p.class_summary(), "level": p.level, "hp": p.hp,
@@ -562,7 +600,11 @@ class Table:
 
     def poll(self, since: int, who: str, timeout: float = POLL_SECONDS) -> dict:
         if who and who.strip():
-            self.presence[" ".join(who.split())[:30]] = time.time()
+            with self.cond:
+                self.presence[" ".join(who.split())[:30]] = time.time()
+                if len(self.presence) > MAX_PRESENCE:
+                    for n in sorted(self.presence, key=self.presence.get)[:10]:
+                        self.presence.pop(n, None)
         deadline = time.time() + timeout
         with self.cond:
             while self.seq <= since and time.time() < deadline:
@@ -575,6 +617,7 @@ class Table:
                     "may_answer": self.may_answer(who) if self.waiting else False,
                     "away": [n for n in here if self._norm(n) in self.afk],
                     "me_away": self.afk.get(self._norm(who), ""),
+                    "afk_mode": self.afk_mode,
                     "reset": since < self.first_seq}
 
     def _run(self) -> None:
@@ -604,7 +647,7 @@ class Table:
             except Exception:  # keep the table alive no matter what
                 self.ui.out("The GM fumbled the dice (internal error). Restarting the "
                             "main menu; load the autosave to continue.", ("bred",))
-                self.ui.out(traceback.format_exc(), ("dim",))
+                traceback.print_exc()   # details go to the server log, not to players
             time.sleep(0.5)
 
 
@@ -612,27 +655,102 @@ TABLES: Dict[str, Table] = {}
 TABLES_LOCK = threading.Lock()
 
 
+class TooManyTables(Exception):
+    pass
+
+
 def get_table(name: str) -> Table:
-    name = re.sub(r"[^a-zA-Z0-9_-]", "", name)[:32] or "main"
+    name = re.sub(r"[^a-zA-Z0-9_-]", "", str(name))[:32] or "main"
     with TABLES_LOCK:
         if name not in TABLES:
+            if len(TABLES) >= MAX_TABLES:
+                raise TooManyTables()
             TABLES[name] = Table(name)
         return TABLES[name]
 
 
+FAILS: Dict[str, list] = {}
+FAILS_LOCK = threading.Lock()
+
+
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Content-Security-Policy": ("default-src 'self'; script-src 'self' 'unsafe-inline'; "
+                                "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+                                "media-src 'self' blob:; connect-src 'self'; "
+                                "frame-ancestors 'none'; base-uri 'none'; form-action 'self'"),
+}
+
+
 class Handler(BaseHTTPRequestHandler):
-    server_version = "dnd35/1"
+    server_version = "dnd35"
+    sys_version = ""
+    timeout = 90   # drop stalled connections (long polls last 25 s)
+
+    def end_headers(self):
+        for k, v in SECURITY_HEADERS.items():
+            self.send_header(k, v)
+        super().end_headers()
+
+    def _ip(self) -> str:
+        return (self.headers.get("Fly-Client-IP") or self.client_address[0] or "?")[:64]
+
+    def _locked_out(self) -> bool:
+        with FAILS_LOCK:
+            now = time.time()
+            times = [t for t in FAILS.get(self._ip(), []) if now - t < FAIL_WINDOW]
+            FAILS[self._ip()] = times
+            if len(FAILS) > 5000:
+                FAILS.clear()
+            return len(times) >= FAIL_LIMIT
+
+    def _deny(self) -> bool:
+        """True (and an error sent) if the password is wrong or this IP is locked out."""
+        if self._locked_out():
+            self._json({"error": "too many wrong passwords; try again in 10 minutes"}, 429)
+            return True
+        if self._auth():
+            return False
+        with FAILS_LOCK:
+            FAILS.setdefault(self._ip(), []).append(time.time())
+        self._json({"error": "bad password"}, 403)
+        return True
+
+    def _player_ok(self, t: "Table", who: str) -> bool:
+        token = self.headers.get("X-Player-Token", "")[:64]
+        if not who.strip():
+            return True
+        if not token:
+            self._json({"error": "reload", "why": "Please reload the page."}, 400)
+            return False
+        if not t.bind_name(who, token):
+            self._json({"error": "name taken",
+                        "why": f"Someone else is already using the name '{who}' at this "
+                               f"table. Pick another name (if it's you on another device, "
+                               f"close it there and wait a minute)."}, 409)
+            return False
+        return True
+
+    def _table(self, name) -> Optional["Table"]:
+        try:
+            return get_table(name)
+        except TooManyTables:
+            self._json({"error": "too many tables", "why": "This server is full; use an "
+                        "existing table name."}, 503)
+            return None
 
     def log_message(self, fmt, *args):  # quieter logs
         if os.environ.get("DND35_VERBOSE"):
             super().log_message(fmt, *args)
 
-    def _auth(self, qs) -> bool:
+    def _auth(self) -> bool:
         pw = os.environ.get("TABLE_PASSWORD")
         if not pw:
             return True
-        given = self.headers.get("X-Password") or qs.get("pw", [""])[0]
-        return given.strip() == pw.strip()
+        given = (self.headers.get("X-Password") or "").strip()
+        return hmac.compare_digest(given.encode(), pw.strip().encode())
 
     def _json(self, obj, code=200):
         data = json.dumps(obj).encode()
@@ -657,10 +775,11 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(data)
             return
         if u.path == "/api/state":
-            if not self._auth(qs):
-                self._json({"error": "bad password"}, 403)
+            if self._deny():
                 return
-            t = get_table(qs.get("table", ["main"])[0])
+            t = self._table(qs.get("table", ["main"])[0])
+            if t is None:
+                return
             try:
                 self._json(t.state())
             except Exception:  # game thread mid-update; the page will retry
@@ -674,28 +793,46 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"ok": True})
             return
         if u.path == "/api/poll":
-            if not self._auth(qs):
-                self._json({"error": "bad password"}, 403)
+            if self._deny():
                 return
-            t = get_table(qs.get("table", ["main"])[0])
-            since = int(qs.get("since", ["0"])[0] or 0)
-            self._json(t.poll(since, qs.get("name", [""])[0]))
+            t = self._table(qs.get("table", ["main"])[0])
+            if t is None:
+                return
+            who = qs.get("name", [""])[0][:30]
+            if not self._player_ok(t, who):
+                return
+            try:
+                since = max(0, int(qs.get("since", ["0"])[0] or 0))
+            except ValueError:
+                since = 0
+            self._json(t.poll(since, who))
             return
         self.send_error(404)
 
     def do_POST(self):
         u = urlparse(self.path)
-        qs = parse_qs(u.query)
-        if not self._auth(qs):
-            self._json({"error": "bad password"}, 403)
+        if self._deny():
             return
-        length = min(int(self.headers.get("Content-Length", 0) or 0), 10000)
+        try:
+            length = int(self.headers.get("Content-Length", 0) or 0)
+        except ValueError:
+            length = -1
+        if not 0 <= length <= 10000:
+            self._json({"error": "bad request"}, 400)
+            return
         try:
             body = json.loads(self.rfile.read(length) or b"{}")
+            if not isinstance(body, dict):
+                raise ValueError
         except ValueError:
-            body = {}
-        t = get_table(body.get("table", "main"))
+            self._json({"error": "bad request"}, 400)
+            return
+        t = self._table(body.get("table", "main"))
+        if t is None:
+            return
         who = str(body.get("name", ""))[:30]
+        if u.path != "/api/tts" and not self._player_ok(t, who):
+            return
         if u.path == "/api/input":
             ok, why = t.submit(str(body.get("text", "")), who)
             self._json({"ok": ok, "why": why})
@@ -704,12 +841,19 @@ class Handler(BaseHTTPRequestHandler):
             if not tts.status()["available"]:
                 self._json({"error": "server voice not installed"}, 503)
                 return
-            try:
-                data = tts.synthesize(str(body.get("text", "")), str(body.get("role", "gm")),
-                                      float(body.get("speed", 1.0) or 1.0))
-            except Exception as e:  # noqa: BLE001
-                self._json({"error": str(e)}, 500)
+            if not TTS_SLOTS.acquire(timeout=20):
+                self._json({"error": "voice busy"}, 503)
                 return
+            try:
+                data = tts.synthesize(str(body.get("text", ""))[:1500],
+                                      str(body.get("role", "gm")),
+                                      float(body.get("speed", 1.0) or 1.0))
+            except Exception:  # noqa: BLE001
+                traceback.print_exc()
+                self._json({"error": "voice failed"}, 500)
+                return
+            finally:
+                TTS_SLOTS.release()
             self.send_response(200)
             self.send_header("Content-Type", "audio/wav")
             self.send_header("Cache-Control", "no-store")
@@ -732,6 +876,9 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"ok": ok, "why": why})
         elif u.path == "/api/afk":
             t.set_afk(who, bool(body.get("away")), bool(body.get("auto")))
+            self._json({"ok": True})
+        elif u.path == "/api/afkmode":
+            t.set_afk_mode(str(body.get("mode", "")), who)
             self._json({"ok": True})
         elif u.path == "/api/chat":
             t.chat(str(body.get("text", "")), who)

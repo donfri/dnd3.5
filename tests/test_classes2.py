@@ -9,7 +9,7 @@ from dnd35.adventure import engine, greyfang_pass
 from dnd35.character import Character
 from dnd35.combat import Combat
 from dnd35.creation import build_pregen
-from dnd35.data.classes import DEITIES, DOMAINS, domain_allowed
+from dnd35.data.classes import DEITIES, domain_allowed
 from dnd35.levelup import gain_level
 from dnd35.magic import saving_throw
 from dnd35.monster import Monster

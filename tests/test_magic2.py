@@ -28,7 +28,7 @@ class TestDevices(unittest.TestCase):
     def test_wands_dont_merge(self):
         c = build_pregen("aldric", level=3)
         a = c.add_item("wand of magic missile")
-        b = c.add_item("wand of magic missile")
+        c.add_item("wand of magic missile")
         a["charges"] = 10
         c._merge_stacks()
         self.assertEqual(len([e for e in c.inventory if e["id"] == "wand of magic missile"]), 2)

@@ -141,14 +141,38 @@ questions so the game keeps moving. Press **I'm back** (or just answer a
 question) to take over again. If your page sees no mouse, keyboard or touch for
 5 minutes you're marked away automatically, and moving the mouse or tapping
 brings you back. A player whose page has been closed for 5 minutes is treated
-as away too.
+as away too. In settings, **When someone steps away** can be switched (for the
+whole table) from "the computer plays their heroes in fights" to "the party
+controls their heroes", which turns the autopilot off.
 
 ### On a phone
 
-The choices panel takes at most 40% of the screen, shows choices two to a row
-without their explanations (press and hold one to see it), and folds down to a
-single line on every tab except Story. Tap **choose ▴** to open it there, or
-**hide ▾** to fold it on the Story tab.
+The tabs, AFK and settings move into the **☰** menu at the top right (the
+button beside it shows which tab you're on). The choices panel takes at most
+about a third of the screen, shows choices two to a row without their
+explanations (press and hold one to see it), and folds down to a single line on
+every tab except Story. Tap **choose ▴** to open it there, or **hide ▾** to fold
+it on the Story tab.
+
+### Security
+
+The server is built to sit on the open internet behind Fly.io's HTTPS:
+- Set a table password with `fly secrets set TABLE_PASSWORD=...`. It is checked
+  on every request (in constant time). An address that gets it wrong 8 times
+  in 10 minutes is locked out for 10 minutes.
+- Each browser gets a random id, and a player name is bound to the browser using
+  it, so nobody else at the table can answer, chat or move gear as you. (A name
+  frees up a minute and a half after its browser goes quiet.)
+- At most 8 tables can exist, request bodies are capped at 10 KB, voice
+  synthesis runs at most 2 at a time, and slow connections are dropped.
+- Pages are sent with a strict Content Security Policy, no framing, no MIME
+  sniffing and no referrer. Everything players type is escaped before display.
+- Error details go to the server log, never to the players' screens; save files
+  are named from letters, digits, `-` and `_` only.
+
+Not covered: there are no individual accounts (anyone with the table password
+can join under a new name), and saved games are shared by every table on the
+server.
 
 ## Quick start for two players
 
