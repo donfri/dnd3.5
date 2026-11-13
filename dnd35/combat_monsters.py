@@ -305,6 +305,21 @@ class MonstersMixin:
 
     def start_auras(self) -> None:
         ui = self.ui
+        from .data.items import item_clash
+        for p in self.party:
+            for e_, d_ in (p.minds() if hasattr(p, "minds") and p.conscious else []):
+                it = d_["intelligent"]
+                if not item_clash(p.alignment, d_):
+                    ui.out(f"{d_['name']}: {dice.choice(it['voice'])}", ("bmagenta",))
+                    continue
+                ui.warn(f"{d_['name']} strains against {p.name}'s will!")
+                if saving_throw(ui, p, "will", it["ego"], [], f"mastering {d_['name']}"):
+                    ui.good(f"  {p.name} forces the blade to obey, for now.")
+                else:
+                    p.add_effect(Effect(f"{d_['name']} balks", None,
+                                        [("attack", "untyped", -4)], hidden=False))
+                    ui.bad(f"  {d_['name']} drags and twists in the hand: -4 on {p.name}'s "
+                           f"attacks this fight.")
         side_pc = [x.c for x in self.st.values() if x.side == "pc" and self.active(x.c)]
         if any(getattr(p, "class_level", lambda c_: 0)("paladin") >= 3 and p.conscious
                for p in self.party):

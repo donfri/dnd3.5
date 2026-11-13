@@ -396,7 +396,8 @@ ROOMS = {
         "features": [
             {"id": "mural", "label": "Read the murals' inscriptions (Decipher Script or "
                                      "Knowledge (religion) DC 13)",
-             "check": {"skill": "Knowledge (religion)", "dc": 13, "retry": False},
+             "check": {"skill": "best:Decipher Script|Knowledge (religion)", "dc": 13,
+                       "retry": False},
              "success": [T("'Here kneel those who fed the King's flame. The King hungers, and "
                            "is fed, and is never full.' A prayer, or a warning."),
                          {"do": "journal", "text": "Inscription: 'The King hungers, and is "

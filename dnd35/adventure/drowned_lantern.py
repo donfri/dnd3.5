@@ -460,13 +460,26 @@ ROOMS = {
                          {"do": "fight", "enc": "captain"}]},
             {"id": "chest", "label": "Open Merrow's sea chest",
              "requires": {"enc_cleared": "captain"}, "once": True, "effects": [
-                T("Gold, a fine cutlass belt, and a leather ledger in Merrow's neat hand: "
-                  "dates, ships, cargoes... and payments to 'B. the harbormaster'."),
+                T("Gold, a fine cutlass belt, a slim black dagger that seems to be muttering "
+                  "to itself, and a leather ledger in Merrow's neat hand: dates, ships, "
+                  "cargoes... and payments to 'B. the harbormaster'. The last pages are in "
+                  "cipher."),
                 {"do": "gold", "gp": 160},
+                {"do": "item", "id": "whisper"},
                 {"do": "item", "id": "potion of cure moderate wounds"},
                 {"do": "flag", "name": "ledger"},
                 {"do": "journal", "text": "Merrow's ledger proves Bram the harbormaster "
                                           "sold out the ships. Confront him in Saltmere."}]},
+            {"id": "cipher", "label": "Decode the cipher pages of Merrow's ledger "
+                                      "(Decipher Script DC 18)",
+             "requires": {"flag": "ledger"},
+             "check": {"skill": "Decipher Script", "dc": 18, "retry": False},
+             "success": [T("The cipher is a sailor's substitution, and it falls apart in an "
+                           "hour. 'Rainy-day money: under the loose flag by the rum cask.' "
+                           "It is exactly where he wrote."),
+                         {"do": "gold", "gp": 140},
+                         {"do": "xp", "amount": 75, "why": "cipher broken"}],
+             "failure": [T("Columns of nonsense. Whatever Merrow hid, he hid it well.")]},
         ],
         "exits": {"south": {"to": "sea_caves", "label": "Back to the caves"}},
     },

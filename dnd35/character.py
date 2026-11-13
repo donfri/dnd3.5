@@ -9,7 +9,8 @@ from . import companions as _comp
 from .creature import Creature, weapon_info_from_entry, thrown_variant
 from .data.classes import CLASSES, DEITIES, DOMAINS, METAL_ARMOR, MONK_UNARMED
 from .data.feats import FEATS
-from .data.items import WEAPONS, WORN_SLOTS, item_data, item_name, make_item, stuck
+from .data.items import (WEAPONS, WORN_SLOTS, item_clash, item_data, item_name, make_item,
+                         stuck)
 from .data.monsters import MONSTERS
 from .data.races import RACES
 from .data.skills import SKILLS, SYNERGIES
@@ -348,6 +349,12 @@ class Character(Creature):
                 off.pop("slot", None)
         entry["slot"] = slot
         self._merge_stacks()
+        it = d.get("intelligent")
+        if it and slot in ("main", "off"):
+            said = it["clash"] if item_clash(self.alignment, d) else it["greet"]
+            extra = (" It resents you: -1 on attacks and saves while you hold it, and it "
+                     "may balk in a fight.") if item_clash(self.alignment, d) else ""
+            return f"{self.name} takes up {d['name']}. {said}{extra}"
         if d.get("cursed") and not entry.get("curse_known"):
             fake = item_name(entry)
             entry["curse_known"] = True
@@ -553,6 +560,11 @@ class Character(Creature):
             out.append(("dodge", 1, "Dodge"))
         if stat == "saves" and self.race_data.get("save_bonus_all"):
             out.append(("racial", self.race_data["save_bonus_all"], "racial"))
+        if stat in ("attack", "saves"):
+            for slot in ("main", "off"):
+                e = self.equipped(slot)
+                if e and item_clash(self.alignment, item_data(e)):
+                    out.append(("untyped", -1, f"{item_name(e)} fights your grip"))
         for slot in WORN:
             e = self.equipped(slot)
             if e:
@@ -859,6 +871,15 @@ class Character(Creature):
     FOCUS = {"wizard": "spell component pouch", "sorcerer": "spell component pouch",
              "bard": "spell component pouch", "cleric": "holy symbol",
              "paladin": "holy symbol"}
+
+    def minds(self) -> List[dict]:
+        """Intelligent items in hand: [(entry, its data)]."""
+        out = []
+        for slot in ("main", "off"):
+            e = self.equipped(slot)
+            if e and item_data(e).get("intelligent"):
+                out.append((e, item_data(e)))
+        return out
 
     def ensure_focus(self) -> None:
         """New casters get their pouch or holy symbol once (also for old saves)."""

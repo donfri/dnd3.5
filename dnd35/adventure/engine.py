@@ -570,6 +570,12 @@ class GM:
             for p in gs.able():
                 if self.roll_check(p, "Spot", hide, show_dc=False) < hide:
                     surprised.append(p)
+            warned = next((d_["name"] for p in gs.able() for _, d_ in p.minds()
+                           if d_["intelligent"]["senses"]), None)
+            if surprised and warned:
+                ui.good(f"'Ware! To arms!' {warned} rings like a struck bell, and nobody "
+                        f"is caught off guard.")
+                surprised = []
             if surprised:
                 ui.bad(", ".join(p.name for p in surprised) + " didn't see it coming!")
             else:

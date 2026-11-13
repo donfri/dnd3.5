@@ -145,6 +145,32 @@ class TestCharacterForm(unittest.TestCase):
         self.assertTrue(ch.has_item("holy symbol"))
 
 
+class TestIntelligentItems(unittest.TestCase):
+    def test_sword_accepts_or_rejects_its_wielder(self):
+        from dnd35.data.items import item_clash, item_data, item_name, make_item
+        good = build_pregen("elowen", level=6)               # lawful good paladin
+        e = good.add_item(make_item("dawnreed"))
+        self.assertEqual((item_name(e), e["enhancement"]), ("Dawnreed", 2))
+        self.assertIn("A calm voice", good.equip(e))
+        self.assertFalse(item_clash(good.alignment, item_data(e)))
+        rogue = build_pregen("pip", level=6)
+        rogue.alignment = "Chaotic Evil"
+        before = sum(v for _, v, _ in rogue.save_components("will"))
+        e2 = rogue.add_item(make_item("dawnreed"))
+        self.assertIn("resents", rogue.equip(e2))
+        self.assertEqual(sum(v for _, v, _ in rogue.save_components("will")), before - 1)
+
+    def test_once_a_day_gift(self):
+        from dnd35.data.items import make_item
+        p = build_pregen("elowen", level=6)
+        p.equip(p.add_item(make_item("dawnreed")))
+        p.damage = 20
+        cb = Combat(AutoUI(), [p], [Monster("orc")])
+        cb.act_item_power(cb.s(p), p.equipped("main"))
+        self.assertLess(p.damage, 20)
+        self.assertTrue(p.daily.get("mind:dawnreed"))
+
+
 class TestCursedItems(unittest.TestCase):
     def test_disguised_until_worn_then_stuck(self):
         from dnd35.data.items import item_name, make_item, stuck

@@ -106,6 +106,48 @@ def _a(name, cat, bonus, maxdex, acp, asf, cost_gp, weight, speed_reduce=True):
             "speed_reduce": speed_reduce and cat in ("medium", "heavy")}
 
 
+# Intelligent weapons: they think, talk, and have opinions about who holds them.
+#   align: the item's alignment; ego: the Will DC to master it when you clash;
+#   senses: its wielder can't be surprised; power: a once-a-day gift it grants when asked.
+WEAPONS["dawnreed"] = dict(
+    WEAPONS["longsword"], name="Dawnreed", cost=22000 * GP, base_enh=2,
+    desc="An intelligent +2 longsword that served the fen knight Sir Wendel. Lawful good. "
+         "It warns of ambushes, and once a day it mends its wielder's wounds.",
+    intelligent={"align": "Lawful Good", "ego": 12, "senses": True,
+                 "power": {"id": "heal", "label": "mend your wounds (heals 2d8+5)"},
+                 "voice": ["'Steady. I have stood in worse places than this.'",
+                           "'Strike true. I will do the rest.'",
+                           "'Sir Wendel never ran. I do not expect you to.'"],
+                 "greet": "A calm voice speaks inside your head: 'So. A new hand. Let us see "
+                          "whether it is a worthy one.'",
+                 "clash": "'I will not be swung for such ends,' the sword says, cold as "
+                          "fen water."})
+WEAPONS["whisper"] = dict(
+    WEAPONS["dagger"], name="Whisper", cost=9000 * GP, base_enh=1,
+    desc="An intelligent +1 dagger with a sly tongue. Chaotic neutral. Once a day it "
+         "wraps its wielder in invisibility.",
+    intelligent={"align": "Chaotic Neutral", "ego": 9, "senses": False,
+                 "power": {"id": "invisibility", "label": "hide you (invisibility)"},
+                 "voice": ["'Ooh, that one. Stab that one.'",
+                           "'Left. No, YOUR left.'",
+                           "'I was a captain's dagger, you know. I had standards.'"],
+                 "greet": "The dagger sighs. 'Finally. Someone with thumbs. Merrow never "
+                          "listened to me either.'",
+                 "clash": "'Rules, rules, rules,' the dagger mutters. 'You're no fun at all.'"})
+
+
+def item_clash(alignment: str, d: dict) -> bool:
+    """Does an intelligent item reject this wielder? (Opposed on law/chaos or good/evil.)"""
+    it = d.get("intelligent")
+    if not it or not alignment:
+        return False
+    a, b = alignment.split(), it["align"].split()
+    if len(a) < 2 or len(b) < 2:
+        return False
+    opp = {"Lawful": "Chaotic", "Chaotic": "Lawful", "Good": "Evil", "Evil": "Good"}
+    return opp.get(a[0]) == b[0] or opp.get(a[1]) == b[1]
+
+
 ARMOR = {
     "padded": _a("Padded armor", "light", 1, 8, 0, 5, 5, 10),
     "leather": _a("Leather armor", "light", 2, 6, 0, 10, 10, 15),
@@ -477,6 +519,9 @@ def make_item(item_id: str, qty: int = 1, **overrides) -> dict:
     if not any(base_id in t for t in (WEAPONS, ARMOR, GEAR, CONSUMABLES, MAGIC)):
         raise KeyError(f"Unknown item: {item_id}")
     entry = {"id": base_id, "qty": qty}
+    for t in (WEAPONS,):
+        if t.get(base_id, {}).get("base_enh"):
+            enh, mw = t[base_id]["base_enh"], True
     if mw:
         entry["masterwork"] = True
     if enh:
@@ -516,6 +561,8 @@ def item_name(entry: dict) -> str:
     if d.get("cursed") and not entry.get("curse_known"):
         return shown_data(entry)["name"]
     name = d["name"]
+    if d.get("intelligent"):
+        return name
     if entry.get("enhancement"):
         name = f"{name} +{entry['enhancement']}"
     elif entry.get("masterwork"):

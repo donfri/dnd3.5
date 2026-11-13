@@ -344,7 +344,7 @@ ROOMS = {
                 T("Sir Wendel's bones lie in rusted mail, hands folded on a longsword "
                   "that shines as if forged yesterday: Dawnreed. On one finger, a silver "
                   "ring."),
-                {"do": "item", "id": "+2 longsword"},
+                {"do": "item", "id": "dawnreed"},
                 {"do": "item", "id": "ring of protection +2"},
                 {"do": "xp", "amount": 300, "why": "the barrow laid to rest"}]},
         ],

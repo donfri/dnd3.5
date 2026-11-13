@@ -640,6 +640,7 @@ class Combat(ManeuversMixin, MonstersMixin, PlayerMixin):
                              "stunned", "dazed", "entangled", "frightened", "grappled",
                              "pinned"} \
                         or e.name in ("Dazed", "Turned", "Aura of Courage", "In the dark") \
+                        or e.name.endswith(" balks") \
                         or e.name.startswith("Terror ("):
                     p.effects.remove(e)
             st = self.s(p)

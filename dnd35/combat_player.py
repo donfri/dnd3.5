@@ -6,7 +6,7 @@ from typing import Dict, List, Optional
 
 from . import dice, grid, rules
 from .creature import Creature
-from .data.items import item_data, item_name
+from .data.items import item_data, item_name, item_clash
 from .data.spells import SPELLS
 from .effects import Effect, ROUNDS_PER_MINUTE
 from .abilities import (bardic_music, lay_on_hands, protective_ward, revert_shape, wholeness_of_body, wild_shape)
@@ -232,6 +232,10 @@ class PlayerMixin:
                 add(f"Set Power Attack (now {p.power_attack})", self.act_power, x)
             if not p.get_effect("Fighting defensively") and x.std:
                 add("Toggle: fight defensively this turn (-4 attack, +2 AC)", self.act_defensive, x)
+            for e_, d_ in p.minds():
+                if not p.daily.get(f"mind:{e_['id']}") and not item_clash(p.alignment, d_):
+                    add(f"Ask {d_['name']} to {d_['intelligent']['power']['label']} "
+                        f"(once a day, free)", self.act_item_power, x, e_)
             add("Look: battlefield / my character sheet / foe details", self.act_look, x)
             if self.can_flee and full_ok and x.move and not entangled:
                 add("Flee the battle (withdraw out of the fight)", self.act_flee, x)
@@ -849,6 +853,24 @@ class PlayerMixin:
     def act_dismount(self, x: CState) -> None:
         x.move = False
         self.dismount(x.c)
+
+    def act_item_power(self, x: CState, entry: dict) -> None:
+        """An intelligent weapon grants its once-a-day gift."""
+        p, ui = x.c, self.ui
+        d = item_data(entry)
+        p.daily[f"mind:{entry['id']}"] = 1
+        power = d["intelligent"]["power"]["id"]
+        if power == "heal":
+            r = dice.roll("2d8+5")
+            ui.out(f"{d['name']} flares with dawn light.", ("byellow",))
+            from .magic import heal
+            heal(ui, p, r.total)
+        elif power == "invisibility":
+            p.add_effect(Effect("Invisibility", 10 * ROUNDS_PER_MINUTE,
+                                [("concealment", "concealment", 50),
+                                 ("attack", "untyped", 2)], ["invisible"],
+                                source=d["name"]))
+            ui.good(f"'Hold your breath,' says {d['name']}. {p.name} fades from sight.")
 
     def act_move_away(self, x: CState) -> None:
         p = x.c

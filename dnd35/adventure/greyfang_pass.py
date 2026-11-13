@@ -344,6 +344,18 @@ ROOMS = {
                          {"do": "flag", "name": "gate_open"}],
              "failure": [T("Someone slips and falls, hard."),
                          {"do": "damage", "dice": "2d6", "who": "actor"}]},
+            {"id": "forge", "label": "Forge marching orders in Skarn's hand and wave them at "
+                                     "the gatehouse (Forgery DC 16)",
+             "requires": {"not_flag": "gate_open"},
+             "check": {"skill": "Forgery", "dc": 16, "retry": False},
+             "success": [T("A scrap of hide, a smear of soot, a fair copy of the paw-print "
+                           "seal you saw on the raiders' gear. The gnoll squints at it for a "
+                           "long moment, shrugs, and hauls the bar back."),
+                         {"do": "flag", "name": "gate_open"},
+                         {"do": "flag", "name": "surprise_yard"},
+                         {"do": "xp", "amount": 100, "why": "talked through the gate"}],
+             "failure": [T("The gnoll sniffs the 'orders', then tears them in half and "
+                           "laughs. They won't fall for that twice.")]},
             {"id": "force", "label": "Force the gate (Strength DC 25; noisy)",
              "requires": {"not_flag": "gate_open"},
              "check": {"skill": "ability:str", "dc": 25},
