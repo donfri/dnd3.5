@@ -13,8 +13,17 @@ from .effects import Effect, ROUNDS_PER_HOUR, ROUNDS_PER_MINUTE
 
 
 # ---------------------------------------------------------------- helpers
+SAVE_NAMES = {"fort": "Fortitude save", "ref": "Reflex save", "will": "Will save"}
+
+
 def saving_throw(ui, target: Creature, kind: str, dc: int, tags: Sequence[str] = (),
                  label: str = "") -> bool:
+    with dice.rolling(target, SAVE_NAMES.get(kind, "saving throw")):
+        return _saving_throw(ui, target, kind, dc, tags, label)
+
+
+def _saving_throw(ui, target: Creature, kind: str, dc: int, tags: Sequence[str] = (),
+                  label: str = "") -> bool:
     roll = dice.d20()
     comps = target.save_components(kind, tags)
     bonus = sum(v for _, v, _ in comps)
@@ -386,6 +395,14 @@ def cast_spell(ui, caster: Creature, spell_name: str, targets: List[Creature], c
                dc: int, combat=None, allies: Optional[List[Creature]] = None,
                enemies: Optional[List[Creature]] = None, meta=()) -> bool:
     """Resolve a spell. Returns True if the spell was used up (always, once cast)."""
+    with dice.rolling(caster, spell_name):
+        return _cast_spell_meta(ui, caster, spell_name, targets, cl, dc, combat, allies,
+                                enemies, meta)
+
+
+def _cast_spell_meta(ui, caster: Creature, spell_name: str, targets: List[Creature], cl: int,
+                     dc: int, combat=None, allies: Optional[List[Creature]] = None,
+                     enemies: Optional[List[Creature]] = None, meta=()) -> bool:
     global _META
     _META = set(meta or ())
     try:

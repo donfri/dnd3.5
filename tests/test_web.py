@@ -156,6 +156,47 @@ class TestAway(unittest.TestCase):
         self.assertEqual(ui.autopick("Charge it instead?", ["Yes", "No"], "confirm", True), "y")
 
 
+class TestManualDice(unittest.TestCase):
+    def test_waits_for_the_player_only_when_they_are_here(self):
+        t = TestAway().bare_table()
+        t.manual = set()
+
+        class Hero:
+            is_pc, player, name = True, "Bob", "Thorgar"
+        hero = Hero()
+        t.before_roll(hero, "attack", "1d20")            # Bob hasn't asked: no prompt
+        self.assertFalse(any(e["t"] == "prompt" for e in t.events))
+        t.set_manual("Bob", True)
+        threading.Timer(0.2, lambda: t.submit("1", "Bob")).start()
+        start = time.time()
+        t.before_roll(hero, "attack", "1d20")
+        self.assertGreater(time.time() - start, 0.15)     # it waited for Bob's click
+        self.assertTrue(any(e.get("kind") == "roll" for e in t.events))
+        t.set_afk("Bob", True)                            # away: rolled for him at once
+        start = time.time()
+        t.before_roll(hero, "attack", "1d20")
+        self.assertLess(time.time() - start, 0.1)
+
+    def test_dice_events_for_heroes_only(self):
+        t = TestAway().bare_table()
+
+        class Hero:
+            is_pc, player, name = True, "Bob", "Thorgar"
+
+        class Orc:
+            is_pc, name = False, "Orc"
+        t.after_roll(Orc(), "attack", "1d20", [(20, [7])], 7)
+        t.after_roll(Hero(), "attack", "1d20", [(20, [20])], 20)
+        ev = [e for e in t.events if e["t"] == "dice"]
+        self.assertEqual(len(ev), 1)
+        self.assertEqual(ev[0]["rolls"], [[20, [20]]])
+
+    def test_free_rolls_report_faces(self):
+        r = web.free_roll("2d6+1")
+        self.assertEqual(r["rolls"][0][0], 6)
+        self.assertEqual(len(r["rolls"][0][1]), 2)
+
+
 class TestTTS(unittest.TestCase):
     def test_status_and_fallback(self):
         from dnd35 import tts

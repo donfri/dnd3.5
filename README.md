@@ -125,6 +125,20 @@ python3 -m dnd35.web --port 8080
 Then share `http://<your-ip>:8080` with your friend. This needs port forwarding,
 or a tunnel such as Tailscale, `cloudflared tunnel`, or `ngrok http 8080`.
 
+### Dice
+
+- **Roll your own dice:** in settings → Dice, tick **Roll my own dice**. The game
+  then waits for you to press **🎲 Roll** before each roll for your heroes
+  (attacks, damage, saves, skill checks, initiative, spells). The server still
+  makes the roll, so nobody can fudge it; you just choose the moment. Secret
+  checks (like spotting an ambush) are still rolled quietly by the GM, and if
+  you're away or offline your rolls happen automatically so the game never
+  waits on you.
+- **Dice animations:** rolls tumble across the top-right corner and land on the
+  real result (natural 20s glow green, natural 1s red). Choose whose rolls to
+  show: your heroes' (default), everyone's, only free rolls from the Dice tab,
+  or none.
+
 ### Hearing a line again
 
 Every line in the story has a small speaker button (on a computer it appears
@@ -152,6 +166,9 @@ story as "> Alice (for Bob): Attack", and when Bob comes back he's told how many
 choices the party and the computer made for his heroes while he was away.
 
 ### On a phone
+
+Character sheets have a big **✕ Close** button at the bottom right (the
+phone's Back button and Escape close them too).
 
 The tabs, AFK and settings move into the menu at the top right: the button
 shows which tab you're on (for example **📖 Story ▾**) and a red dot means

@@ -7,10 +7,52 @@ from __future__ import annotations
 
 import random
 import re
+import threading
+from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import List, Tuple
+from typing import Callable, List, Optional, Tuple
 
 _rng = random.Random()
+
+# Who is rolling right now (set around attacks, saves, checks...). A front end can
+# install hooks to let a player press "Roll" for their own hero (before) and to
+# show the dice (after). The numbers always come from this module's RNG.
+_local = threading.local()          # each game thread has its own roller stack
+before_roll: Optional[Callable] = None   # (who, what, expr) -> None, may block
+after_roll: Optional[Callable] = None    # (who, what, expr, [(sides, [values])], total)
+
+
+@contextmanager
+def rolling(who, what: str):
+    stack = _stack()
+    stack.append((who, what))
+    try:
+        yield
+    finally:
+        stack.pop()
+
+
+def _stack() -> List[tuple]:
+    if not hasattr(_local, "rollers"):
+        _local.rollers = []
+    return _local.rollers
+
+
+def _roller():
+    stack = _stack()
+    return stack[-1] if stack else (None, "")
+
+
+def _before(expr: str) -> None:
+    who, what = _roller()
+    if who is not None and before_roll is not None:
+        before_roll(who, what, expr)
+
+
+def _after(expr: str, rolls, total: int) -> None:
+    who, what = _roller()
+    if who is not None and after_roll is not None:
+        after_roll(who, what, expr, rolls, total)
 
 TERM_RE = re.compile(r"([+-]?)\s*(\d*d\d+|\d+)")
 
@@ -25,7 +67,10 @@ def die(sides: int) -> int:
 
 
 def d20() -> int:
-    return die(20)
+    _before("1d20")
+    v = die(20)
+    _after("1d20", [(20, [v])], v)
+    return v
 
 
 def percent() -> int:
@@ -96,6 +141,10 @@ def roll(expr: str, multiplier: int = 1) -> RollResult:
     """Roll an expression. ``multiplier`` rolls the whole expression N times
     and sums it (this is how 3.5 critical hits work: roll damage x times)."""
     terms = parse(expr)
+    has_dice = any(not t.is_flat for t in terms)
+    label = expr if multiplier <= 1 else f"({expr})x{multiplier}"
+    if has_dice:
+        _before(label)
     total = 0
     rolls = []
     flat = 0
@@ -108,7 +157,8 @@ def roll(expr: str, multiplier: int = 1) -> RollResult:
                 res = [die(t.sides) for _ in range(t.count)]
                 rolls.append((t.sides, res if t.sign > 0 else [-r for r in res]))
                 total += t.sign * sum(res)
-    label = expr if multiplier <= 1 else f"({expr})x{multiplier}"
+    if has_dice:
+        _after(label, rolls, total)
     return RollResult(label, total, rolls, flat)
 
 

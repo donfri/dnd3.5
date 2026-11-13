@@ -195,7 +195,11 @@ class GM:
         if take:
             r = take
             how = f"takes {take}"
-        else:
+        elif show_dc:
+            with dice.rolling(ch, self.skill_label(skill)):
+                r = dice.d20()
+            how = f"d20={r}"
+        else:   # a secret check (Spot vs an ambush...): the GM rolls it quietly
             r = dice.d20()
             how = f"d20={r}"
         total = r + bonus

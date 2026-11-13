@@ -20,6 +20,16 @@ header b{color:var(--gold)}
 #afkbar{display:none;background:#3a2f16;border-bottom:1px solid var(--gold);color:var(--gold);padding:8px 14px;font-size:14px;white-space:normal}
 #afkbar button{margin-left:10px;background:var(--gold);color:#111;border:0;border-radius:6px;padding:4px 12px;font:inherit;font-weight:bold;cursor:pointer}
 #curtab{display:none;background:none;border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:2px 9px;font-size:13px;position:relative}
+#tray{position:fixed;top:58px;right:10px;z-index:35;display:flex;flex-direction:column;gap:8px;align-items:flex-end;pointer-events:none}
+.throw{background:rgba(24,20,17,.94);border:1px solid #5a4a28;border-radius:12px;padding:8px 10px;box-shadow:0 6px 18px #000b;max-width:300px;transition:opacity .5s}
+.throw .tl{font-size:12px;color:var(--dim);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.throw .row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.throw .tot{color:var(--gold);font-weight:bold;font-size:20px;margin-left:6px}
+.die{width:52px;height:52px;animation:tumble .7s cubic-bezier(.2,.7,.3,1.2)}
+.die.small{width:40px;height:40px}
+.die.crit{filter:drop-shadow(0 0 8px #7ed957)}.die.fumble{filter:drop-shadow(0 0 8px #ff6b6b)}
+@keyframes tumble{0%{transform:translate(-90px,-40px) rotate(-540deg) scale(.4);opacity:0}70%{transform:translate(4px,2px) rotate(18deg) scale(1.08);opacity:1}100%{transform:none}}
+.opt.rollbtn{background:var(--gold);color:#111;font-weight:bold;font-size:17px;padding:12px 22px;border:0}
 #mdot{display:none;position:absolute;top:-3px;right:-3px;width:9px;height:9px;border-radius:50%;background:var(--red);border:1px solid var(--bg)}
 #menu{display:none;position:absolute;right:6px;top:42px;z-index:25;background:var(--panel);border:1px solid var(--gold);border-radius:10px;padding:6px;min-width:210px;box-shadow:0 8px 24px #000a}
 #menu button{display:flex;justify-content:space-between;align-items:center;width:100%;background:none;border:0;color:var(--ink);padding:10px 12px;border-radius:7px;font-size:15px;text-align:left}
@@ -85,6 +95,7 @@ main{flex:1;min-height:0;position:relative}
 #modal .box{background:var(--panel);border:1px solid var(--gold);border-radius:10px;width:min(860px,96vw);max-height:90vh;display:flex;flex-direction:column}
 #modal .top{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);color:var(--gold)}
 #modal pre{margin:0;padding:12px 14px;overflow:auto;font:13px/1.4 ui-monospace,Menlo,Consolas,monospace}
+#mclose2{display:none;position:fixed;right:14px;bottom:calc(16px + env(safe-area-inset-bottom));z-index:40;background:var(--gold);color:#111;border:0;border-radius:24px;padding:10px 18px;font-weight:bold;box-shadow:0 4px 14px #000a}
 #modal .top button{background:none;border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:2px 10px}
 /* character sheet */
 #modal .box{width:min(1040px,97vw)}
@@ -175,7 +186,11 @@ table.sh tr.dim td{color:var(--dim)}
  #prompt{font-size:14px}
  #textrow input{font-size:16px}
  #settings{left:6px;right:6px;width:auto;top:40px;max-height:80vh;overflow-y:auto}
- #modal .box{width:100vw;max-height:100vh;height:100vh;border-radius:0}
+ #modal{align-items:stretch}
+ #modal .box{width:100vw;max-height:100vh;height:100vh;max-height:100dvh;height:100dvh;border-radius:0}
+ #modal .top{position:sticky;top:0;z-index:3;background:var(--panel);padding:10px 12px}
+ #modal .top button{padding:6px 14px;font-size:15px}
+ #mclose2{display:block}
  #msheet{padding:10px}
  .sh-head h2{font-size:20px}
  .abil{grid-template-columns:repeat(3,1fr);gap:6px}
@@ -211,6 +226,7 @@ table.sh tr.dim td{color:var(--dim)}
 <button id="gear" onclick="toggleSettings()" title="Narrator & settings">&#128266; &#9881;</button>
 <button id="curtab" onclick="toggleMenu()" title="Menu"><span id="curlabel"></span><span id="mdot"></span></button></header>
 <div id="menu"></div>
+<div id="tray"></div>
 <div id="afkbar"><span id="afktext"></span><button onclick="setAway(false)">I'm back</button></div>
 <div id="settings">
 <b style="color:var(--gold)">Narrator (read aloud)</b>
@@ -232,6 +248,9 @@ table.sh tr.dim td{color:var(--dim)}
 <b style="color:var(--gold);display:block;margin-top:14px">When someone steps away</b>
 <select id="afkmode" onchange="setAfkMode(this.value)" style="margin-top:6px"><option value="computer">The computer plays their heroes in fights</option><option value="party">The party controls their heroes</option></select>
 <div class="why" style="margin-top:4px">This is shared by everyone at the table.</div>
+<b style="color:var(--gold);display:block;margin-top:14px">Dice</b>
+<label style="color:var(--ink)"><input type="checkbox" id="manualdice" style="width:auto"> Roll my own dice (press &#127922; Roll for each of my heroes' rolls)</label>
+<label>Dice animations</label><select id="diceanim"><option value="mine">My heroes' rolls and free rolls</option><option value="all">Everyone's rolls</option><option value="free">Only free rolls (Dice tab)</option><option value="off">Off</option></select>
 <label style="margin-top:12px">Story tab</label>
 <label style="color:var(--ink)"><input type="checkbox" id="showrolls" style="width:auto"> Show dice rolls in the story too</label>
 </div>
@@ -266,7 +285,8 @@ table.sh tr.dim td{color:var(--dim)}
 
 <div id="modal" onclick="if(event.target.id=='modal')closeModal()"><div class="box">
 <div class="top"><span id="mtitle"></span><span><button id="mplain" style="display:none" onclick="togglePlain()">Plain text</button> <button onclick="closeModal()">Close</button></span></div>
-<div id="msheet"></div><pre id="mbody"></pre></div></div>
+<div id="msheet"></div><pre id="mbody"></pre></div>
+<button id="mclose2" onclick="closeModal()">&#10005; Close</button></div>
 
 <script>
 const NEEDPW=__NEEDPW__;
@@ -325,7 +345,7 @@ function isMenu(t){const s=strip(t);return /^\s{1,3}\d{1,2}\. /.test(s)||/^\s+0\
 function join(){if(N.mode!='off')audioKeepAlive(true);me=$('jname').value.trim()||'Player';table=$('jtable').value.trim()||'main';pw=$('jpw').value||pw;
  localStorage.setItem('dndname',me);localStorage.setItem('dndtable',table);localStorage.setItem('dndpw',pw);
  $('join').style.display='none';$('tname').textContent='table '+table;
- history.replaceState(null,'','?table='+encodeURIComponent(table));joined=true;lastAct=Date.now();poll();inp.focus()}
+ history.replaceState(null,'','?table='+encodeURIComponent(table));joined=true;lastAct=Date.now();poll();sendPrefs();inp.focus()}
 function handle(ev){
  narrateEvent(ev);
  if(ev.t=='battle'){lastBattle=ev.b;
@@ -343,7 +363,9 @@ function handle(ev){
  else if(ev.t=='block'){blocks[ev.seq]=ev;
   add('story','&#128220; <span class="sheetlink" onclick="openBlock('+ev.seq+')">'+esc(ev.title)+' &mdash; open character sheet</span>');
   add('full',ansi(ev.text))}
- else if(ev.t=='roll'){const html='<div class="froll">\ud83c\udfb2 <b>'+esc(ev.who)+'</b> rolled '+esc(ev.expr)+(ev.label?' <i>for '+esc(ev.label)+'</i>':'')+
+ else if(ev.t=='dice'){const m=$('diceanim').value;if(primed&&(m=='all'||(m=='mine'&&ev.player&&ev.player.toLowerCase()==me.toLowerCase())))
+   throwDice(ev.hero+': '+ev.what,ev.rolls,ev.total,ev.expr)}
+ else if(ev.t=='roll'){if(primed&&$('diceanim').value!='off')throwDice(ev.who+(ev.label?' \u2014 '+ev.label:''),ev.rolls||[],ev.total,ev.expr);const html='<div class="froll">\ud83c\udfb2 <b>'+esc(ev.who)+'</b> rolled '+esc(ev.expr)+(ev.label?' <i>for '+esc(ev.label)+'</i>':'')+
    '<span class="tot">'+ev.total+'</span><div class="why">'+esc(ev.detail)+'</div></div>';
   add('dicelog',html);add('chatlog',html);add('full',html);
   if(tab!='chat'&&tab!='dice'&&primed&&ev.who!=me){unreadChat++;$('b-chat').textContent=unreadChat;$('b-chat').style.display='inline'}}
@@ -364,6 +386,36 @@ async function setAfkMode(m){await fetch('/api/afkmode',{method:'POST',headers:h
 function activity(){lastAct=Date.now();if(away=='idle'&&!afkPending)setAway(false)}
 ['mousemove','mousedown','keydown','touchstart','wheel'].forEach(ev=>window.addEventListener(ev,activity,{passive:true,capture:true}));
 setInterval(()=>{if(joined&&!away&&Date.now()-lastAct>IDLE_MS)setAway(true,true)},10000);
+// ---- dice pictures
+const DIE_SHAPE={4:'50,6 94,88 6,88',6:'12,12 88,12 88,88 12,88',8:'50,4 94,50 50,96 6,50',
+ 10:'50,4 92,40 76,92 24,92 8,40',12:'50,4 95,37 78,92 22,92 5,37',20:'50,3 92,27 92,73 50,97 8,73 8,27'};
+function dieSVG(sides,val,small){const pts=DIE_SHAPE[sides]||null;
+ const crit=sides==20&&val==20,fum=sides==20&&val==1;
+ const fill=crit?'#2c4a22':fum?'#4a2222':'#e0b44c',ink=crit?'#7ed957':fum?'#ff6b6b':'#1b1510';
+ let body=pts?`<polygon points="${pts}" fill="${fill}" stroke="#7a6430" stroke-width="3" stroke-linejoin="round"/>`:`<circle cx="50" cy="50" r="45" fill="${fill}" stroke="#7a6430" stroke-width="3"/>`;
+ if(sides==20)body+=`<polygon points="50,24 78,66 22,66" fill="none" stroke="${crit||fum?ink:'#9a7a30'}" stroke-width="2" opacity=".55"/>`;
+ if(sides==6)body+=`<rect x="12" y="12" width="76" height="76" rx="14" fill="none" stroke="#7a6430" stroke-width="3"/>`;
+ const fs=String(val).length>2?26:String(val).length>1?32:38,ty=sides==4?74:sides==20?60:62;
+ return `<svg class="die${small?' small':''}${crit?' crit':''}${fum?' fumble':''}" viewBox="0 0 100 100"><g>${body}<text class="dv" x="50" y="${ty}" text-anchor="middle" font-size="${fs}" font-weight="bold" font-family="system-ui,sans-serif" fill="${ink}">${val}</text></g><text x="94" y="99" text-anchor="end" font-size="13" fill="#8d8378">d${sides}</text></svg>`}
+function throwDice(label,rolls,total,expr){if(!rolls||!rolls.length)return;
+ const tray=$('tray');while(tray.children.length>=3)tray.removeChild(tray.firstChild);
+ const many=rolls.reduce((n,r)=>n+r[1].length,0),small=many>3;
+ const t=document.createElement('div');t.className='throw';
+ let dice='';for(const [sd,vals] of rolls)for(const v of vals.slice(0,12))dice+=dieSVG(sd,Math.abs(v),small);
+ t.innerHTML=`<div class="tl">${esc(label)}</div><div class="row">${dice}${many>1||/[+-]\d/.test(expr||'')?'<span class="tot">= '+total+'</span>':''}</div>`;
+ tray.appendChild(t);
+ // numbers flicker while the dice tumble, then settle on the real result
+ const texts=[...t.querySelectorAll('.dv')],finals=texts.map(x=>x.textContent),sides=[];
+ for(const [sd,vals] of rolls)for(const v of vals.slice(0,12))sides.push(sd);
+ let k=0;const iv=setInterval(()=>{k++;texts.forEach((x,i)=>x.textContent=k<9?1+Math.floor(Math.random()*sides[i]):finals[i]);if(k>=9)clearInterval(iv)},70);
+ setTimeout(()=>{t.style.opacity='0';setTimeout(()=>t.remove(),600)},3200)}
+// ---- dice preferences (kept in this browser; manual rolling is also told to the server)
+function initDicePrefs(){const md=$('manualdice'),da=$('diceanim');
+ md.checked=localStorage.getItem('manualdice')=='1';da.value=localStorage.getItem('diceanim')||'mine';
+ md.onchange=()=>{localStorage.setItem('manualdice',md.checked?'1':'0');sendPrefs()};
+ da.onchange=()=>{localStorage.setItem('diceanim',da.value);if(da.value!='off')throwDice('Test roll',[[20,[1+Math.floor(Math.random()*20)]]],0,'1d20')}}
+async function sendPrefs(){if(!joined)return;try{await fetch('/api/prefs',{method:'POST',headers:hdr(true),body:JSON.stringify({table,name:me,manual_dice:$('manualdice').checked})})}catch(e){}}
+initDicePrefs();
 async function poll(){if(polling)return;polling=true;
  while(true){try{const r=await fetch('/api/poll?table='+encodeURIComponent(table)+'&since='+next+'&name='+encodeURIComponent(me),{headers:hdr()});
   if(r.status==403){alert('Wrong password');localStorage.removeItem('dndpw');location.reload();return}
@@ -381,6 +433,7 @@ async function poll(){if(polling)return;polling=true;
   hereNow=j.here.map(x=>x.toLowerCase());$('here').textContent='• '+j.here.map(n=>(j.away||[]).includes(n)?n+' (away)':n).join(', ');
   if(j.me_away!==undefined&&!afkPending&&j.me_away!==away){away=j.me_away;renderAfk()}
   if(j.afk_mode&&$('afkmode').value!==j.afk_mode)$('afkmode').value=j.afk_mode;
+  if(j.manual!==undefined&&j.manual!==$('manualdice').checked)sendPrefs();
   $('status').textContent=!j.waiting?'The GM is thinking…':(j.owner&&!j.may_answer?'Only '+j.owner+' can answer this one.':(j.owner?'':'Party decision — anyone at the table can answer.'));
   if(got){for(const id of ['story','dice','full']){const p=$(id);p.scrollTop=p.scrollHeight}scheduleState()}
  }catch(e){$('status').textContent='Connection lost, retrying…';await new Promise(r=>setTimeout(r,2000))}}}
@@ -389,7 +442,7 @@ async function poll(){if(polling)return;polling=true;
 const GROUP_ORDER=['Actions','Fight','Travel','Move','Tactics','Explore','Party','Turn','Game'];
 const GROUP_LABEL={Actions:'Do something here',Fight:'Attack & magic',Travel:'Go somewhere',Move:'Move',Tactics:'Tactics',Explore:'Explore',Party:'Party',Turn:'',Game:'More'};
 let showMore=false;
-function optButton(ev,o,i){const b=document.createElement('button');b.className='opt';let val;
+function optButton(ev,o,i){const b=document.createElement('button');b.className='opt'+(ev.kind=='roll'?' rollbtn':'');let val;
  if(ev.kind=='confirm')val=(i==0?'y':'n');else if(ev.kind=='pause')val='';else val=(o=='(back)'?'0':String(i+1));
  // in the big action menus, the "(explanation)" part is a hint (hidden on phones)
  let label=esc(o);const m=ev.groups&&o.match(/^(.+?) (\(.+\))$/);
@@ -545,12 +598,12 @@ function renderJournal(s){const el=$('journal');if(!s.active){el.innerHTML='<div
 let sheetIdx=null,showAllSkills=false;
 function openSheet(i){sheetIdx=i;const p=lastState.party[i];$('mtitle').textContent=p.name+' — character sheet';
  $('mbody').innerHTML=esc(p.sheet);$('mbody').style.display='none';$('mplain').style.display='inline-block';$('mplain').textContent='Plain text';
- $('msheet').style.display='block';$('msheet').innerHTML=renderSheet(p.sheet_data);$('modal').style.display='flex';$('msheet').scrollTop=0}
+ $('msheet').style.display='block';$('msheet').innerHTML=renderSheet(p.sheet_data);$('modal').style.display='flex';modalOpened();$('msheet').scrollTop=0}
 function togglePlain(){const plain=$('mbody').style.display=='none';$('mbody').style.display=plain?'block':'none';$('msheet').style.display=plain?'none':'block';$('mplain').textContent=plain?'Formatted':'Plain text'}
 async function openBlock(seq){const b=blocks[seq];await refreshState();
  const i=lastState&&lastState.party?lastState.party.findIndex(p=>b.title.toLowerCase().startsWith(p.name.toLowerCase())):-1;
  if(i>=0){openSheet(i);return}
- $('mtitle').textContent=b.title;$('msheet').style.display='none';$('mplain').style.display='none';$('mbody').style.display='block';$('mbody').innerHTML=ansi(b.text);$('modal').style.display='flex'}
+ $('mtitle').textContent=b.title;$('msheet').style.display='none';$('mplain').style.display='none';$('mbody').style.display='block';$('mbody').innerHTML=ansi(b.text);$('modal').style.display='flex';modalOpened()}
 const sgn=n=>(n>=0?'+':'')+n;
 function canManageHero(i){if(!lastState||!lastState.can_manage)return false;const p=lastState.party[i];
  const owner=(p.player||'').toLowerCase();return !owner||owner==me.toLowerCase()||!hereNow.includes(owner)}
@@ -617,7 +670,12 @@ function renderSheet(d){if(!d)return '<div class="empty">No sheet.</div>';
    (lastState&&!lastState.can_manage?'<div class="why" style="margin-top:6px">Gear can be changed while exploring, between actions (not in combat or while the game is asking something else).</div>':
     (!mine&&sheetIdx!=null?'<div class="why" style="margin-top:6px">Only this hero\'s player can change their gear.</div>':''))+`</div>`;
  return h}
-function closeModal(){$('modal').style.display='none'}
+function closeModal(){if($('modal').style.display!='flex')return;$('modal').style.display='none';
+ if(history.state&&history.state.modal)history.back()}
+// the phone's Back button (or Escape) closes a sheet instead of leaving the page
+function modalOpened(){if(!(history.state&&history.state.modal))history.pushState({modal:1},'')}
+window.addEventListener('popstate',()=>{if($('modal').style.display=='flex')$('modal').style.display='none'});
+document.addEventListener('keydown',e=>{if(e.key=='Escape')closeModal()});
 document.addEventListener('keydown',e=>{if(e.key=='Escape'){closeModal();$('settings').style.display='none'}});
 
 // ---------------------------------------------------------------- narrator

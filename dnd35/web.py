@@ -27,6 +27,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Dict, List, Optional, Sequence
 from urllib.parse import parse_qs, urlparse
 
+from . import dice
 from .rules import MAX_LEVEL
 from .ui import UI, Color, QuitGame, c
 
@@ -55,7 +56,7 @@ def free_roll(expr: str) -> dict:
         raise ValueError("Type dice like 2d6+1, d20 or 4d6kh3.")
     if e[0] not in "+-":
         e = "+" + e
-    pos, total, parts, dice_count = 0, 0, [], 0
+    pos, total, parts, dice_count, faces = 0, 0, [], 0, []
     for m in ROLL_TERM.finditer(e):
         if m.start() != pos:
             raise ValueError(f"I don't understand '{expr}'. Try 2d6+1, d20 or 4d6kh3.")
@@ -67,6 +68,7 @@ def free_roll(expr: str) -> dict:
             if n < 1 or sides < 2 or dice_count > 100 or sides > 1000:
                 raise ValueError("Up to 100 dice, with 2 to 1000 sides each.")
             rolls = [_FREE_RNG.randint(1, sides) for _ in range(n)]
+            faces.append([sides, rolls[:20]])
             kept = rolls
             note = ""
             if m.group(4):
@@ -81,7 +83,8 @@ def free_roll(expr: str) -> dict:
             parts.append(f"{sign * int(m.group(7)):+d}")
     if pos != len(e) or not dice_count:
         raise ValueError(f"I don't understand '{expr}'. Try 2d6+1, d20 or 4d6kh3.")
-    return {"expr": expr.strip(), "detail": "  ".join(parts), "total": total}
+    return {"expr": expr.strip(), "detail": "  ".join(parts), "total": total,
+            "rolls": faces[:6]}
 
 
 class WebUI(UI):
@@ -328,6 +331,7 @@ class Table:
         self.afk_mode = "computer"         # or "party": friends answer for away players
         self.tokens: Dict[str, list] = {}  # normalized name -> [browser token, last seen]
         self.covered: Dict[str, list] = {}  # away player -> [party answers, computer answers]
+        self.manual: set = set()           # players who press "Roll" for their own heroes
         self.ui = WebUI(self)
         self.ui.autosave_name = f"autosave-{name}"
         self.thread = threading.Thread(target=self._run, daemon=True)
@@ -368,6 +372,55 @@ class Table:
             self.waiting = False
             self.owner = ""
             return self.inputs.pop(0)
+
+    # ---- dice: optional manual rolls, and dice events for the animations
+    def _hero_player(self, who) -> str:
+        return (getattr(who, "player", "") or "") if getattr(who, "is_pc", False) else ""
+
+    def before_roll(self, who, what: str, expr: str) -> None:
+        """A player who rolls their own dice presses Roll before their hero's roll.
+        Away or offline players are never waited for."""
+        player = self._hero_player(who)
+        if not player or self._norm(player) not in self.manual:
+            return
+        here = {self._norm(n) for n in self.present()}
+        if self._norm(player) not in here or self.is_afk(player):
+            return
+        self.emit({"t": "prompt", "text": f"{who.name}: {what} \u2014 roll {expr}",
+                   "options": [f"\U0001f3b2 Roll {expr}"], "kind": "roll", "groups": None,
+                   "owner": player})
+        with self.cond:
+            self.waiting = True
+            self.owner = player
+            self.inputs.clear()
+            while not self.inputs:
+                here = {self._norm(n) for n in self.present()}
+                if self._norm(player) not in here or self.is_afk(player):
+                    break
+                self.cond.wait(timeout=5)
+            if self.inputs:
+                self.inputs.pop(0)
+            self.waiting = False
+            self.owner = ""
+
+    def after_roll(self, who, what: str, expr: str, rolls, total: int) -> None:
+        player = self._hero_player(who)
+        if not player:
+            return
+        self.emit({"t": "dice", "hero": who.name, "player": player, "what": what,
+                   "expr": expr, "rolls": [[sd, list(v)[:20]] for sd, v in rolls][:6],
+                   "total": total})
+
+    def set_manual(self, who: str, on: bool) -> None:
+        key = self._norm(who)
+        if not key:
+            return
+        with self.cond:
+            if on:
+                self.manual.add(key)
+            else:
+                self.manual.discard(key)
+            self.cond.notify_all()
 
     def note_cover(self, owner: str, by: str) -> None:
         if not hasattr(self, "covered"):
@@ -641,9 +694,11 @@ class Table:
                     "away": [n for n in here if self._norm(n) in self.afk],
                     "me_away": self.afk.get(self._norm(who), ""),
                     "afk_mode": self.afk_mode,
+                    "manual": self._norm(who) in getattr(self, "manual", set()),
                     "reset": since < self.first_seq}
 
     def _run(self) -> None:
+        GAME_THREADS[threading.get_ident()] = self
         from .adventure.engine import list_saves, load_game, save_info
         from .game import gm_play_loaded, main_menu
         Color.enabled = True
@@ -673,6 +728,20 @@ class Table:
                 traceback.print_exc()   # details go to the server log, not to players
             time.sleep(0.5)
 
+
+GAME_THREADS: Dict[int, "Table"] = {}
+
+
+def _dispatch(method):
+    def hook(*args):
+        t = GAME_THREADS.get(threading.get_ident())
+        if t is not None:
+            getattr(t, method)(*args)
+    return hook
+
+
+dice.before_roll = _dispatch("before_roll")   # only game threads of web tables are affected
+dice.after_roll = _dispatch("after_roll")
 
 TABLES: Dict[str, Table] = {}
 TABLES_LOCK = threading.Lock()
@@ -899,6 +968,9 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"ok": ok, "why": why})
         elif u.path == "/api/afk":
             t.set_afk(who, bool(body.get("away")), bool(body.get("auto")))
+            self._json({"ok": True})
+        elif u.path == "/api/prefs":
+            t.set_manual(who, bool(body.get("manual_dice")))
             self._json({"ok": True})
         elif u.path == "/api/afkmode":
             t.set_afk_mode(str(body.get("mode", "")), who)

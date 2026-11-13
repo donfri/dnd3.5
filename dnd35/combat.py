@@ -565,7 +565,8 @@ class Combat:
         ui = self.ui
         ui.sub("Initiative")
         for x in self.st.values():
-            r = dice.d20()
+            with dice.rolling(x.c, "initiative"):
+                r = dice.d20()
             x.init = r + x.c.initiative()
             x.tiebreak = (x.c.initiative(), dice.d20())
             ui.roll(f"{x.c.name}: d20={r} {x.c.initiative():+d} = {x.init}")
@@ -731,6 +732,13 @@ class Combat:
                     situational: Sequence[Tuple[str, int, str]] = (), offhand=False,
                     twf=False, aoo=False, power: int = 0, extra_damage: int = 0) -> bool:
         """Resolve one attack roll. Returns True on hit."""
+        with dice.rolling(attacker, f"{w.get('name', 'attack')} vs {target.name}"):
+            return self._make_attack(attacker, target, w, bab, situational, offhand, twf,
+                                     aoo, power, extra_damage)
+
+    def _make_attack(self, attacker: Creature, target: Creature, w: dict, bab: int,
+                     situational: Sequence[Tuple[str, int, str]] = (), offhand=False,
+                     twf=False, aoo=False, power: int = 0, extra_damage: int = 0) -> bool:
         ui = self.ui
         if w.get("natural") is False and offhand:
             w = dict(w, _offhand_light=w.get("light"))
