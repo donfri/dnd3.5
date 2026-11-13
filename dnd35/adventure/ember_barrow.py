@@ -62,6 +62,11 @@ TRAVEL = {("millbrook", "forest_road"): (3, "road"), ("forest_road", "old_bridge
           ("old_bridge", "barrow_hill"): (1, "hills")}
 
 WANDERING = [
+    {"text": "Three ragged men step out of the trees. 'Purses, boots, and nobody bleeds.'",
+     "monsters": ["human bandit", "human bandit", "human bandit"],
+     "requires": {"not_flag": "ember_king_dead"}},
+    {"text": "Something crashes through the undergrowth, snorting: a wild boar, and angry.",
+     "monsters": ["boar"]},
     {"text": "Squeaking and scrabbling: hungry dire rats find you!",
      "monsters": ["dire rat", "dire rat"]},
     {"text": "A goblin patrol stumbles across your camp!",

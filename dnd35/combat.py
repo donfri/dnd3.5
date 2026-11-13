@@ -1025,6 +1025,14 @@ class Combat(ManeuversMixin, MonstersMixin, PlayerMixin):
                     target.add_effect(Effect("Grappling", None, tags=["grappled"],
                                              data={"with": attacker.uid}))
                     ui.bad(f"  {target.name} is caught in {attacker.name}'s crushing grip!")
+            if special.get("petrify") and target.conscious and target.is_living() \
+                    and not target.get_effect("Petrified"):
+                if not saving_throw(ui, target, "fort", special["petrify"]["dc"], [],
+                                    "petrification"):
+                    target.add_effect(Effect("Petrified", None,
+                                             tags=["paralyzed", "petrified"], hidden=False))
+                    ui.bad(f"  {target.name} stiffens, greys, and turns to STONE!")
+                    self.after_damage(target)
             if special.get("paralysis") and target.conscious:
                 elf = getattr(target, "race", "") == "elf"
                 if elf:

@@ -61,6 +61,9 @@ RUMORS = [
 TRAVEL = {("saltmere", "cliff_path"): (1, "trail"), ("cliff_path", "lighthouse_yard"): (1, "trail")}
 
 WANDERING = [
+    {"text": "A drifting log opens one yellow eye.", "monsters": ["crocodile"]},
+    {"text": "Wreckers with hooded lanterns, hoping you were a ship: 'Well. You'll do.'",
+     "monsters": ["human bandit", "human bandit"]},
     {"text": "Scrabbling claws and wet whiskers: dire rats from the cliff burrows!",
      "monsters": ["dire rat", "dire rat"]},
     {"text": "A kobold patrol with a hooded lantern stumbles onto you!",

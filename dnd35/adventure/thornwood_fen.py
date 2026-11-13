@@ -67,6 +67,20 @@ TRAVEL = {("marrowmere", "fen_road"): (4, "trail"), ("fen_road", "owl_hollow"): 
           ("lizard_village", "abbey_gate"): (2, "marsh")}
 
 WANDERING = [
+    {"text": "The black water bulges, and a crocodile the length of a barge surges out.",
+     "monsters": ["giant crocodile"]},
+    {"text": "Two heads rise over the reeds, bickering. Both of them see you.",
+     "monsters": ["ettin"]},
+    {"text": "Pale faces at the edge of the torchlight, smiling. 'Travelers. How kind.'",
+     "monsters": ["vampire spawn", "vampire spawn"]},
+    {"text": "The path ahead glistens. The glistening is ten feet tall, and moving.",
+     "monsters": ["gelatinous cube"]},
+    {"text": "Wings like sails, three heads, and a furnace glow: a chimera drops from the "
+             "dead trees!", "monsters": ["chimera"]},
+    {"text": "A veiled woman sits weeping on a fallen column. Her hair is moving.",
+     "monsters": ["medusa"]},
+    {"text": "A dragon the color of tar lifts its head from the mere, acid drooling.",
+     "monsters": ["young black dragon"]},
     {"text": "Two glassy-eyed lizardfolk rise out of the reeds, clubs raised!",
      "monsters": ["lizardfolk", "lizardfolk"], "requires": {"not_flag": "lizards_free"}},
     {"text": "The reeds part and a dire boar charges, squealing!",

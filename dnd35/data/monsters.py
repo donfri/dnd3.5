@@ -696,3 +696,279 @@ WILD_SHAPES = {  # key: minimum druid level
 }
 ELEMENTAL_SHAPES = {"large air elemental": 16, "large earth elemental": 16,
                     "large fire elemental": 16, "large water elemental": 16}
+
+
+# ---------------------------------------------------------------- bestiary, part 3
+def _sv(hd, good):
+    """Base saves from Hit Dice: good = 2 + HD/2, poor = HD/3. good is e.g. "FR"."""
+    return tuple(2 + hd // 2 if k in good else hd // 3 for k in "FRW")
+
+
+def _a(name, damage, dtype, primary=True, **special):
+    return dict({"name": name, "damage": damage, "dtype": dtype, "primary": primary}, **special)
+
+
+def _mon(name, mtype, size, hd, hit_die, bab, good, cr, ab, natural, speed, desc, **kw):
+    d = {"name": name, "type": mtype, "size": size, "hd": hd, "hit_die": hit_die, "bab": bab,
+         "base_saves": _sv(hd, good), "cr": cr,
+         "abilities": dict(zip(("str", "dex", "con", "int", "wis", "cha"), ab)),
+         "natural": natural, "speed": speed, "skills": {"Listen": 4, "Spot": 4},
+         "feats": [], "vision": "darkvision 60 ft.", "desc": desc}
+    d.update(kw)
+    return d
+
+
+_PAR = {"dc": 15, "duration": "1d4+1"}
+MONSTERS.update({
+    # ---- people
+    "human bandit": _mon(
+        "Bandit", "humanoid", "medium", 1, 8, 1, "F", 0.5, (13, 11, 12, 10, 9, 8), 0, 30,
+        "A hard-eyed outlaw in patched leather.", armor="studded leather",
+        weapons=["short sword", "light crossbow"], vision="normal", morale=True),
+    "dark acolyte": _mon(
+        "Dark acolyte", "humanoid", "medium", 3, 8, 2, "FW", 3, (12, 10, 12, 10, 15, 12), 0, 20,
+        "A robed priest of some hungry god, a black iron mace in hand.",
+        armor="chain shirt", shield="light wooden shield", weapons=["heavy mace"],
+        vision="normal", evil=True,
+        slas=[{"spell": "Cause Fear", "cl": 3, "dc": 13, "uses": 2},
+              {"spell": "Hold Person", "cl": 3, "dc": 14, "uses": 1}]),
+    "hobgoblin warcaster": _mon(
+        "Hobgoblin warcaster", "humanoid", "medium", 3, 4, 1, "W", 3, (10, 14, 12, 15, 10, 10),
+        0, 30, "A hobgoblin in a soot-stained coat, fingers already sketching fire.",
+        subtypes=["goblinoid"], weapons=["quarterstaff"], evil=True,
+        slas=[{"spell": "Magic Missile", "cl": 3, "dc": 13, "uses": 3},
+              {"spell": "Burning Hands", "cl": 3, "dc": 13, "uses": 2}]),
+    "minotaur": _mon(
+        "Minotaur", "monstrous humanoid", "large", 6, 8, 6, "RW", 4, (19, 10, 15, 7, 10, 8), 5,
+        30, "A bull-headed brute hefting an axe as long as you are tall.",
+        weapons=["greataxe"], evil=True),
+    "medusa": _mon(
+        "Medusa", "monstrous humanoid", "medium", 6, 8, 6, "RW", 7, (10, 15, 12, 12, 13, 15),
+        3, 30, "A veiled woman with a nest of hissing snakes for hair. Don't meet her eyes.",
+        weapons=["shortbow", "dagger"], gaze={"dc": 15, "range": 30}, evil=True,
+        natural_attacks=[_a("snakes", "1d4", "P", False, poison={
+            "dc": 14, "ability": "str", "damage": "1d6", "name": "medusa venom"})]),
+    # ---- giants
+    "ettin": _mon("Ettin", "giant", "large", 10, 8, 7, "F", 6, (23, 8, 15, 6, 10, 11), 7, 30,
+                  "A two-headed giant, each head arguing with the other about who gets to "
+                  "hit you.", armor="hide", weapons=["morningstar", "javelin"], evil=True),
+    "hill giant": _mon("Hill giant", "giant", "large", 12, 8, 9, "F", 7,
+                       (25, 8, 19, 6, 10, 7), 9, 30,
+                       "A slab-muscled giant in stinking hides, swinging a tree trunk.",
+                       armor="hide", weapons=["greatclub", "javelin"], evil=True),
+    "stone giant": _mon("Stone giant", "giant", "large", 14, 8, 10, "F", 8,
+                        (27, 15, 19, 10, 12, 11), 11, 30,
+                        "A grey, hairless giant with skin like weathered granite.",
+                        armor="hide", weapons=["greatclub", "javelin"]),
+    "frost giant": _mon("Frost giant", "giant", "large", 14, 8, 10, "F", 9,
+                        (29, 9, 21, 10, 14, 11), 9, 40,
+                        "A blue-skinned giant with an icicle beard and a rime-crusted axe.",
+                        subtypes=["cold"], armor="chain shirt", weapons=["greataxe"],
+                        immune=["cold"], vulnerable=["fire"], evil=True),
+    "fire giant": _mon("Fire giant", "giant", "large", 15, 8, 11, "F", 10,
+                       (31, 9, 21, 10, 14, 11), 8, 30,
+                       "A coal-black giant with hair of flame, armored in blackened plate.",
+                       subtypes=["fire"], armor="half-plate", weapons=["greatsword"],
+                       immune=["fire"], vulnerable=["cold"], evil=True),
+    # ---- undead
+    "ghast": _mon("Ghast", "undead", "medium", 4, 12, 2, "W", 3, (17, 17, None, 13, 14, 16), 4,
+                  30, "A ghoul gone worse: bloated, clever, and stinking of the grave.",
+                  natural_attacks=[_a("bite", "1d8", "P", paralysis=_PAR),
+                                   _a("claw", "1d4", "S", False, paralysis=_PAR),
+                                   _a("claw", "1d4", "S", False, paralysis=_PAR)],
+                  evil=True, savage=True),
+    "ogre zombie": _mon("Ogre zombie", "undead", "large", 8, 12, 4, "W", 3,
+                        (23, 6, None, None, 10, 1), 5, 30,
+                        "A dead ogre, grey and sagging, that has not stopped walking.",
+                        weapons=["greatclub"], dr=[(5, "S")], mindless=True,
+                        single_actions=True, immune=["mind-affecting"], evil=True),
+    "vampire spawn": _mon("Vampire spawn", "undead", "medium", 4, 12, 2, "W", 4,
+                          (16, 14, None, 13, 13, 14), 3, 30,
+                          "Pale, quick and smiling, with too many teeth in the smile.",
+                          natural_attacks=[_a("slam", "1d6", "B", drain={"dc": 14})],
+                          dr=[(5, "magic")], evil=True),
+    "spectre": _mon("Spectre", "undead", "medium", 7, 12, 3, "W", 7,
+                    (None, 16, None, 14, 14, 15), 0, 40,
+                    "A hateful, translucent figure that still wears the face it died with.",
+                    deflection=2, fly=80, incorporeal=True, evil=True,
+                    natural_attacks=[_a("incorporeal touch", "1d8", "", touch=True,
+                                        finesse=True, drain={"dc": 15})]),
+    # ---- animals
+    "boar": _mon("Boar", "animal", "medium", 3, 8, 2, "FR", 2, (15, 10, 17, 2, 13, 4), 6, 40,
+                 "A bristling wild boar with yellow tusks and no fear at all.",
+                 natural_attacks=[_a("gore", "1d8", "P", str_mult=1.5)], savage=True,
+                 vision="low-light, scent"),
+    "wolverine": _mon("Wolverine", "animal", "medium", 3, 8, 2, "FR", 2,
+                      (14, 15, 19, 2, 12, 10), 2, 30,
+                      "Forty pounds of teeth and bad temper.",
+                      natural_attacks=[_a("claw", "1d4", "S"), _a("claw", "1d4", "S"),
+                                       _a("bite", "1d6", "P", False)], savage=True,
+                      vision="low-light, scent"),
+    "crocodile": _mon("Crocodile", "animal", "medium", 3, 8, 2, "FR", 2,
+                      (19, 12, 17, 1, 12, 2), 4, 20,
+                      "A log with eyes, until it moves.",
+                      natural_attacks=[_a("bite", "1d8", "P", str_mult=1.5, grab=True)],
+                      vision="low-light"),
+    "giant crocodile": _mon("Giant crocodile", "animal", "huge", 7, 8, 5, "FR", 4,
+                            (27, 12, 19, 1, 12, 2), 7, 20,
+                            "A crocodile as long as a river barge.",
+                            natural_attacks=[_a("bite", "2d8", "P", str_mult=1.5, grab=True)],
+                            vision="low-light"),
+    "lion": _mon("Lion", "animal", "large", 5, 8, 3, "FR", 3, (21, 17, 15, 2, 12, 6), 3, 40,
+                 "A tawny lion, shoulders rolling as it paces.",
+                 natural_attacks=[_a("claw", "1d4", "S"), _a("claw", "1d4", "S"),
+                                  _a("bite", "1d8", "P", False, grab=True)],
+                 vision="low-light, scent"),
+    "tiger": _mon("Tiger", "animal", "large", 6, 8, 4, "FR", 4, (23, 15, 17, 2, 12, 6), 3, 40,
+                  "Stripes in the tall grass, and then four hundred pounds of cat.",
+                  natural_attacks=[_a("claw", "1d8", "S", grab=True), _a("claw", "1d8", "S"),
+                                   _a("bite", "2d6", "P", False)],
+                  vision="low-light, scent"),
+    "dire ape": _mon("Dire ape", "animal", "large", 5, 8, 3, "FR", 3,
+                     (22, 15, 14, 2, 12, 7), 4, 30,
+                     "A shaggy ape twice the size of a man, beating its chest.",
+                     natural_attacks=[_a("claw", "1d6", "S"), _a("claw", "1d6", "S"),
+                                      _a("bite", "1d8", "P", False)], rend="2d6+9",
+                     vision="low-light, scent"),
+    "dire bear": _mon("Dire bear", "animal", "large", 12, 8, 9, "FR", 7,
+                      (31, 13, 19, 2, 12, 10), 7, 40,
+                      "A cave bear from an older age, as tall at the shoulder as a horse.",
+                      natural_attacks=[_a("claw", "2d4", "S", grab=True), _a("claw", "2d4", "S"),
+                                       _a("bite", "2d8", "P", False)],
+                      vision="low-light, scent"),
+    "dire tiger": _mon("Dire tiger", "animal", "large", 16, 8, 12, "FR", 8,
+                       (27, 15, 17, 2, 12, 10), 6, 40,
+                       "A sabre-toothed cat the size of an ox.",
+                       natural_attacks=[_a("claw", "2d4", "S", grab=True), _a("claw", "2d4", "S"),
+                                        _a("bite", "2d6", "P", False)],
+                       vision="low-light, scent"),
+    # ---- vermin
+    "large monstrous spider": _mon(
+        "Large monstrous spider", "vermin", "large", 4, 8, 3, "F", 2,
+        (15, 17, 12, None, 10, 2), 1, 30, "A spider the size of a pony, eyes like wet beads.",
+        natural_attacks=[_a("bite", "1d8", "P", poison={
+            "dc": 13, "ability": "str", "damage": "1d6", "name": "spider venom"})],
+        mindless=True, immune=["mind-affecting"]),
+    "giant wasp": _mon(
+        "Giant wasp", "vermin", "large", 5, 8, 3, "F", 3, (18, 12, 14, None, 13, 11), 4, 20,
+        "A wasp as big as a hound, its drone rattling your teeth.", fly=60,
+        natural_attacks=[_a("sting", "1d3", "P", str_mult=1.5, poison={
+            "dc": 14, "ability": "dex", "damage": "1d6", "name": "wasp venom"})],
+        mindless=True, immune=["mind-affecting"]),
+    "giant scorpion": _mon(
+        "Giant scorpion", "vermin", "large", 5, 8, 3, "F", 3, (19, 10, 14, None, 10, 2), 6, 50,
+        "A scorpion as long as a wagon, claws clacking.",
+        natural_attacks=[_a("claw", "1d6", "B", grab=True), _a("claw", "1d6", "B"),
+                         _a("sting", "1d6", "P", False, poison={
+                             "dc": 14, "ability": "con", "damage": "1d4",
+                             "name": "scorpion venom"})],
+        constrict="1d6+4", mindless=True, immune=["mind-affecting"]),
+    # ---- beasts and horrors
+    "giant eagle": _mon("Giant eagle", "magical beast", "large", 4, 10, 4, "FR", 3,
+                        (18, 17, 12, 10, 14, 10), 3, 10,
+                        "A noble eagle with a twenty-foot wingspan.", fly=80,
+                        natural_attacks=[_a("claw", "1d6", "S"), _a("claw", "1d6", "S"),
+                                         _a("bite", "1d8", "P", False)],
+                        vision="low-light"),
+    "griffon": _mon("Griffon", "magical beast", "large", 7, 10, 7, "FR", 4,
+                    (18, 15, 16, 5, 13, 8), 6, 30,
+                    "Half lion, half eagle, all appetite. It likes horses best.", fly=80,
+                    natural_attacks=[_a("bite", "2d6", "P"), _a("claw", "1d4", "S", False),
+                                     _a("claw", "1d4", "S", False)]),
+    "ankheg": _mon("Ankheg", "magical beast", "large", 3, 10, 3, "FR", 3,
+                   (21, 10, 17, 1, 13, 6), 8, 30,
+                   "A burrowing insect-thing the size of a cart, mandibles dripping acid.",
+                   natural_attacks=[_a("bite", "2d6", "P", str_mult=1.5, grab=True,
+                                       extra_damage=["1d4", "acid"])]),
+    "cockatrice": _mon("Cockatrice", "magical beast", "small", 5, 10, 5, "FR", 3,
+                       (6, 17, 11, 2, 13, 9), 0, 20,
+                       "A scrawny rooster with a lizard's tail and bat wings. Its peck turns "
+                       "flesh to stone.", fly=60,
+                       natural_attacks=[_a("bite", "1d4", "P", finesse=True,
+                                           petrify={"dc": 12})]),
+    "winter wolf": _mon("Winter wolf", "magical beast", "large", 6, 10, 6, "FR", 5,
+                        (18, 13, 16, 9, 13, 10), 5, 50,
+                        "A white wolf the size of a horse, breath smoking with cold.",
+                        subtypes=["cold"], immune=["cold"], vulnerable=["fire"], evil=True,
+                        natural_attacks=[_a("bite", "1d8", "P", str_mult=1.5, trip=True,
+                                            extra_damage=["1d6", "cold"])],
+                        breath={"dice": "4d6", "dtype": "cold", "dc": 16, "save": "ref",
+                                "targets": 2, "recharge": "1d4",
+                                "text": "breathes a cone of killing frost",
+                                "area": ("cone", 15)}),
+    "chimera": _mon("Chimera", "magical beast", "large", 9, 10, 9, "FR", 7,
+                    (19, 13, 17, 4, 13, 10), 9, 30,
+                    "A lion's body with three heads: lion, goat, and a red dragon that is "
+                    "already drawing breath.", fly=50, evil=True,
+                    natural_attacks=[_a("bite", "2d6", "P"), _a("bite", "1d8", "P", False),
+                                     _a("gore", "1d8", "P", False), _a("claw", "1d6", "S", False),
+                                     _a("claw", "1d6", "S", False)],
+                    breath={"dice": "3d8", "dtype": "fire", "dc": 17, "save": "ref",
+                            "targets": 3, "recharge": "1d4", "text": "breathes a cone of fire",
+                            "area": ("cone", 20)}),
+    "bulette": _mon("Bulette", "magical beast", "huge", 9, 10, 9, "FR", 7,
+                    (27, 15, 20, 2, 13, 6), 12, 40,
+                    "An armored land shark that erupts out of the ground under your feet.",
+                    natural_attacks=[_a("bite", "2d8", "P"), _a("claw", "2d6", "S", False),
+                                     _a("claw", "2d6", "S", False)], savage=True),
+    "carrion crawler": _mon(
+        "Carrion crawler", "aberration", "large", 3, 8, 2, "W", 4, (14, 15, 14, 1, 15, 6), 6, 30,
+        "A pale segmented worm with a fringe of twitching tentacles around its mouth.",
+        natural_attacks=[_a("tentacle", "0", "", no_damage=True, touch=True,
+                            paralysis={"dc": 13, "duration": "2d4"}),
+                         _a("tentacle", "0", "", no_damage=True, touch=True,
+                            paralysis={"dc": 13, "duration": "2d4"}),
+                         _a("bite", "1d4", "P", False)]),
+    "ettercap": _mon("Ettercap", "aberration", "medium", 5, 8, 3, "W", 3,
+                     (14, 17, 13, 6, 15, 8), 1, 30,
+                     "A hunched, pot-bellied spider-man with venom beading on its fangs.",
+                     natural_attacks=[_a("bite", "1d8", "P", poison={
+                         "dc": 15, "ability": "dex", "damage": "1d6", "name": "ettercap venom"}),
+                                      _a("claw", "1d3", "S", False), _a("claw", "1d3", "S", False)],
+                     evil=True),
+    "gelatinous cube": _mon(
+        "Gelatinous cube", "ooze", "large", 4, 10, 3, "", 3, (10, 1, 26, None, 1, 1), 0, 15,
+        "A ten-foot block of clear jelly filling the passage, bones drifting inside it.",
+        natural_attacks=[_a("slam", "1d6", "B", extra_damage=["1d6", "acid"],
+                            paralysis={"dc": 20, "duration": "3d6"})],
+        mindless=True, immune=["mind-affecting", "sleep", "paralysis", "electricity"]),
+    "ochre jelly": _mon(
+        "Ochre jelly", "ooze", "large", 6, 10, 4, "", 5, (15, 1, 22, None, 1, 1), 0, 10,
+        "A heaving yellow-brown slime that eats flesh and leaves the bones.",
+        natural_attacks=[_a("slam", "2d4", "B", extra_damage=["1d4", "acid"], grab=True)],
+        constrict="2d4+3", mindless=True,
+        immune=["mind-affecting", "sleep", "paralysis"]),
+    "treant": _mon("Treant", "plant", "huge", 7, 8, 5, "F", 8, (29, 8, 21, 12, 16, 12), 13, 30,
+                   "An ancient oak that has decided to walk, and is not pleased with you.",
+                   natural_attacks=[_a("slam", "2d6", "B"), _a("slam", "2d6", "B")],
+                   dr=[(10, "S")], vulnerable=["fire"],
+                   immune=["mind-affecting", "sleep", "paralysis"], vision="low-light"),
+    # ---- dragons
+    "young black dragon": _mon(
+        "Young black dragon", "dragon", "medium", 10, 12, 10, "FRW", 5,
+        (15, 10, 15, 10, 11, 10), 9, 60,
+        "A gaunt, horned dragon the color of a tar pit, dripping swamp water.", fly=150,
+        subtypes=["water"], immune=["acid", "sleep", "paralysis"], evil=True,
+        natural_attacks=[_a("bite", "1d8", "P"), _a("claw", "1d6", "S", False),
+                         _a("claw", "1d6", "S", False)],
+        breath={"dice": "6d4", "dtype": "acid", "dc": 17, "save": "ref", "targets": 3,
+                "recharge": "1d4", "text": "spits a hissing line of acid",
+                "area": ("line", 60)}),
+    "young red dragon": _mon(
+        "Young red dragon", "dragon", "large", 13, 12, 13, "FRW", 7,
+        (21, 10, 15, 12, 13, 12), 12, 40,
+        "Scarlet scales, a furnace glow in its throat, and the certainty that you are prey.",
+        fly=150, subtypes=["fire"], immune=["fire", "sleep", "paralysis"],
+        vulnerable=["cold"], evil=True,
+        natural_attacks=[_a("bite", "2d6", "P"), _a("claw", "1d8", "S", False),
+                         _a("claw", "1d8", "S", False)],
+        breath={"dice": "6d10", "dtype": "fire", "dc": 18, "save": "ref", "targets": 3,
+                "recharge": "1d4", "text": "breathes a roaring cone of fire",
+                "area": ("cone", 40)}),
+})
+
+# true base saves for the round-4 monsters
+for _k, (_hd, _good) in {"constrictor snake": (3, "FR"), "giant constrictor snake": (11, "FR"),
+                         "rat swarm": (4, "FR"), "basilisk": (6, "FR"), "elephant": (11, "FR"),
+                         "tyrannosaurus": (18, "FR")}.items():
+    MONSTERS[_k]["base_saves"] = _sv(_hd, _good)
