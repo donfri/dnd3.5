@@ -57,6 +57,10 @@ RUMORS = [
          "what it fears."),
 ]
 
+# overland legs between places: (miles, terrain); used in both directions
+TRAVEL = {("millbrook", "forest_road"): (3, "road"), ("forest_road", "old_bridge"): (2, "trail"),
+          ("old_bridge", "barrow_hill"): (1, "hills")}
+
 WANDERING = [
     {"text": "Squeaking and scrabbling: hungry dire rats find you!",
      "monsters": ["dire rat", "dire rat"]},

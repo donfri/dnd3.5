@@ -58,6 +58,10 @@ RUMORS = [
          "the dwarf-holds, which means there's still time."),
 ]
 
+# overland legs between places: (miles, terrain); used in both directions
+TRAVEL = {("highcairn", "pass_road"): (6, "road"), ("pass_road", "gnoll_camp"): (1, "mountains"),
+          ("pass_road", "gorge"): (3, "trail"), ("gorge", "watchtower"): (1, "trail")}
+
 WANDERING = [
     {"text": "A sunning rock-snake as thick as your thigh takes exception to your boots.",
      "monsters": ["constrictor snake"]},

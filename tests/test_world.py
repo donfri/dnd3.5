@@ -113,6 +113,41 @@ class TestCrafting(unittest.TestCase):
         w.xp = 36000   # exactly the 9th-level minimum
         self.assertFalse(craft(Yes(), w, "scroll of fireball"))
 
+class TestOverland(unittest.TestCase):
+    def test_travel_tables_match_real_exits(self):
+        from dnd35.adventure import ORDER
+        from dnd35.adventure.engine import GM
+        for adv in ORDER:
+            for (a, b), (miles, terrain) in adv.TRAVEL.items():
+                self.assertIn(b, [e["to"] for e in adv.ROOMS[a]["exits"].values()], (a, b))
+                self.assertIn(terrain, GM.TERRAIN_PACE)
+                self.assertGreater(miles, 0)
+
+    def test_time_passes_and_long_marches_tire(self):
+        from dnd35 import dice
+        from dnd35.adventure import engine, thornwood_fen
+        from dnd35.creation import build_pregen
+        from dnd35.ui import AutoUI
+        dice.seed(1)
+        party = [build_pregen("thorgar", level=6), build_pregen("lyra", level=6)]
+        gs = engine.GameState(thornwood_fen, party, {})
+        gm = engine.GM(AutoUI(), gs)
+        gm.wandering_check = lambda *a, **k: False
+        t0 = gs.minutes
+        self.assertTrue(gm.overland("marrowmere", "fen_road"))      # 4 miles of trail
+        # dwarf at 20 ft: 2 mph x 0.75 = 1.5 mph -> 2 h 40 min
+        self.assertEqual(gs.minutes - t0, 160)
+        self.assertTrue(gm.overland("fen_road", "marrowmere"))      # the table works both ways
+        gs.settings["march_hours"] = 9
+        old = dice.d20
+        dice.d20 = lambda: 1
+        try:
+            gm.overland("marrowmere", "fen_road")
+        finally:
+            dice.d20 = old
+        self.assertTrue(all(p.has_tag("fatigued") for p in party))
+        self.assertTrue(gm.overland("owl_hollow", "abbey_gate"))    # not a leg: nothing happens
+
 
 if __name__ == "__main__":
     unittest.main()

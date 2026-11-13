@@ -61,6 +61,11 @@ RUMORS = [
          "anyone: a kindly old granny, even. Don't trust a sweet face in the fen."),
 ]
 
+# overland legs between places: (miles, terrain); used in both directions
+TRAVEL = {("marrowmere", "fen_road"): (4, "trail"), ("fen_road", "owl_hollow"): (2, "forest"),
+          ("fen_road", "causeway"): (2, "marsh"), ("causeway", "lizard_village"): (1, "marsh"),
+          ("lizard_village", "abbey_gate"): (2, "marsh")}
+
 WANDERING = [
     {"text": "Two glassy-eyed lizardfolk rise out of the reeds, clubs raised!",
      "monsters": ["lizardfolk", "lizardfolk"], "requires": {"not_flag": "lizards_free"}},

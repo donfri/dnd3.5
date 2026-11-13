@@ -888,7 +888,70 @@ class GM:
         if ex.get("text"):
             ui.gm(ex["text"])
         self.run(ex.get("effects", []))
+        if not self.overland(gs.room, ex["to"]):
+            return
         self.enter(ex["to"])
+
+    # ------------------------------------------------------------ overland travel
+    TERRAIN_PACE = {"road": 1.0, "trail": 0.75, "forest": 0.5, "hills": 0.5,
+                    "mountains": 0.5, "marsh": 0.5}
+    TRACKLESS = ("forest", "hills", "mountains", "marsh")
+
+    def overland(self, here: str, there: str) -> bool:
+        """Long legs between places (the adventure's TRAVEL table): hours on the road at
+        the slowest hero's pace, slower off the roads; a Survival check or you lose
+        your way in trackless country; a chance of meeting something; and more than 8
+        hours' march in a day wears you down. Returns False if the party can't go on."""
+        ui, gs = self.ui, self.gs
+        table = getattr(self.adv, "TRAVEL", {})
+        leg = table.get((here, there)) or table.get((there, here))
+        if not leg or not gs.able():
+            return True
+        miles, terrain = leg
+        speed = min(p.speed() for p in gs.able())
+        if any(not p.conscious for p in gs.living()):
+            speed = max(10, speed - 10)            # carrying the fallen
+        hours = miles / (speed / 10 * self.TERRAIN_PACE[terrain])
+        ui.out(f"It's {miles} mile{'s' if miles != 1 else ''} by "
+               f"{terrain if terrain in ('road', 'trail') else 'trackless ' + terrain}: "
+               f"about {self._hours(hours)} at your pace (slowest hero: {speed} ft).",
+               ("dim",))
+        if terrain in self.TRACKLESS:
+            guide = max(gs.able(), key=lambda p: self.check_bonus(p, "Survival") or -99)
+            if self.roll_check(guide, "Survival", 15) < 15:
+                extra = dice.die(3)
+                hours += extra
+                ui.bad(f"{guide.name} loses the way. You wander for {extra} extra "
+                       f"hour{'s' if extra > 1 else ''} before finding it again.")
+            else:
+                ui.good(f"{guide.name} keeps you on course.")
+        gs.pass_time(int(hours * 60), ui)
+        marched = gs.settings.get("march_hours", 0) + hours
+        gs.settings["march_hours"] = marched
+        if marched > 8:
+            dc = 10 + 2 * int(marched - 8)
+            ui.warn(f"That makes {self._hours(marched)} on the march today: a forced march "
+                    f"(Constitution DC {dc}).")
+            for p in gs.able():
+                if self.roll_check(p, "ability:con", dc) < dc:
+                    r = dice.roll("1d6").total
+                    p.take_nonlethal(r)
+                    p.add_effect(Effect("Worn out by the march", None, tags=["fatigued"]))
+                    ui.bad(f"{p.name} is worn out: {r} nonlethal damage and fatigued until "
+                           f"you rest.")
+        if self.wandering_check(min(0.5, 0.08 * hours)):
+            if not gs.able():
+                raise GameOver("defeat")
+        return bool(gs.able())
+
+    @staticmethod
+    def _hours(h: float) -> str:
+        whole, mins = int(h), int(round((h - int(h)) * 60 / 15) * 15)
+        if mins == 60:
+            whole, mins = whole + 1, 0
+        if not whole:
+            return f"{max(15, mins)} minutes"
+        return f"{whole} hour{'s' if whole != 1 else ''}" + (f" {mins} minutes" if mins else "")
 
     def cross_trap(self, trap_id: str, trap: dict) -> None:
         """Everyone gets past a known trap one at a time (Jump, Climb, Balance...).
@@ -1159,6 +1222,9 @@ class GM:
                 ui.out("After the fight you manage to finish resting.")
         gs.pass_time(8 * 60, ui)
         ui.header("A NIGHT'S REST")
+        gs.settings["march_hours"] = 0
+        for p in gs.party:
+            p.remove_effect("Worn out by the march")
         self._camped = not cost_sp
         if self._camped:
             self.eat()

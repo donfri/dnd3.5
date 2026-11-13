@@ -57,6 +57,9 @@ RUMORS = [
          "Antitoxin from the chapel helps."),
 ]
 
+# overland legs between places: (miles, terrain); used in both directions
+TRAVEL = {("saltmere", "cliff_path"): (1, "trail"), ("cliff_path", "lighthouse_yard"): (1, "trail")}
+
 WANDERING = [
     {"text": "Scrabbling claws and wet whiskers: dire rats from the cliff burrows!",
      "monsters": ["dire rat", "dire rat"]},
