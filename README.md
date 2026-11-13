@@ -188,8 +188,15 @@ The server is built to sit on the open internet behind Fly.io's HTTPS:
 - Each browser gets a random id, and a player name is bound to the browser using
   it, so nobody else at the table can answer, chat or move gear as you. (A name
   frees up a minute and a half after its browser goes quiet.)
-- At most 8 tables can exist, request bodies are capped at 10 KB, voice
-  synthesis runs at most 2 at a time, and slow connections are dropped.
+- After you log in the browser keeps a signed 30-day pass, not the password.
+  The server refuses to start on a public address without a password.
+- Requests are rate-limited per browser. At most 8 tables can exist, request
+  bodies are capped at 10 KB, voice synthesis runs at most 2 at a time, and slow
+  connections are dropped.
+- Saves are written to a temporary file and swapped in, with the previous save
+  kept as a backup that is used automatically if a save is ever damaged.
+- The container drops root after taking ownership of the save volume, and the
+  build pins its GitHub Actions and the voice library to exact versions.
 - Pages are sent with a strict Content Security Policy, no framing, no MIME
   sniffing and no referrer. Everything players type is escaped before display.
 - Error details go to the server log, never to the players' screens; save files
@@ -307,6 +314,21 @@ Command-line options:
   Fireball, Burning Hands, Lightning Bolt and Cone of Cold are real bursts,
   cones and lines: you pick where to aim, and you're warned if a friend (or you)
   would be caught. Breath weapons hit everyone in their cone.
+- **Moving:** tap or pick any square you can reach, or choose a foe and let the
+  game route you. Leaving a square a foe threatens provokes an attack of
+  opportunity (Tumble DC 15 avoids it; big creatures threaten 10 ft). You can
+  also **Run** (4x speed) and, as a paladin, fight **mounted** on your warhorse.
+- **Also in:** creatures in the line of fire give cover, touch spells need you
+  next to your friend and close-range spells have a real range, 50+ damage in one
+  blow forces a massive-damage save, Intimidate can **demoralize** a foe, and
+  monsters can **swallow whole, constrict, trample, petrify with a gaze**, or
+  come as a **swarm**.
+- **Outside fights:** casters need their spell component pouch or holy symbol,
+  camping eats a day's rations each, uneven multiclassing costs XP, magic items
+  you find are **unidentified** until a caster's Spellcraft (DC 20) or a town
+  sage (100 gp) works them out, rangers can **read tracks** to learn what waits
+  beyond each exit, Appraise gets a better price when selling, and the
+  **Leadership** feat (level 6) brings a cohort.
 - **Terrain** fits the place you're fighting: trees and undergrowth on the forest
   road, pillars and rubble in crypts, rock walls in caves, deep pools and reeds
   in the fen, carts and mud in villages, and a narrow bridge or ledge where
@@ -401,7 +423,12 @@ dnd35/
   character.py monster.py  PCs and monsters
   levelup.py creation.py   character creation, leveling, pregens, recommended builds
   sheet.py                 character sheet rendering
-  magic.py combat.py       spells and the combat engine
+  magic.py                 spells
+  combat.py                the combat engine: rounds, attacks, movement, the grid
+  combat_player.py         a hero's turn (the action menu and every action)
+  combat_maneuvers.py      trip, disarm, grapple, feint, demoralize, ready, delay...
+  combat_monsters.py       monster, companion and summon behavior and powers
+  static/app.js app.css    the web page's script and styles
   grid.py                  battle grid: distances, movement, areas, ASCII map
   abilities.py             lay on hands, wild shape, wholeness of body, bardic music
   companions.py            animal companions and familiars
@@ -438,9 +465,13 @@ python3 -m unittest discover -s tests
 
 ## Simplifications (deliberate)
 
-- You choose who to move toward, and the game picks the route and the exact
-  square (stepping round to flank when it can). Moving past a foe you aren't
-  fighting doesn't provoke. Battlefields are generated fresh for each fight.
+- Battlefields are generated fresh for each fight. Large and bigger monsters fill
+  a 10-ft (2 x 2) space; even bigger ones don't take more. Heroes in a large wild
+  shape still take one square.
+- Not in the game: intelligent and cursed items, the Mounted Combat feat chain and
+  lances, Forgery and Decipher Script uses, overland travel rules, and a stepped
+  character-creation form for phones. Spell ranges are touch, close, or
+  "anywhere on this battlefield".
 - Levels go to 20 (no epic levels), and the adventures cover levels 1 to 8.
   Higher-level heroes can still start any adventure, but it won't be a challenge.
 - *Raise dead* costs the hero half a level of experience instead of a whole
