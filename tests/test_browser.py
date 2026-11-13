@@ -19,6 +19,9 @@ EVIL = '<img src=x onerror="window.__pwned=1">'
 class TestBrowser(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        import tempfile
+        from dnd35.adventure import engine
+        engine.SAVE_DIR = tempfile.mkdtemp()      # fresh tables, no old autosaves
         cls.srv = ThreadingHTTPServer(("127.0.0.1", 0), web.Handler)
         threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
         cls.base = f"http://127.0.0.1:{cls.srv.server_address[1]}"

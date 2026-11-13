@@ -17,10 +17,11 @@
 <button id="gear" onclick="toggleSettings()" title="Narrator & settings">&#128266; &#9881;</button>
 <button id="curtab" onclick="toggleMenu()" title="Menu"><span id="curlabel"></span><span id="mdot"></span></button></header>
 <div id="menu"></div>
+<div id="strip"></div>
 <div id="tray"></div>
 <div id="afkbar"><span id="afktext"></span><button onclick="setAway(false)">I'm back</button></div>
 <div id="settings">
-<b style="color:var(--gold)">Narrator (read aloud)</b>
+<details open><summary>Narrator (read aloud)</summary>
 <label>What to read</label><select id="nmode"><option value="off">Off</option><option value="story">Story &amp; dialogue</option><option value="all">Story + combat</option></select>
 <label>Voice engine</label><select id="nengine"><option value="server">Server voice (clean, same for everyone)</option><option value="browser">This computer's voices</option></select>
 <div id="browservoices"><label>Narrator voice</label><select id="nvoice"></select>
@@ -30,21 +31,22 @@
 <label>Volume</label><input id="nvol" type="range" min="0.05" max="1" step="0.05">
 <label>Speed</label><input id="nrate" type="range" min="0.7" max="1.4" step="0.05">
 <div style="display:flex;gap:6px;margin-top:10px"><button class="opt" onclick="stopSpeech()">Skip / stop reading</button><button class="opt" onclick="toggleSettings()">Close</button></div>
-<b style="color:var(--gold);display:block;margin-top:14px">Turn alerts</b>
+</details><details><summary>Turn alerts</summary>
 <label style="color:var(--ink)"><input type="checkbox" id="amine" style="width:auto"> Alert me when it's my decision</label>
 <label style="color:var(--ink)"><input type="checkbox" id="aparty" style="width:auto"> Also alert for party decisions</label>
 <label style="color:var(--ink)"><input type="checkbox" id="asound" style="width:auto"> Play a chime</label>
 <button class="opt" style="margin-top:6px" id="anotify" onclick="enableNotify()">Enable desktop notifications</button>
 <div class="why" style="margin-top:4px">Alerts fire only when this tab is in the background.</div>
-<b style="color:var(--gold);display:block;margin-top:14px">When someone steps away</b>
+</details><details><summary>When someone steps away</summary>
 <select id="afkmode" onchange="setAfkMode(this.value)" style="margin-top:6px"><option value="computer">The computer plays their heroes in fights</option><option value="party">The party controls their heroes</option></select>
 <div class="why" style="margin-top:4px">This is shared by everyone at the table.</div>
-<b style="color:var(--gold);display:block;margin-top:14px">Dice</b>
+</details><details><summary>Dice</summary>
 <label style="color:var(--ink)"><input type="checkbox" id="manualdice" style="width:auto"> Roll my own dice (press &#127922; Roll for each of my heroes' rolls)</label>
 <label>Dice animations</label><select id="diceanim"><option value="mine">My heroes' rolls and free rolls</option><option value="all">Everyone's rolls</option><option value="free">Only free rolls (Dice tab)</option><option value="off">Off</option></select>
-<label style="margin-top:12px">Story tab</label>
+</details><details><summary>Display</summary>
+<label>Text size</label><select id="textsize"><option value="0.9">Small</option><option value="1">Normal</option><option value="1.15">Large</option><option value="1.3">Extra large</option></select>
 <label style="color:var(--ink)"><input type="checkbox" id="showrolls" style="width:auto"> Show dice rolls in the story too</label>
-</div>
+</details></div>
 
 <nav id="tabs">
 <button data-tab="story" class="on">&#128214; Story<span class="badge" id="b-story" style="display:none">!</span></button>

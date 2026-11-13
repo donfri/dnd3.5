@@ -60,16 +60,20 @@ async function join(){if(N.mode!='off')audioKeepAlive(true);me=$('jname').value.
  history.replaceState(null,'','?table='+encodeURIComponent(table));joined=true;lastAct=Date.now();poll();sendPrefs();inp.focus()}
 function handle(ev){
  narrateEvent(ev);
- if(ev.t=='battle'){lastBattle=ev.b;
+ if(ev.t=='battle'){lastBattle=ev.b;renderStrip();
   if(ev.inline&&ev.b)add('story',battleHtml(ev.b,true),'bmap');
   else if(ev.b){const maps=$('story').querySelectorAll('.bmap');   // keep the newest map current
    if(maps.length)maps[maps.length-1].innerHTML=battleHtml(ev.b,true)}
   if(tab=='map'&&lastState)renderMap(lastState);return}
- if(ev.t=='line'){const t=ev.text;add('full',ansi(t));
+ if(ev.t=='line'){let t=ev.text;add('full',ansi(t));
   if(isRoll(t)){add('dicelog',ansi(t));if($('showrolls').checked)add('story',ansi(t));return}
   if(isMenu(t))return;
   if(/^\[[^\]|]+\| Day \d+/.test(strip(t)))return;   // status line: shown in header & Party tab
-  const d=add('story',ansi(t),ev.kind=='echo'?'echo':null);
+  if(ev.kind=='echo'){const last=$('story').lastElementChild,m=strip(t).match(/^> (.*?): (.*)$/);
+   if(last&&last.classList.contains('echo')&&m&&last.dataset.who==m[1]&&last.dataset.n<4){last.insertAdjacentHTML('beforeend',' <span class="sep">\u203a</span> '+esc(m[2].replace(/\s+\(.*\)$/,'')));last.dataset.n++;return}
+   const e=add('story',ansi(t),'echo');if(m){e.dataset.who=m[1];e.dataset.n=1}return}
+  t=t.replace('-> \x1b[92mHIT','-> \x1b[92m\u2714 HIT').replace(/-> miss\b/,'-> \u2716 miss').replace('CRITICAL HIT!','\u2605 CRITICAL HIT!');
+  const d=add('story',ansi(t),null);
   if(ev.kind!='echo'&&strip(t).trim())addReadButton(d)}
  else if(ev.t=='prompt'){add('full','<span class="c93">'+esc(ev.text)+'</span>')}
  else if(ev.t=='block'){blocks[ev.seq]=ev;
@@ -128,6 +132,9 @@ function initDicePrefs(){const md=$('manualdice'),da=$('diceanim');
  da.onchange=()=>{localStorage.setItem('diceanim',da.value);if(da.value!='off')throwDice('Test roll',[[20,[1+Math.floor(Math.random()*20)]]],0,'1d20')}}
 async function sendPrefs(){if(!joined)return;try{await fetch('/api/prefs',{method:'POST',headers:hdr(true),body:JSON.stringify({table,name:me,manual_dice:$('manualdice').checked})})}catch(e){}}
 initDicePrefs();
+(function(){const ts=$('textsize');ts.value=localStorage.getItem('textsize')||'1';
+ const ap=()=>document.documentElement.style.setProperty('--zoom',ts.value);ap();
+ ts.onchange=()=>{localStorage.setItem('textsize',ts.value);ap()}})();
 async function poll(){if(polling)return;polling=true;
  while(true){try{const r=await fetch('/api/poll?table='+encodeURIComponent(table)+'&since='+next+'&name='+encodeURIComponent(me),{headers:hdr()});
   if(r.status==403){alert('Please enter the table password again.');localStorage.removeItem('dndpw');localStorage.removeItem('dndsess');location.reload();return}
@@ -152,7 +159,7 @@ async function poll(){if(polling)return;polling=true;
  }catch(e){$('status').textContent='Connection lost, retrying…';await new Promise(r=>setTimeout(r,2000))}}}
 
 // ---------------------------------------------------------------- choices
-const GROUP_ORDER=['Actions','Fight','Travel','Move','Tactics','Explore','Party','Turn','Game'];
+const GROUP_ORDER=['Actions','Fight','Travel','Move','Turn','Explore','Party','Tactics','Game'];
 const GROUP_LABEL={Actions:'Do something here',Fight:'Attack & magic',Travel:'Go somewhere',Move:'Move',Tactics:'Tactics',Explore:'Explore',Party:'Party',Turn:'',Game:'More'};
 let showMore=false;
 function optButton(ev,o,i){const b=document.createElement('button');b.className='opt'+(ev.kind=='roll'?' rollbtn':'');let val;
@@ -169,14 +176,17 @@ function applyPanel(){const has=!!$('prompt').textContent;
  $('ptog').textContent=panelOpen?'hide \u25be':'choose \u25b4';$('ptog').style.visibility=has?'visible':'hidden'}
 function togglePanel(){if(!phone())return;panelOpen=!panelOpen;applyPanel()}
 window.addEventListener('resize',applyPanel);
-function showPrompt(ev){$('prompt').textContent=ev.text.replace(/:\s*$/,'');const box=$('opts');box.innerHTML='';
+function showPrompt(ev){curPrompt=ev;if(!showMore&&followIntent(ev))return;$('prompt').textContent=ev.text.replace(/:\s*$/,'');const box=$('opts');box.innerHTML='';
  const opts=ev.options||[];$('bottom').classList.toggle('hasopts',opts.length>0);applyPanel();
  if(!ev.groups){const row=document.createElement('div');row.className='row';row.style.display='flex';row.style.flexWrap='wrap';row.style.gap='6px';
   opts.forEach((o,i)=>row.appendChild(optButton(ev,o,i)));box.appendChild(row);return}
  const by={};opts.forEach((o,i)=>{const g=ev.groups[i]||'Game';(by[g]=by[g]||[]).push([o,i])});
  for(const g of GROUP_ORDER.concat(Object.keys(by).filter(k=>!GROUP_ORDER.includes(k)))){if(!by[g])continue;
-  if(g=='Game'&&!showMore){const m=document.createElement('button');m.id='more';m.textContent='More options (sheet, journal, save, help…) ▾';
-   m.onclick=()=>{showMore=true;showPrompt(ev)};box.appendChild(m);continue}
+  const fight=!!ev.keys;
+  if((g=='Game'||(fight&&g=='Tactics'))&&!showMore){if(!$('more')){const m=document.createElement('button');m.id='more';
+    const n=opts.filter((o,i)=>{const gg=ev.groups[i]||'Game';return gg=='Game'||(fight&&gg=='Tactics')}).length;
+    m.textContent=fight?'More actions: maneuvers, tactics, look ('+n+') \u25be':'More options (sheet, journal, save, help\u2026) \u25be';
+    m.onclick=()=>{showMore=true;showPrompt(ev)};box.appendChild(m)}continue}
   const d=document.createElement('div');d.className='grp';
   if(GROUP_LABEL[g])d.innerHTML='<div class="gl">'+esc(GROUP_LABEL[g]||g)+'</div>';
   const row=document.createElement('div');row.className='row';by[g].forEach(([o,i])=>{const b=optButton(ev,o,i);if(g=='Actions'||g=='Fight')b.classList.add('primary');row.appendChild(b)});
@@ -189,7 +199,7 @@ function setOwner(owner,may,j){const o=$('owner');o.className='';o.textContent='
   o.textContent='\u2615 '+owner+' is away \u2014 '+(j.afk_mode=='party'?'the party plays for them. Anyone can answer.':
    'anyone can answer; in a fight the computer answers after a moment.')}
  else{o.className='party';o.textContent='\ud83d\udc65 '+owner+' isn\'t at the table \u2014 the party plays for them. Anyone can answer.'}}
-function clearPrompt(){$('prompt').textContent='';$('opts').innerHTML='';showMore=false;$('bottom').classList.remove('hasopts');applyPanel()}
+function clearPrompt(){curPrompt=null;$('prompt').textContent='';$('opts').innerHTML='';showMore=false;$('bottom').classList.remove('hasopts');applyPanel()}
 async function send(text){inp.value='';clearPrompt();if(away)setAway(false);
  const r=await fetch('/api/input',{method:'POST',headers:hdr(true),body:JSON.stringify({table,name:me,text})});
  const j=await r.json();if(!j.ok)$('status').textContent=j.why||'Not accepted.'}
@@ -231,7 +241,7 @@ async function freeRoll(expr){if(!expr.trim())return;
 // ---------------------------------------------------------------- party & journal
 function scheduleState(){clearTimeout(stateTimer);stateTimer=setTimeout(refreshState,700)}
 async function refreshState(){try{const r=await fetch('/api/state?table='+encodeURIComponent(table),{headers:hdr()});
- const s=await r.json();if(s.busy)return;lastState=s;if(s.battle!==undefined&&!primedBattle){lastBattle=s.battle;primedBattle=true}renderParty(s);renderJournal(s);renderMap(s);
+ const s=await r.json();if(s.busy)return;lastState=s;if(s.battle!==undefined&&!primedBattle){lastBattle=s.battle;primedBattle=true}renderParty(s);renderJournal(s);renderMap(s);renderStrip();
  $('where').textContent=s.active?('📍 '+s.location+' • '+s.time):''}catch(e){}}
 function renderParty(s){const el=$('party');if(!s.active){el.innerHTML='<div class="empty">Start or load a game to see your party.</div>';return}
  el.innerHTML='<div class="cards">'+s.party.map((p,i)=>{
@@ -254,6 +264,37 @@ function wrapName(name,max){const words=name.split(' ');const lines=[];let cur='
 let lastBattle=null;
 const TOKC={pc:'#7ed957',ally:'#5fd3c4',foe:'#ff6b6b'};
 const TERR={wall:'#5e554c',tree:'#2f6b2a',crate:'#7a5a30',deep:'#0c1d33',chasm:'#050403',water:'#3d6f99',rubble:'#3a332d',brush:'#2f4224',mud:'#4d3b25'};
+// ---- the bar under the header: turn order in a fight, the party's hit points otherwise
+function renderStrip(){const el=$('strip');let h='';
+ if(lastBattle&&lastBattle.order&&lastBattle.order.length){
+  h='<span class="sl">Turn</span>'+lastBattle.order.map(o=>`<span class="chipx ${o.side}${o.name==lastBattle.current?' cur':''}${o.down?' down':''}">${o.name==lastBattle.current?'\u25b6 ':''}${esc(o.name)} <i>${esc(o.hp)}</i></span>`).join('')}
+ else if(lastState&&lastState.active&&lastState.party){
+  h=lastState.party.map((p,i)=>{const pct=Math.max(0,Math.min(100,100*p.hp/Math.max(1,p.max_hp)));
+   return `<span class="chipx pc${p.hp<=0?' down':''}" onclick="openSheet(${i})">\u2665 ${esc(p.name.split(' ')[0])} <i>${p.hp}/${p.max_hp}</i><b class="hpb"><b style="width:${pct}%;background:${pct>50?'var(--green)':pct>25?'var(--gold)':'var(--red)'}"></b></b></span>`}).join('')}
+ el.innerHTML=h;el.style.display=h?'flex':'none';
+ const c=el.querySelector('.cur');if(c&&c.scrollIntoView)c.scrollIntoView({block:'nearest',inline:'center'})}
+// ---- tapping the battle map: a foe = attack it, an empty square = move there
+let intent=null;
+function mapTap(e){const svg=e.target.closest('.bmap svg');if(!svg||!lastBattle||!curPrompt)return;
+ const r=svg.getBoundingClientRect(),vb=svg.viewBox.baseVal,S=26;
+ const x=Math.floor(((e.clientX-r.left)/r.width*vb.width+vb.x-1)/S),y=Math.floor(((e.clientY-r.top)/r.height*vb.height+vb.y-1)/S);
+ if(x<0||y<0||x>=lastBattle.w||y>=lastBattle.h)return;
+ const tok=lastBattle.tokens.find(t=>t.x==x&&t.y==y),keys=curPrompt.keys||[];
+ if(/^Move to which square/.test(curPrompt.text)){if(!tok)send(x+','+y);return}
+ if(!keys.length){return}
+ if(tok&&tok.side=='foe'){const i=keys.indexOf('attack');if(i<0){flash('No attack left this turn.');return}
+  intent={foe:tok.name,at:Date.now()};send(String(i+1))}
+ else if(!tok){const i=keys.indexOf('move_to');if(i<0){flash('No movement left this turn.');return}
+  intent={sq:x+','+y,at:Date.now()};send(String(i+1))}}
+function flash(msg){$('status').textContent=msg}
+document.addEventListener('click',mapTap);
+function followIntent(ev){if(!intent||Date.now()-intent.at>20000){intent=null;return false}
+ if(ev.keys){intent=null;return false}
+ if(intent.sq&&/^Move to which square/.test(ev.text)){const v=intent.sq;intent=null;send(v);return true}
+ if(intent.foe&&ev.options){const i=ev.options.findIndex(o=>o.startsWith(intent.foe+' ('));
+  if(i>=0){intent=null;send(String(i+1));return true}}
+ return false}
+let curPrompt=null;
 function battleHtml(b,crop){const S=26,W=b.w*S,H=b.h*S;
  const ys=b.tokens.map(t=>t.y);let y0=0,y1=b.h-1;
  if(crop&&ys.length){y0=Math.max(0,Math.min(...ys)-1);y1=Math.min(b.h-1,Math.max(...ys)+1)}

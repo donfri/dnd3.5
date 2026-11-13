@@ -403,7 +403,16 @@ class Combat:
         return out
 
     def battle_state(self) -> dict:
+        order = []
+        for x in self.order:
+            if x.c.dead or x.fled:
+                continue
+            order.append({"name": x.c.name, "side": "foe" if x.side != "pc" else
+                          ("pc" if x.c.is_pc else "ally"),
+                          "hp": f"{x.c.hp}/{x.c.max_hp()}" if x.side == "pc"
+                          else wound_word(x.c), "down": not x.c.conscious})
         return {"w": grid.W, "h": grid.H, "round": self.round, "title": self.title,
+                "order": order, "current": getattr(self, "current", ""),
                 "dark": self.dark, "tokens": self.battle_tokens(),
                 "terrain": [{"x": q[0], "y": q[1], "k": k} for q, k in self.terrain.cells.items()],
                 "legend": [{"k": k, "name": grid.KINDS[k][1], "slow": grid.KINDS[k][5]}
@@ -490,6 +499,8 @@ class Combat:
         ui = self.ui
         ui.sub(f"Round {self.round}")
         self.show_map()
+        if hasattr(ui, "battle"):
+            return      # the web page shows everyone's state on the map and the turn bar
         for p in self.party:
             st = self.s(p)
             eng = ", ".join(f.name for f in self.engaged_foes(p))
@@ -712,6 +723,8 @@ class Combat:
         return can
 
     def take_turn(self, x: CState, surprise: bool = False) -> None:
+        x.provoked_by = set()
+        self.current = x.c.name
         self.sync_map()
         if x.delayed:
             x.delayed = False   # coming back after delaying: start-of-turn already done
@@ -1471,6 +1484,9 @@ class Combat:
         """Engaged enemies get attacks of opportunity. Returns damage taken."""
         before = mover.damage
         for foe in self.engaged_foes(mover):
+            if movement:
+                self.s(mover).provoked_by = set(getattr(self.s(mover), "provoked_by", ())) | {
+                    foe.uid}
             self.aoo_from(foe, mover, reason, movement)
             if not mover.conscious:
                 break
@@ -1549,7 +1565,8 @@ class Combat:
             start = self.s(mover).pos
             if dest is None or cost > budget:
                 end = self.walk_toward(mover, tgt, budget)
-                self.s(mover).pos = end
+                self.travel(mover, self.terrain.path(start, end, self.foe_squares(mover)))
+                end = self.s(mover).pos
                 self.fell_short = True
                 if end == start:
                     self.ui.out(f"{mover.name} can't find a way through to {tgt.name}.")
@@ -1560,17 +1577,91 @@ class Combat:
                     self.ui.out(f"{mover.name} moves toward {tgt.name}{slow} "
                                 f"(now {self.distance(mover, tgt)} ft away).")
                 return False
-            self.s(mover).pos = dest
-        if self.has_reach(tgt) and not self.has_reach(mover) and not self.is_engaged(mover, tgt):
-            w = self.reach_weapon(tgt)
-            if w:
-                self.aoo_from(tgt, mover, f"has to close past {tgt.name}'s long reach",
-                              movement=True, w=w)
+            path = self.terrain.path(start, dest, self.foe_squares(mover)) \
+                if dest != start else []
+            if not self.travel(mover, path) or self.s(mover).pos != dest:
+                return False
         if not self.active(mover) or not mover.conscious:
             return False
         self.engage(mover, tgt)
         self.trigger_readied(mover, tgt)
         return self.active(mover) and mover.conscious
+
+    def threat_at(self, foe: Creature, sq) -> bool:
+        """Does foe threaten this square? (5 ft; 10 ft for big creatures; exactly 10 ft
+        for a reach weapon.) Walls block."""
+        d = grid.dist(self.s(foe).pos, sq)
+        if foe.size in ("large", "huge") or getattr(foe, "block", {}).get("reach"):
+            ok = d <= 10
+        elif self.has_reach(foe):
+            ok = d == 10
+        else:
+            ok = d <= 5
+        return ok and d > 0 and self.terrain.line_of_effect(self.s(foe).pos, sq)
+
+    def try_tumble(self, mover: Creature, foes: int) -> bool:
+        """Tumble (trained only, DC 15, +2 per extra foe) to slip past without provoking."""
+        can = getattr(mover, "can_use_skill", None)
+        if not can or not can("Tumble") or mover.has_tag("prone"):
+            return False
+        a = getattr(mover, "armor_data", lambda: None)()
+        if a and a.get("category") in ("medium", "heavy"):
+            return False
+        dc = 15 + 2 * max(0, foes - 1)
+        with dice.rolling(mover, "Tumble"):
+            r = dice.d20()
+        tot = r + mover.skill_total("Tumble")
+        ok = tot >= dc
+        self.ui.roll(f"{mover.name} Tumble: d20={r} {mover.skill_total('Tumble'):+d} = {tot} "
+                     f"vs DC {dc} -> {'tumbles past safely' if ok else 'failure'}")
+        return ok
+
+    def travel(self, mover: Creature, path) -> bool:
+        """Walk a path square by square. Leaving a square a foe threatens provokes an
+        attack of opportunity (once per foe per move; Tumble can avoid them).
+        Returns False if the mover was dropped on the way."""
+        x = self.s(mover)
+        done = set(getattr(x, "provoked_by", ()))
+        tumbled = None
+        cur = x.pos
+        for nxt in path:
+            threats = [f for f in self.enemies(mover) if f.uid not in done
+                       and self.threatens(f) and self.s(f).aoo_used < self.aoo_limit(f)
+                       and self.threat_at(f, cur)]
+            if threats:
+                if tumbled is None:
+                    tumbled = self.try_tumble(mover, len(threats))
+                for f in threats:
+                    done.add(f.uid)
+                    if tumbled:
+                        continue
+                    w = self.reach_weapon(f) if grid.dist(self.s(f).pos, cur) > 5 else None
+                    self.aoo_from(f, mover, f"moves through {f.name}'s reach",
+                                  movement=True, w=w)
+                    if not self.active(mover) or not mover.conscious:
+                        x.provoked_by = done
+                        self.sync_engagement(mover)
+                        return False
+            cur = nxt
+            x.pos = cur
+        x.provoked_by = done
+        self.sync_engagement(mover)
+        return True
+
+    def sync_engagement(self, mover: Creature) -> None:
+        """After moving: you're in melee with exactly the foes next to you."""
+        x = self.s(mover)
+        if mover.has_tag("grappled"):
+            return
+        for u in list(x.engaged):
+            if u in self.st and not grid.adjacent(x.pos, self.st[u].pos):
+                x.engaged.discard(u)
+                self.st[u].engaged.discard(mover.uid)
+        for f in self.enemies(mover):
+            if grid.adjacent(x.pos, self.s(f).pos) and not f.dead \
+                    and not self.airborne(f) and mover.conscious:
+                x.engaged.add(f.uid)
+                self.s(f).engaged.add(mover.uid)
 
     def trigger_readied(self, mover: Creature, tgt: Creature) -> None:
         for x in list(self.st.values()):
@@ -1814,6 +1905,14 @@ class Combat:
                     not disabled and not p.has_tag("prone"):
                 add(f"Move toward a foe again (uses your standard action; up to "
                     f"{self.speed_of(p)} ft)", self.act_approach, x)
+            if (x.move or (x.std and not single and not disabled)) and not entangled \
+                    and not p.has_tag("prone"):
+                add(f"Move to a square (pick it on the map; up to {self.speed_of(p)} ft)",
+                    self.act_move_to, x)
+            if full_ok and x.move and not entangled and not p.has_tag("prone") \
+                    and not p.has_tag("fatigued"):
+                add("Run (full round: up to 4x speed in a straight dash, lose Dex bonus to AC)",
+                    self.act_move_to, x, True)
             if x.move:
                 if p.has_tag("prone"):
                     add("Stand up (move action, provokes)", self.act_stand, x)
@@ -1852,26 +1951,34 @@ class Combat:
             if self.can_flee and full_ok and x.move and not entangled:
                 add("Flee the battle (withdraw out of the fight)", self.act_flee, x)
             add("End turn", None)
-            groups = []
+            MAIN = ("Attack", "Full attack", "Charge", "Cast", "Use an item", "Turn undead",
+                    "Rage", "Smite", "Stunning", "Call down", "Bardic", "Lay on", "Wild shape",
+                    "Return to", "Grapple:", "Coup de grace", "Stabilize")
+            MOVE = ("Move t", "Stand", "5-foot", "Move away")
+            groups, keys = [], []
             for a in acts:
                 lab = a[0]
-                if lab.startswith(("Attack", "Full attack", "Charge", "Cast", "Use an item",
-                                   "Turn undead", "Rage", "Feat of Strength", "Smite",
-                                   "Stunning", "Manyshot", "Spring", "Call down", "Bardic",
-                                   "Lay on", "Wholeness", "Wild shape", "Return to",
-                                   "Trip", "Disarm", "Grapple", "Bull rush", "Sunder",
-                                   "Overrun", "Feint", "Aid another", "Coup de grace",
-                                   "Destruction", "Death touch", "Protective", "Quivering",
-                                   "Defensive stance", "Hail", "Arrow of", "Study")):
+                if lab.startswith(MAIN):
                     groups.append("Fight")
-                elif lab.startswith(("Move", "Stand", "Draw", "Withdraw", "Flee", "5-foot")):
+                elif lab.startswith(MOVE):
                     groups.append("Move")
-                elif lab.startswith(("End turn",)):
+                elif lab.startswith("End turn"):
                     groups.append("Turn")
-                elif lab.startswith(("Look",)):
+                elif lab.startswith("Look"):
                     groups.append("Game")
                 else:
                     groups.append("Tactics")
+                key = a[1].__name__[4:] if a[1] else "end"
+                if key == "attack":
+                    extra = a[2][2] if len(a[2]) > 2 else ("full" if a[2][1] else "")
+                    key = f"attack_{extra}" if extra else "attack"
+                elif key == "move_to" and len(a[2]) > 1:
+                    key = "run"
+                elif key == "feint" and len(a[2]) > 1:
+                    key = "feint_move"
+                keys.append(key)
+            ui.option_keys = keys
+            self.sync_map()
             i = ui.choose(f"{p.name}, what do you do?", [a[0] for a in acts], groups=groups)
             label, fn, args = acts[i]
             if fn is None:
@@ -2363,6 +2470,46 @@ class Combat:
         if self.feet_to_melee(p, tgt) <= self.speed_of(p):
             self.ui.out(f"{p.name} moves into melee with {tgt.name}.")
         self.close_in(p, tgt)
+
+    def reachable_squares(self, cr: Creature, budget: int) -> Dict[tuple, int]:
+        costs, _ = self.terrain.costs(self.s(cr).pos, self.foe_squares(cr))
+        occ = set(self.occupied(cr))
+        return {q: c_ for q, c_ in costs.items() if 0 < c_ <= budget and q not in occ}
+
+    def act_move_to(self, x: CState, run: bool = False) -> None:
+        """Move to a square you choose (typed as column,row or tapped on the map)."""
+        p = x.c
+        ui = self.ui
+        sp = self.speed_of(p)
+        heavy = (getattr(p, "armor_data", lambda: None)() or {}).get("category") == "heavy"
+        budget = sp * (3 if heavy else 4) if run else sp
+        ok = self.reachable_squares(p, budget)
+        if not ok:
+            ui.bad("There's nowhere you can move to.")
+            return
+        ans = ui.ask(f"Move to which square? Type column,row (you can go {budget} ft) "
+                     f"or tap the map", "")
+        try:
+            cx, cy = [int(v) for v in ans.replace(" ", "").split(",")[:2]]
+        except (ValueError, TypeError):
+            ui.out("No move made.")
+            return
+        if (cx, cy) not in ok:
+            ui.bad(f"You can't reach square {cx},{cy} this turn (too far, blocked or taken).")
+            return
+        if run:
+            x.std = x.move = False
+            p.add_effect(Effect("Running", 1, [("ac", "untyped", -max(0, p.mod("dex")))],
+                                hidden=False))
+        elif x.move:
+            x.move = False
+        else:
+            x.std = False
+        x.moved = True
+        start = x.pos
+        path = self.terrain.path(start, (cx, cy), self.foe_squares(p))
+        ui.out(f"{p.name} {'RUNS' if run else 'moves'} {ok[(cx, cy)]} ft.")
+        self.travel(p, path)
 
     def act_move_away(self, x: CState) -> None:
         p = x.c

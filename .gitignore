@@ -4,3 +4,5 @@ saves/*.json
 .venv/
 *.egg-info/
 voices/
+saves/*.bak
+saves/*.tmp

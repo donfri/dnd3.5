@@ -178,14 +178,16 @@ class WebUI(UI):
         groups = self._pending_groups if kind == "choose" else None
         owner = self.current_owner()
         self.table.explore_idle = self._explore
+        keys = getattr(self, "_pending_keys", None) if kind == "choose" else None
+        self._pending_keys = None
         self.table.emit({"t": "prompt", "text": ANSI_RE.sub("", prompt), "options": opts,
-                         "kind": kind, "groups": groups, "owner": owner})
+                         "kind": kind, "groups": groups, "owner": owner, "keys": keys})
         plain = ANSI_RE.sub("", prompt)
         default = self._pending_default
         auto = None
         if owner and self.battle_now is not None:
             # in a fight, an away player's hero is played by the computer
-            auto = (lambda: self.autopick(plain, opts, kind, default))
+            auto = (lambda: self.autopick(plain, opts, kind, default, keys))
         text, who = self.table.wait_input(owner, auto)
         self.table.explore_idle = False
         self.last_who = who
@@ -211,7 +213,8 @@ class WebUI(UI):
             return ""  # nobody can kill the shared table from a browser
         return text
 
-    def autopick(self, prompt: str, opts: Optional[List[str]], kind: str, default) -> str:
+    def autopick(self, prompt: str, opts: Optional[List[str]], kind: str, default,
+                 keys: Optional[List[str]] = None) -> str:
         """What the computer answers for a hero whose player is away (combat only):
         fight the nearest foe, say yes to sensible offers, never back out."""
         if kind == "confirm":
@@ -220,8 +223,15 @@ class WebUI(UI):
             return ""
         real = [o for o in opts if o != "(back)"]
 
+        # action ids from the game when it sends them, button text otherwise
+        IDS = {"Stabilize a dying ally": "stabilize", "Full attack": "attack_full",
+               "Attack": "attack", "Move toward a foe (": "approach",
+               "Move toward a foe again": "approach", "End turn": "end"}
+
         def pick(*starts):
             for st in starts:
+                if keys and IDS.get(st) in keys:
+                    return str(keys.index(IDS[st]) + 1)
                 for i, o in enumerate(real):
                     if o.startswith(st):
                         return str(i + 1)
@@ -233,7 +243,8 @@ class WebUI(UI):
             key = (rnd, prompt)
             n = self._auto_counts.get(key, 0) + 1
             self._auto_counts = {key: n}
-            in_melee = any(o.startswith(("Trip a foe", "Feint", "Bull rush")) for o in real)
+            in_melee = bool(keys and {"trip", "feint", "bull_rush"} & set(keys)) or any(
+                o.startswith(("Trip a foe", "Feint", "Bull rush")) for o in real)
             if n <= 4:
                 ans = pick("Stabilize a dying ally") if n == 1 else None
                 if not ans and in_melee:
@@ -267,6 +278,10 @@ class WebUI(UI):
                 opts = opts + ["(back)"]
                 if grp:
                     grp.append("Game")
+            self._pending_keys = getattr(self, "option_keys", None)
+            self.option_keys = None
+            if self._pending_keys and len(self._pending_keys) != len(options):
+                self._pending_keys = None
             prev = (self._pending_groups, self._explore)
             self._pending_default = default
             self._pending_groups = grp
