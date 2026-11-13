@@ -14,6 +14,7 @@ Environment variables:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import hmac
 import json
 import os
@@ -37,6 +38,8 @@ MAX_TABLES = 8          # each table runs its own game thread
 MAX_PRESENCE = 40       # names remembered per table
 NAME_HOLD = 90          # seconds a name stays bound to the browser that used it
 FAIL_LIMIT, FAIL_WINDOW = 8, 600   # wrong passwords per IP before a 10-minute lockout
+SESSION_DAYS = 30
+RATE = {"default": (20, 5.0), "tts": (8, 1.0)}   # bucket size, refills per second
 TTS_SLOTS = threading.BoundedSemaphore(2)   # voice synthesis is CPU-heavy
 IDLE_SECONDS = 300      # page gone this long: treat the player as away
 AUTOPILOT_DELAY = 1.5   # seconds before the computer answers for an away player
@@ -768,6 +771,43 @@ def get_table(name: str) -> Table:
         return TABLES[name]
 
 
+BUCKETS: Dict[tuple, list] = {}
+BUCKETS_LOCK = threading.Lock()
+
+
+def allow(who: str, kind: str = "default") -> bool:
+    """Token-bucket rate limit per browser (or address) and kind of request."""
+    size, per_sec = RATE[kind]
+    now = time.time()
+    with BUCKETS_LOCK:
+        if len(BUCKETS) > 5000:
+            BUCKETS.clear()
+        b = BUCKETS.setdefault((who, kind), [float(size), now])
+        b[0] = min(size, b[0] + (now - b[1]) * per_sec)
+        b[1] = now
+        if b[0] < 1:
+            return False
+        b[0] -= 1
+        return True
+
+
+def session_token(pw: str, exp: Optional[int] = None) -> str:
+    """A signed pass the browser keeps instead of the password itself. It survives
+    server restarts and stops working when the password changes or after 30 days."""
+    exp = exp or int(time.time()) + SESSION_DAYS * 86400
+    sig = hmac.new(hashlib.sha256(pw.strip().encode()).digest(),
+                   f"dnd35-session:{exp}".encode(), hashlib.sha256).hexdigest()
+    return f"{exp}.{sig}"
+
+
+def session_ok(token: str, pw: str) -> bool:
+    try:
+        exp = int(token.split(".", 1)[0])
+    except ValueError:
+        return False
+    return exp > time.time() and hmac.compare_digest(token, session_token(pw, exp))
+
+
 FAILS: Dict[str, list] = {}
 FAILS_LOCK = threading.Lock()
 
@@ -848,8 +888,11 @@ class Handler(BaseHTTPRequestHandler):
         pw = os.environ.get("TABLE_PASSWORD")
         if not pw:
             return True
+        sess = self.headers.get("X-Session") or ""
+        if sess and session_ok(sess[:120], pw):
+            return True
         given = (self.headers.get("X-Password") or "").strip()
-        return hmac.compare_digest(given.encode(), pw.strip().encode())
+        return bool(given) and hmac.compare_digest(given.encode(), pw.strip().encode())
 
     def _json(self, obj, code=200):
         data = json.dumps(obj).encode()
@@ -869,6 +912,16 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Cache-Control", "no-cache")   # always pick up new versions
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
+        if u.path in STATIC:
+            data, ctype = STATIC[u.path]
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Cache-Control", "public, max-age=31536000, immutable"
+                             if qs.get("v") == [_VER] else "no-cache")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
@@ -925,6 +978,15 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError
         except ValueError:
             self._json({"error": "bad request"}, 400)
+            return
+        if u.path == "/api/login":
+            self._json({"ok": True, "session": session_token(
+                os.environ.get("TABLE_PASSWORD") or "")})
+            return
+        limiter = self.headers.get("X-Player-Token", "")[:64] or self._ip()
+        if not allow(limiter, "tts" if u.path == "/api/tts" else "default"):
+            self._json({"ok": False, "error": "slow down",
+                        "why": "Too many requests; wait a moment."}, 429)
             return
         t = self._table(body.get("table", "main"))
         if t is None:
@@ -998,8 +1060,38 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(404)
 
 
-PAGE = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "web_page.html"),
-            encoding="utf-8").read()
+_HERE = os.path.dirname(os.path.abspath(__file__))
+STATIC = {}
+for _name, _ctype in (("app.js", "text/javascript; charset=utf-8"),
+                      ("app.css", "text/css; charset=utf-8")):
+    with open(os.path.join(_HERE, "static", _name), "rb") as _f:
+        STATIC["/static/" + _name] = (_f.read(), _ctype)
+_VER = hashlib.sha256(b"".join(v[0] for v in STATIC.values())).hexdigest()[:12]
+PAGE = open(os.path.join(_HERE, "web_page.html"), encoding="utf-8").read().replace(
+    "__VER__", _VER)
+
+
+def drop_privileges() -> None:
+    """If started as root (as in the container), hand the save folder to an
+    unprivileged user and switch to it. Any failure just leaves things as they were."""
+    user = os.environ.get("DND35_RUN_AS")
+    if not user or not hasattr(os, "getuid") or os.getuid() != 0:
+        return
+    try:
+        import pwd
+        from .adventure.engine import SAVE_DIR
+        pw = pwd.getpwnam(user)
+        os.makedirs(SAVE_DIR, exist_ok=True)
+        for root, dirs, files in os.walk(SAVE_DIR):
+            for n in [root] + [os.path.join(root, f) for f in files]:
+                os.chown(n, pw.pw_uid, pw.pw_gid)
+        os.setgroups([])
+        os.setgid(pw.pw_gid)
+        os.setuid(pw.pw_uid)
+        os.environ["HOME"] = pw.pw_dir
+        print(f"running as {user}")
+    except Exception as e:  # noqa: BLE001
+        print(f"could not switch to user {user}: {e}; continuing as root")
 
 
 def main(argv=None) -> int:
@@ -1007,8 +1099,16 @@ def main(argv=None) -> int:
     ap.add_argument("--host", default="0.0.0.0")
     ap.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8080")))
     args = ap.parse_args(argv)
+    local = args.host in ("127.0.0.1", "localhost", "::1")
+    if not local and not os.environ.get("TABLE_PASSWORD") and \
+            not os.environ.get("DND35_ALLOW_OPEN"):
+        print("Refusing to start: this server would be open to anyone on the network.\n"
+              "Set TABLE_PASSWORD (on Fly: fly secrets set TABLE_PASSWORD=...), or set\n"
+              "DND35_ALLOW_OPEN=1 if you really want no password.")
+        return 2
     srv = ThreadingHTTPServer((args.host, args.port), Handler)
     srv.daemon_threads = True
+    drop_privileges()
     print(f"D&D 3.5 table running on http://{args.host}:{args.port}/  (Ctrl+C to stop)")
     try:
         srv.serve_forever()

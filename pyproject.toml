@@ -16,4 +16,4 @@ build-backend = "setuptools.build_meta"
 include = ["dnd35*"]
 
 [tool.setuptools.package-data]
-dnd35 = ["*.html"]
+dnd35 = ["*.html", "static/*"]

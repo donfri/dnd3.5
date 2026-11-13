@@ -110,6 +110,22 @@ class TestTrapCrossing(unittest.TestCase):
         self.assertTrue(any("Everyone is across" in t for t in ui.transcript))
 
 
+class TestSafeSaves(unittest.TestCase):
+    def test_backup_used_when_save_is_damaged(self):
+        engine.SAVE_DIR = tempfile.mkdtemp()
+        gs = engine.GameState(ember_barrow, [build_pregen("pip")], {})
+        engine.save_game(gs, "s")
+        gs.flags.add("later")
+        engine.save_game(gs, "s")
+        path = os.path.join(engine.SAVE_DIR, "s.json")
+        self.assertTrue(os.path.exists(path + ".bak"))
+        self.assertFalse(os.path.exists(path + ".tmp"))
+        with open(path, "w") as f:
+            f.write("{ broken")
+        self.assertNotIn("later", engine.load_game("s", ember_barrow).flags)  # the backup
+        self.assertEqual(engine.list_saves(), ["s"])
+
+
 class TestAdventureData(unittest.TestCase):
     def test_all_adventures_valid(self):
         from dnd35.adventure import ORDER

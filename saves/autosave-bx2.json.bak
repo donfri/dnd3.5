@@ -1,0 +1,349 @@
+{
+ "adventure": "ember_barrow",
+ "party": [
+  {
+   "name": "Thorgar Ironbrow",
+   "player": "Chris",
+   "race": "dwarf",
+   "class_levels": [
+    "fighter"
+   ],
+   "base_abilities": {
+    "str": 15,
+    "dex": 13,
+    "con": 14,
+    "int": 10,
+    "wis": 12,
+    "cha": 8
+   },
+   "ability_increases": [],
+   "hp_rolls": [
+    10
+   ],
+   "skill_ranks": {
+    "Climb": 2,
+    "Jump": 1,
+    "Intimidate": 1,
+    "Swim": 1,
+    "Ride": 1,
+    "Craft": 1,
+    "Handle Animal": 1
+   },
+   "feats": [
+    "Power Attack",
+    "Weapon Focus (longsword)"
+   ],
+   "alignment": "Lawful Good",
+   "deity": "",
+   "domains": [],
+   "gender": "Male",
+   "age": 53,
+   "height": "4' 3\"",
+   "weight": "172 lb.",
+   "languages": [
+    "Common",
+    "Dwarven"
+   ],
+   "favored_enemies": [],
+   "combat_style": null,
+   "spellbook": [],
+   "spells_known": {},
+   "prepared": {},
+   "spont_used": {},
+   "inventory": [
+    {
+     "id": "scale mail",
+     "qty": 1,
+     "slot": "armor"
+    },
+    {
+     "id": "heavy wooden shield",
+     "qty": 1,
+     "slot": "shield"
+    },
+    {
+     "id": "longsword",
+     "qty": 1,
+     "slot": "main"
+    },
+    {
+     "id": "shortbow",
+     "qty": 1
+    },
+    {
+     "id": "arrows",
+     "qty": 20
+    },
+    {
+     "id": "dagger",
+     "qty": 1
+    },
+    {
+     "id": "javelin",
+     "qty": 2
+    },
+    {
+     "id": "backpack",
+     "qty": 1
+    },
+    {
+     "id": "rations",
+     "qty": 2
+    },
+    {
+     "id": "flint and steel",
+     "qty": 1
+    },
+    {
+     "id": "torch",
+     "qty": 2
+    },
+    {
+     "id": "potion of cure light wounds",
+     "qty": 1
+    }
+   ],
+   "cp": 400,
+   "xp": 0,
+   "notes": [],
+   "damage": 0,
+   "temp_hp": 0,
+   "ability_damage": {},
+   "stable": false,
+   "dead": false,
+   "effects": [],
+   "afflictions": [],
+   "daily": {},
+   "power_attack": 0,
+   "bonus_hp": 8,
+   "companion": null,
+   "nonlethal": 0,
+   "energy": "positive",
+   "specialty": null,
+   "prohibited": [],
+   "mount": null,
+   "fallen": false,
+   "rogue_specials": [],
+   "prestige_target": {},
+   "familiar": null
+  },
+  {
+   "name": "Lyra Vaelith",
+   "player": "Player 2",
+   "race": "elf",
+   "class_levels": [
+    "wizard"
+   ],
+   "base_abilities": {
+    "str": 8,
+    "dex": 14,
+    "con": 13,
+    "int": 15,
+    "wis": 12,
+    "cha": 10
+   },
+   "ability_increases": [],
+   "hp_rolls": [
+    4
+   ],
+   "skill_ranks": {
+    "Concentration": 2,
+    "Spellcraft": 1,
+    "Knowledge (arcana)": 1,
+    "Knowledge (religion)": 1,
+    "Knowledge (dungeoneering)": 1,
+    "Decipher Script": 1,
+    "Knowledge (history)": 1,
+    "Craft": 1,
+    "Knowledge (architecture and engineering)": 1,
+    "Knowledge (geography)": 1,
+    "Knowledge (local)": 1,
+    "Knowledge (nature)": 1,
+    "Knowledge (nobility and royalty)": 1,
+    "Knowledge (the planes)": 1,
+    "Profession": 1
+   },
+   "feats": [
+    "Improved Initiative"
+   ],
+   "alignment": "Chaotic Good",
+   "deity": "",
+   "domains": [],
+   "gender": "Female",
+   "age": 141,
+   "height": "5' 0\"",
+   "weight": "64 lb.",
+   "languages": [
+    "Common",
+    "Elven"
+   ],
+   "favored_enemies": [],
+   "combat_style": null,
+   "spellbook": [
+    "Acid Splash",
+    "Daze",
+    "Detect Magic",
+    "Disrupt Undead",
+    "Flare",
+    "Light",
+    "Mage Hand",
+    "Prestidigitation",
+    "Ray of Frost",
+    "Resistance",
+    "Magic Missile",
+    "Sleep",
+    "Mage Armor",
+    "Shield",
+    "Color Spray"
+   ],
+   "spells_known": {},
+   "prepared": {
+    "wizard": {
+     "0": [
+      {
+       "spell": "Ray of Frost",
+       "used": false
+      },
+      {
+       "spell": "Acid Splash",
+       "used": false
+      },
+      {
+       "spell": "Daze",
+       "used": false
+      }
+     ],
+     "1": [
+      {
+       "spell": "Magic Missile",
+       "used": false
+      },
+      {
+       "spell": "Sleep",
+       "used": false
+      }
+     ]
+    }
+   },
+   "spont_used": {},
+   "inventory": [
+    {
+     "id": "quarterstaff",
+     "qty": 1,
+     "slot": "main"
+    },
+    {
+     "id": "light crossbow",
+     "qty": 1
+    },
+    {
+     "id": "bolts",
+     "qty": 20
+    },
+    {
+     "id": "dagger",
+     "qty": 1
+    },
+    {
+     "id": "spell component pouch",
+     "qty": 1
+    },
+    {
+     "id": "spellbook",
+     "qty": 1
+    },
+    {
+     "id": "backpack",
+     "qty": 1
+    },
+    {
+     "id": "rations",
+     "qty": 2
+    },
+    {
+     "id": "flint and steel",
+     "qty": 1
+    },
+    {
+     "id": "torch",
+     "qty": 2
+    },
+    {
+     "id": "potion of cure light wounds",
+     "qty": 1
+    }
+   ],
+   "cp": 700,
+   "xp": 0,
+   "notes": [],
+   "damage": 0,
+   "temp_hp": 0,
+   "ability_damage": {},
+   "stable": false,
+   "dead": false,
+   "effects": [],
+   "afflictions": [],
+   "daily": {},
+   "power_attack": 0,
+   "bonus_hp": 5,
+   "companion": null,
+   "nonlethal": 0,
+   "energy": "positive",
+   "specialty": null,
+   "prohibited": [],
+   "mount": null,
+   "fallen": false,
+   "rogue_specials": [],
+   "prestige_target": {},
+   "familiar": {
+    "kind": "owl",
+    "name": "Nib"
+   }
+  }
+ ],
+ "room": "forest_road",
+ "flags": [
+  "quest"
+ ],
+ "rooms": {
+  "millbrook": {
+   "visited": true,
+   "used": [
+    "marta"
+   ],
+   "found_traps": [],
+   "disabled_traps": [],
+   "revealed": [],
+   "attempts": {},
+   "unlocked": []
+  },
+  "forest_road": {
+   "visited": true,
+   "used": [],
+   "found_traps": [],
+   "disabled_traps": [],
+   "revealed": [],
+   "attempts": {},
+   "unlocked": []
+  },
+  "old_bridge": {
+   "visited": true,
+   "used": [],
+   "found_traps": [],
+   "disabled_traps": [],
+   "revealed": [],
+   "attempts": {},
+   "unlocked": []
+  }
+ },
+ "minutes": 663,
+ "settings": {
+  "heroic": true
+ },
+ "sneaking": false,
+ "journal": [
+  "[Day 1, 08:01] Quest: rescue Tomas the miller's apprentice from the goblins at Ashen Hill (100 gp each)."
+ ],
+ "light_minutes": 0,
+ "attitudes": {}
+}

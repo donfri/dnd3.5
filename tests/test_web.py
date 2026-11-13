@@ -298,6 +298,26 @@ class TestSecurity(unittest.TestCase):
             else:
                 os.environ["TABLE_PASSWORD"] = old
 
+    def test_session_token_and_rate_limit(self):
+        tok = web.session_token("sesame")
+        self.assertTrue(web.session_ok(tok, "sesame"))
+        self.assertFalse(web.session_ok(tok, "other"))
+        self.assertFalse(web.session_ok(web.session_token("sesame", 5), "sesame"))  # expired
+        web.BUCKETS.clear()
+        got = [web.allow("spammer") for _ in range(40)]
+        self.assertTrue(got[0])
+        self.assertFalse(got[-1])
+        self.assertTrue(web.allow("someone-else"))
+
+    def test_refuses_to_start_open(self):
+        old = os.environ.pop("TABLE_PASSWORD", None)
+        os.environ.pop("DND35_ALLOW_OPEN", None)
+        try:
+            self.assertEqual(web.main(["--host", "0.0.0.0", "--port", "0"]), 2)
+        finally:
+            if old is not None:
+                os.environ["TABLE_PASSWORD"] = old
+
     def test_table_limit(self):
         old = web.MAX_TABLES
         web.MAX_TABLES = len(web.TABLES)

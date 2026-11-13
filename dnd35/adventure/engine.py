@@ -108,12 +108,42 @@ class GameState:
         return gs
 
 
+_LAST_SAVED: Dict[str, int] = {}
+
+
 def save_game(gs: GameState, name: str) -> str:
+    """Write a save safely: skip it if nothing changed, write to a temporary file,
+    keep the previous save as a .bak, then swap the new one in (never a half file)."""
     os.makedirs(SAVE_DIR, exist_ok=True)
     path = os.path.join(SAVE_DIR, f"{name}.json")
-    with open(path, "w") as f:
-        json.dump(gs.to_dict(), f, indent=1)
+    text = json.dumps(gs.to_dict(), indent=1)
+    key = hash(text)
+    if _LAST_SAVED.get(path) == key and os.path.exists(path):
+        return path
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        f.write(text)
+        f.flush()
+        os.fsync(f.fileno())
+    if os.path.exists(path):
+        try:
+            os.replace(path, path + ".bak")
+        except OSError:
+            pass
+    os.replace(tmp, path)
+    _LAST_SAVED[path] = key
     return path
+
+
+def _read_save(name: str) -> dict:
+    """Read a save; if it is damaged, fall back to the backup copy."""
+    path = os.path.join(SAVE_DIR, f"{name}.json")
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        with open(path + ".bak") as f:
+            return json.load(f)
 
 
 def list_saves() -> List[str]:
@@ -128,8 +158,7 @@ def list_saves() -> List[str]:
 def load_game(name: str, adventure=None) -> GameState:
     """Load a save. The adventure is taken from the save file itself."""
     from . import get
-    with open(os.path.join(SAVE_DIR, f"{name}.json")) as f:
-        d = json.load(f)
+    d = _read_save(name)
     return GameState.from_dict(d, get(d.get("adventure", "")) if adventure is None
                                or d.get("adventure") not in (None, adventure.ID)
                                else adventure)
@@ -139,8 +168,7 @@ def save_info(name: str) -> str:
     """One-line description of a save for menus."""
     from . import get
     try:
-        with open(os.path.join(SAVE_DIR, f"{name}.json")) as f:
-            d = json.load(f)
+        d = _read_save(name)
         adv = get(d.get("adventure", ""))
         heroes = ", ".join(f"{p['name']} (L{len(p.get('class_levels', []))})"
                            for p in d.get("party", []) if not p.get("dead"))
