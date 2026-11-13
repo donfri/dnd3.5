@@ -78,6 +78,35 @@ def touch_attack(ui, caster: Creature, target: Creature, ranged: bool, combat=No
     return hit
 
 
+TOUCH_SPELLS = {"Mage Armor", "Bull's Strength", "Bear's Endurance", "Cat's Grace",
+                "Barkskin", "Resist Energy", "Protection from Evil", "Shield of Faith",
+                "Magic Weapon", "Stoneskin", "Heroism", "Greater Heroism", "Fly",
+                "Invisibility", "Restoration", "Lesser Restoration", "Heal", "Harm",
+                "Raise Dead", "Resurrection", "Chill Touch", "Vampiric Touch", "Poison",
+                "Contagion", "Death Ward", "Freedom of Movement", "Neutralize Poison",
+                "Delay Poison", "Endure Elements", "Guidance", "Resistance", "Virtue",
+                "Bestow Curse", "Remove Curse", "Remove Disease", "Remove Fear",
+                "Slay Living", "Protection from Energy", "Greater Magic Weapon",
+                "Magic Fang", "Shillelagh", "Touch of Idiocy", "Ghoul Touch"}
+CLOSE_SPELLS = {"Ray of Frost", "Daze", "Cause Fear", "Command", "Charm Person", "Doom",
+                "Scorching Ray", "Slow", "Haste", "Enervation", "Finger of Death",
+                "Ray of Enfeeblement", "Dominate Person", "Power Word Stun",
+                "Power Word Kill", "Power Word Blind", "Deep Slumber", "Hideous Laughter",
+                "Sound Burst", "Acid Splash", "Disrupt Undead", "Charm Monster",
+                "Dimension Door", "Baleful Polymorph", "Flesh to Stone"}
+
+
+def spell_range(spell: str, cl: int) -> int:
+    """Range in feet: touch (5), close (25 + 5 per 2 levels), otherwise medium
+    (100 + 10 per level, which covers any battlefield here)."""
+    if spell in TOUCH_SPELLS or (spell.startswith(("Cure ", "Inflict "))
+                                 and "Mass" not in spell):
+        return 5
+    if spell in CLOSE_SPELLS:
+        return 25 + 5 * (max(1, cl) // 2)
+    return 100 + 10 * max(1, cl)
+
+
 def deal_damage(ui, target: Creature, amount: int, dtype: str, combat=None,
                 source: str = "", magic: bool = True) -> int:
     if magic and target.incorporeal and dtype not in ("force", "positive", "negative",
@@ -89,6 +118,14 @@ def deal_damage(ui, target: Creature, amount: int, dtype: str, combat=None,
     shown = dtype.replace("*", "")
     ui.out(f"  {target.name} takes {dealt} {shown} damage{extra}." if dealt else
            f"  {target.name} takes no damage{extra}.")
+    if dealt >= 50 and not target.dead and target.hp > -10 and \
+            target.ctype not in ("undead", "construct"):
+        ui.warn(f"  MASSIVE DAMAGE! {target.name} must survive the shock.")
+        if not saving_throw(ui, target, "fort", 15, [], "massive damage"):
+            ui.bad(f"  {target.name} dies from the sheer trauma of the blow!")
+            target.damage = max(target.damage, target.max_hp() + 10)
+            target.check_death() if hasattr(target, "check_death") else None
+            target.dead = True
     if combat is not None:
         combat.after_damage(target)
     else:
@@ -1457,6 +1494,9 @@ def _cast_for(ui, who, party) -> None:
         return
     if not who.can_cast_now():
         ui.bad(f"{who.name} can't cast spells in animal form.")
+        return
+    if who.missing_focus():
+        ui.bad(who.missing_focus())
         return
     casts = [c for c in who.available_casts()
              if SPELLS[c["spell"]]["target"] in ("ally", "self", "allies", "none")

@@ -87,6 +87,15 @@ def browse(ui, party, section: str, markup: float) -> None:
 
 def sell(ui, party) -> None:
     who = _pick_char(ui, party, "Who is selling?")
+    # a good eye for value (Appraise DC 12) gets a better deal: 55% instead of half
+    from . import dice
+    best = max(party, key=lambda p: p.skill_total("Appraise"))
+    with dice.rolling(best, "Appraise"):
+        r = dice.d20()
+    keen = r + best.skill_total("Appraise") >= 12
+    ui.roll(f"{best.name} Appraise: d20={r} {best.skill_total('Appraise'):+d} = "
+            f"{r + best.skill_total('Appraise')} vs DC 12 -> "
+            f"{'knows what things are worth (+10% on sales)' if keen else 'no better deal'}")
     while True:
         items = [e for e in who.inventory if item_data(e)["cost"] > 0
                  and e["id"] not in ("ember sigil", "iron key")]
@@ -96,9 +105,9 @@ def sell(ui, party) -> None:
         opts = []
         for e in items:
             d = item_data(e)
-            unit = d["cost"] // 2
+            unit = d["cost"] * (11 if keen else 10) // 20
             if d.get("ammo_count"):
-                unit = d["cost"] // 2 // d["ammo_count"]
+                unit = d["cost"] * (11 if keen else 10) // 20 // d["ammo_count"]
             slot = " [equipped]" if e.get("slot") else ""
             opts.append(f"{item_name(e)} x{e['qty']}{slot}  -> {rules.money_str(unit)} each")
         i = ui.choose("Sell which item?", opts, allow_cancel=True)
@@ -106,9 +115,9 @@ def sell(ui, party) -> None:
             return
         e = items[i]
         d = item_data(e)
-        unit = d["cost"] // 2
+        unit = d["cost"] * (11 if keen else 10) // 20
         if d.get("ammo_count"):
-            unit = d["cost"] // 2 // d["ammo_count"]
+            unit = d["cost"] * (11 if keen else 10) // 20 // d["ammo_count"]
         qty = 1 if e["qty"] == 1 else ui.ask_int("How many?", 1, e["qty"], e["qty"])
         e.pop("slot", None) if qty >= e["qty"] else None
         who.remove_item(e, qty)

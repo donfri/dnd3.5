@@ -7,12 +7,14 @@ from __future__ import annotations
 
 import json
 import os
+from collections import Counter
 from typing import Dict, List, Optional
 
 from .. import dice, rules
 from ..character import Character
 from ..combat import Combat, award_xp
 from ..data.items import item_data, item_name, make_item
+from ..data.monsters import MONSTERS
 from ..effects import Effect, ROUNDS_PER_MINUTE
 from ..levelup import level_up_interactive, prepare_spells
 from ..abilities import ability_menu, has_usable
@@ -731,6 +733,29 @@ class GM:
             ui.out("You find nothing new.")
         self.wandering_check(0.1)
 
+    def read_tracks(self) -> None:
+        """A tracker (the Track feat) studies the ground: Survival DC 12 per way out
+        tells what creatures wait in the next area."""
+        ui, gs = self.ui, self.gs
+        trackers = [p for p in gs.able() if p.has_feat("Track") or p.class_level("ranger")]
+        h = max(trackers, key=lambda p: p.skill_total("Survival"))
+        gs.pass_time(10, ui)
+        ui.out(f"{h.name} crouches over the ground, reading scuffs and prints...")
+        for ex_id, ex in self.exits():
+            waiting = [e for e in self.adv.ROOMS[ex["to"]].get("encounters_enter", [])
+                       if not self.enc_done(e) and self.met(self.adv.ENCOUNTERS[e].get(
+                           "requires"))]
+            if self.roll_check(h, "Survival", 12) < 12:
+                ui.out(f"  {ex_id.capitalize()}: the signs are too confused to read.")
+            elif not waiting:
+                ui.good(f"  {ex_id.capitalize()}: nothing has passed this way lately.")
+            else:
+                names = Counter(MONSTERS[k]["name"].lower()
+                                for e in waiting for k in self.adv.ENCOUNTERS[e]["monsters"])
+                what = ", ".join(f"{n} x{c_}" if c_ > 1 else n for n, c_ in names.items())
+                ui.warn(f"  {ex_id.capitalize()}: fresh tracks. Beyond lie: {what}.")
+        self.wandering_check(0.05)
+
     def passive_checks(self) -> None:
         ui, gs = self.ui, self.gs
         room = self.adv.ROOMS[gs.room]
@@ -1068,6 +1093,31 @@ class GM:
             self.run(eff.get("failure", []), h)
 
     # ------------------------------------------------------------ rest
+    def eat(self) -> None:
+        """Camping uses a day's rations each (inns include meals). Friends share.
+        Going hungry: no natural healing; from the third day, fatigue and 1d6
+        nonlethal damage a day."""
+        ui, gs = self.ui, self.gs
+        hungry = []
+        for p in gs.living():
+            giver = p if p.has_item("rations") else next(
+                (o for o in gs.living() if o.has_item("rations")), None)
+            if giver is not None:
+                giver.remove_item(giver.find_item("rations"), 1)
+                p.__dict__["hungry_days"] = 0
+            else:
+                p.__dict__["hungry_days"] = p.__dict__.get("hungry_days", 0) + 1
+                hungry.append(p)
+        if not hungry:
+            ui.out("Everyone eats a day's rations.", ("dim",))
+            return
+        ui.warn(", ".join(p.name for p in hungry) + " ha" + ("s" if len(hungry) == 1 else "ve")
+                + " nothing to eat. (Buy trail rations in town.)")
+        for p in hungry:
+            if p.hungry_days >= 3:
+                p.add_effect(Effect("Starving", None, tags=["fatigued"]))
+                ui.bad(f"{p.name} is starving: fatigued, and takes 1d6 nonlethal damage.")
+
     def rest(self, cost_sp: int = 0, safe: bool = True) -> None:
         ui, gs = self.ui, self.gs
         if cost_sp:
@@ -1095,12 +1145,18 @@ class GM:
                 ui.out("After the fight you manage to finish resting.")
         gs.pass_time(8 * 60, ui)
         ui.header("A NIGHT'S REST")
+        self._camped = not cost_sp
+        if self._camped:
+            self.eat()
         for p in gs.party:
             if p.dead:
                 continue
             if p.hp < 0:
                 p.stable = True
-            healed = p.heal(p.level * (2 if cost_sp else 1))
+            if p.__dict__.get("hungry_days", 0) == 0:
+                p.remove_effect("Starving")
+            healed = p.heal(0 if p.__dict__.get("hungry_days", 0) else
+                            p.level * (2 if cost_sp else 1))
             for ab in list(p.ability_damage):
                 p.ability_damage[ab] -= 1
                 if p.ability_damage[ab] <= 0:
@@ -1108,6 +1164,8 @@ class GM:
             p.daily = {}
             p.temp_hp = 0
             p.nonlethal = 0
+            if getattr(self, "_camped", False) and p.__dict__.get("hungry_days", 0) >= 3:
+                p.take_nonlethal(dice.roll("1d6").total)
             p.effects = [e for e in p.effects if e.duration is None and "fatigued" not in e.tags
                          and "prone" not in e.tags]
             ui.out(f"{p.name} recovers {healed} hp ({p.hp}/{p.max_hp()})."
@@ -1403,6 +1461,8 @@ class GM:
 
     def turn_menu(self) -> None:
         ui, gs = self.ui, self.gs
+        for p in gs.party:
+            p.ensure_focus()
         room = self.adv.ROOMS[gs.room]
         ui.out()
         ui.out(c(f"[{room['name']} | {gs.time_str()}]", "yellow") + "  " +
@@ -1422,6 +1482,10 @@ class GM:
             opts.append(("Search the area (traps, secret doors, loot)", "search", None))
             opts.append((f"Sneaking: {'ON' if gs.sneaking else 'off'} (Move Silently when "
                          f"entering new areas to gain surprise)", "sneak", None))
+        if not room.get("town") and self.exits() and any(
+                p.has_feat("Track") or p.class_level("ranger") for p in gs.able()):
+            opts.append(("Read the tracks (Survival: what lies beyond each way out)",
+                         "track", None))
         if any(p.level < rules.MAX_LEVEL and p.can_level_up() for p in gs.living()):
             opts.append((c("Level up!", "bgreen", "bold"), "levelup", None))
         opts.append(("Character sheet", "sheet", None))
@@ -1445,7 +1509,7 @@ class GM:
         group_of = {"feature": "Actions", "exit": "Travel", "search": "Explore",
                     "sneak": "Explore", "rest": "Explore", "levelup": "Party",
                     "sheet": "Party", "inv": "Party", "cast": "Party", "ability": "Party",
-                    "scout": "Explore", "craft": "Party"}
+                    "scout": "Explore", "craft": "Party", "track": "Explore"}
         i = ui.choose("What do you do?", [o[0] for o in opts],
                       groups=[group_of.get(o[1], "Game") for o in opts])
         _, kind, data = opts[i]
@@ -1455,6 +1519,8 @@ class GM:
             self.try_exit(*data)
         elif kind == "search":
             self.search_room()
+        elif kind == "track":
+            self.read_tracks()
         elif kind == "sneak":
             gs.sneaking = not gs.sneaking
             ui.out("The party moves " + ("stealthily." if gs.sneaking else "normally."))

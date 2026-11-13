@@ -260,6 +260,19 @@ class Combat:
         return min(cands, key=lambda q: grid.dist(q, self.s(a).pos)) if cands else \
             self.s(a).pos
 
+    def route_to_ally(self, a: Creature, b: Creature):
+        """Nearest free square next to a friend: (square, cost, path)."""
+        ap, bp = self.s(a).pos, self.s(b).pos
+        if grid.adjacent(ap, bp):
+            return ap, 0, []
+        costs, _ = self.terrain.costs(ap, self.foe_squares(a))
+        occ = set(self.occupied(a))
+        cands = [q for q in grid.neighbors(bp) if q in costs and q not in occ]
+        if not cands:
+            return None, grid.INF, []
+        dest = min(cands, key=costs.get)
+        return dest, costs[dest], self.terrain.path(ap, dest, self.foe_squares(a))
+
     def feet_to_melee(self, a: Creature, b: Creature) -> int:
         if self.is_engaged(a, b) or grid.adjacent(self.s(a).pos, self.s(b).pos):
             return 0
@@ -770,8 +783,14 @@ class Combat:
             if self.shooting_into_melee(attacker, target) and not attacker.has_feat("Precise Shot"):
                 sit.append(("untyped", -4, "firing into melee"))
             if target.uid in self.st and attacker.uid in self.st:
+                between = set(self.terrain.line(self.s(attacker).pos, self.s(target).pos))
                 if self.terrain.cover(self.s(attacker).pos, self.s(target).pos):
                     sit.append(("untyped", -4, "target behind cover"))
+                elif not attacker.has_feat("Improved Precise Shot") and any(
+                        o.pos in between and not o.c.dead and not o.fled
+                        and o.c is not attacker and o.c is not target and o.c.conscious
+                        for o in self.st.values()):
+                    sit.append(("untyped", -4, "someone in the way (cover)"))
                 pen, _ = self.range_penalty(attacker, target, w)
                 if pen:
                     sit.append(("untyped", pen, f"range {self.distance(attacker, target)} ft"))
@@ -1254,6 +1273,33 @@ class Combat:
             ui.good(f"  {tgt.name} falls for it: {p.name}'s next attack catches it off guard!")
         else:
             ui.out(f"  {tgt.name} doesn't bite.")
+
+    def act_demoralize(self, x: CState) -> None:
+        """Intimidate: a foe within 30 ft is shaken for a round (or more)."""
+        p = x.c
+        ui = self.ui
+        foes = [f for f in self.enemies(p) if self.distance(p, f) <= 30
+                and not f.helpless() and "fear" not in f.immunities()
+                and f.ctype not in ("undead", "construct", "vermin", "ooze", "plant")]
+        tgt = self._maneuver_target(p, foes, "Demoralize whom?")
+        if not tgt:
+            return
+        x.std = False
+        with dice.rolling(p, "Intimidate"):
+            r = dice.d20()
+        tot = r + p.skill_total("Intimidate")
+        hd = getattr(tgt, "hd", None) or getattr(tgt, "level", 1)
+        dc = 10 + hd + tgt.mod("wis") + (tgt.bonus("saves_vs_fear") if hasattr(tgt, "bonus")
+                                         else 0)
+        ui.roll(f"{p.name} Intimidate: d20={r} {p.skill_total('Intimidate'):+d} = {tot} "
+                f"vs DC {dc}")
+        if tot >= dc:
+            rounds = 1 + (tot - dc) // 5
+            tgt.add_effect(Effect("Demoralized", rounds, tags=["shaken", "fear_effect"]))
+            ui.good(f"  {tgt.name} is shaken for {rounds} round{'s' if rounds > 1 else ''} "
+                    f"(-2 on attacks, saves and checks).")
+        else:
+            ui.out(f"  {tgt.name} is not impressed.")
 
     def act_overrun(self, x: CState) -> None:
         p = x.c
@@ -1839,6 +1885,9 @@ class Combat:
                 if any(self.is_engaged(a, f) for f in eng for a in self.allies(p)
                        if a is not p):
                     add("Aid another (+2 to an ally's next attack, or +2 AC)", self.act_aid, x)
+            if x.std and not p.wild_form() and foes_all:
+                add("Demoralize a foe (Intimidate: shaken, -2 on its rolls)",
+                    self.act_demoralize, x)
             if full_ok and x.move and [f for f in eng if f.helpless() and not f.dead]:
                 add("Coup de grace (finish a helpless foe: automatic critical)",
                     self.act_coup, x)
@@ -1854,7 +1903,7 @@ class Combat:
                     self.act_lightning, x, lightning)
             if (x.std or (p.has_feat("Quicken Spell") and not x.quickened)) and \
                     getattr(p, "available_casts", None) and p.available_casts() \
-                    and p.can_cast_now():
+                    and p.can_cast_now() and not p.missing_focus():
                 add("Cast a spell" if x.std else "Cast a quickened spell (free action)",
                     self.act_cast, x)
             if x.std and self.usable_items(p):
@@ -2931,6 +2980,29 @@ class Combat:
         targets = self._spell_targets(p, spell, SPELLS[spell]["target"])
         if targets is None:
             return
+        from .magic import spell_range
+        rng = spell_range(spell, getattr(p, "level", 1))
+        for t in targets:
+            if t is p or t.uid not in self.st or spell in grid.AREAS:
+                continue
+            d = self.distance(p, t)
+            if rng == 5 and SPELLS[spell]["target"] in ("ally", "creature") and d > 5:
+                # a touch spell on a friend: walk over if a move is left
+                spot, cost, path = self.route(p, t) if self.s(t).side != x.side else \
+                    self.route_to_ally(p, t)
+                if spot is None or cost > self.speed_of(p) or not x.move:
+                    ui.bad(f"{spell} needs a touch and {t.name} is {d} ft away"
+                           + ("." if x.move else " (no move left)."))
+                    return
+                x.move = False
+                x.moved = True
+                ui.out(f"{p.name} hurries over to {t.name}.")
+                if not self.travel(p, path):
+                    x.std = False
+                    return
+            elif rng > 5 and d > rng:
+                ui.bad(f"{t.name} is {d} ft away; {spell} reaches only {rng} ft. Move closer.")
+                return
         if "Quicken Spell" in meta.get("feats", ()):
             x.quickened = True
         else:
@@ -3445,7 +3517,11 @@ def award_xp(ui, party, monsters, party_level: int) -> int:
     total = sum(rules.xp_award(party_level, m.cr) for m in monsters)
     each = total // len(alive)
     for p in alive:
-        p.xp += each
+        pen = p.xp_penalty() if hasattr(p, "xp_penalty") else 0
+        p.xp += int(each * (1 - pen))
+        if pen:
+            ui.warn(f"{p.name} earns only {int(each * (1 - pen))} XP (uneven multiclass "
+                    f"levels: -{int(pen * 100)}%).")
     ui.good(f"Each surviving hero earns {each} XP.")
     for p in alive:
         if p.can_level_up():

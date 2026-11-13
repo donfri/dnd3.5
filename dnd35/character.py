@@ -836,6 +836,45 @@ class Character(Creature):
                     s["used"] = False
         self.spont_used = {}
 
+    FOCUS = {"wizard": "spell component pouch", "sorcerer": "spell component pouch",
+             "bard": "spell component pouch", "cleric": "holy symbol",
+             "paladin": "holy symbol"}
+
+    def ensure_focus(self) -> None:
+        """New casters get their pouch or holy symbol once (also for old saves)."""
+        given = self.__dict__.setdefault("focus_given", [])
+        for cls in set(self.class_levels):
+            item = self.FOCUS.get(cls)
+            if item and item not in given:
+                given.append(item)
+                if not self.has_item(item):
+                    self.add_item(item)
+
+    def missing_focus(self) -> Optional[str]:
+        """What this caster lacks to cast at all (material components / divine focus)."""
+        for cls in self.caster_classes():
+            item = self.FOCUS.get(cls)
+            if item and not self.has_item(item):
+                return (f"{self.name} has no {item} and can't cast "
+                        f"{cls} spells without one. (Shops sell them.)")
+        return None
+
+    def xp_penalty(self) -> float:
+        """Multiclass penalty: -20% XP for each base class more than one level away from
+        your highest. Your race's favored class (your highest, for humans and
+        half-elves) and prestige classes don't count."""
+        from .data.classes import CLASSES
+        counts = {c_: n for c_, n in Counter(self.class_levels).items()
+                  if not CLASSES[c_].get("prestige")}
+        fav = self.race_data.get("favored_class", "any")
+        if fav == "any" and counts:
+            fav = max(counts, key=counts.get)
+        counts.pop(fav, None)
+        if len(counts) < 2:
+            return 0.0
+        top = max(counts.values())
+        return min(0.8, 0.2 * sum(1 for n in counts.values() if top - n >= 2))
+
     def can_cast_now(self) -> bool:
         if self.wild_form() and not self.has_feat("Natural Spell"):
             return False
@@ -1051,6 +1090,8 @@ class Character(Creature):
             "alignment": self.alignment, "deity": self.deity, "domains": self.domains,
             "gender": self.gender, "age": self.age, "height": self.height,
             "weight": self.weight, "languages": self.languages,
+            "focus_given": self.__dict__.get("focus_given", []),
+            "hungry_days": self.__dict__.get("hungry_days", 0),
             "favored_enemies": self.favored_enemies, "combat_style": self.combat_style,
             "spellbook": self.spellbook,
             "spells_known": {str(k): v for k, v in self.spells_known.items()},
@@ -1074,7 +1115,7 @@ class Character(Creature):
         for k in ("class_levels", "base_abilities", "ability_increases", "hp_rolls",
                   "skill_ranks", "feats", "alignment", "deity", "domains", "gender", "age",
                   "height", "weight", "languages", "favored_enemies", "combat_style",
-                  "spellbook", "inventory", "cp", "xp", "notes", "damage", "temp_hp",
+                  "focus_given", "hungry_days", "spellbook", "inventory", "cp", "xp", "notes", "damage", "temp_hp",
                   "ability_damage", "stable", "dead", "afflictions", "daily",
                   "power_attack", "bonus_hp", "companion", "familiar", "nonlethal", "energy", "specialty",
                   "prohibited", "mount", "fallen", "rogue_specials",
