@@ -9,7 +9,7 @@ from . import companions as _comp
 from .creature import Creature, weapon_info_from_entry, thrown_variant
 from .data.classes import CLASSES, DEITIES, DOMAINS, METAL_ARMOR, MONK_UNARMED
 from .data.feats import FEATS
-from .data.items import WEAPONS, WORN_SLOTS, item_data, item_name, make_item
+from .data.items import WEAPONS, WORN_SLOTS, item_data, item_name, make_item, stuck
 from .data.monsters import MONSTERS
 from .data.races import RACES
 from .data.skills import SKILLS, SYNERGIES
@@ -324,6 +324,14 @@ class Character(Creature):
             entry.pop("slot", None)
             self.inventory.append(entry)
         old = self.equipped(slot)
+        if old and stuck(old):
+            other = next((sl for sl in WORN_SLOTS.get(kind, []) if sl != slot
+                          and not (self.equipped(sl) and stuck(self.equipped(sl)))), None)
+            if other is None:
+                return (f"{item_name(old)} is cursed and won't come off, so there's no room "
+                        f"for {item_name(entry)}.")
+            slot = other
+            old = self.equipped(slot)
         if old:
             old.pop("slot", None)
         if kind == "weapon" and slot == "main" and (d["hands"] == "two" or d.get("bow")):
@@ -340,11 +348,20 @@ class Character(Creature):
                 off.pop("slot", None)
         entry["slot"] = slot
         self._merge_stacks()
+        if d.get("cursed") and not entry.get("curse_known"):
+            fake = item_name(entry)
+            entry["curse_known"] = True
+            return (f"{self.name} puts on the {fake[0].lower()}{fake[1:]}... and it tightens "
+                    f"like a vice. It's CURSED: {item_name(entry)}! "
+                    f"{d['desc'].split(': ', 1)[1]}")
         return f"{self.name} equips {item_name(entry)} ({slot})."
 
-    def unequip(self, entry: dict) -> None:
+    def unequip(self, entry: dict) -> bool:
+        if stuck(entry):
+            return False
         entry.pop("slot", None)
         self._merge_stacks()
+        return True
 
     def _merge_stacks(self):
         merged: List[dict] = []

@@ -595,10 +595,12 @@ ROOMS = {
             {"id": "loot_grukk", "label": "Search Grukk's throne",
              "requires": {"enc_cleared": "warren", "not_flag": "grukk_parley"}, "once": True,
              "effects": [
-                T("Among the stolen junk: a heavy purse, a potion, and a warm bronze disc "
-                  "stamped with a crowned flame, hanging on a thong."),
+                T("Among the stolen junk: a heavy purse, a potion, a pair of fine steel "
+                  "gauntlets Grukk never dared wear, and a warm bronze disc stamped with a "
+                  "crowned flame, hanging on a thong."),
                 {"do": "gold", "gp": 64},
                 {"do": "item", "id": "potion of cure light wounds"},
+                {"do": "item", "id": "gauntlets of fumbling"},
                 {"do": "item", "id": "ember sigil"},
              ]},
             {"id": "free", "label": "Untie Tomas",

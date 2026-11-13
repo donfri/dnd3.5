@@ -79,6 +79,16 @@ FEATS = {
                              "fighter": True, "fighter_only": True},
     "Great Cleave": {"desc": "Cleave any number of times per round.",
                      "prereq": {"str": 13, "bab": 4, "feats": ["Cleave"]}, "fighter": True},
+    "Mounted Combat": {"desc": "Once a round while mounted, when a melee attack hits you, "
+                               "make a Ride check; if it beats the attack roll, you swerve "
+                               "your mount and the blow misses.",
+                       "prereq": {"skills": {"Ride": 1}}, "fighter": True},
+    "Ride-By Attack": {"desc": "After a mounted charge you keep riding: you end out of "
+                               "your target's reach, and it gets no attack of opportunity.",
+                       "prereq": {"feats": ["Mounted Combat"]}, "fighter": True},
+    "Spirited Charge": {"desc": "A mounted charge deals double damage (triple with a lance).",
+                        "prereq": {"feats": ["Mounted Combat", "Ride-By Attack"]},
+                        "fighter": True},
     "Spring Attack": {"desc": "Full-round action: move in, attack, and move back out without "
                               "provoking from your target.",
                       "prereq": {"dex": 13, "bab": 4, "feats": ["Mobility"]}, "fighter": True},

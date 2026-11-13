@@ -662,6 +662,7 @@ class Combat(ManeuversMixin, MonstersMixin, PlayerMixin):
         x.moved = False
         x.cleave_used = False
         x.deflect_used = False
+        x.mc_used = False
         x.stepped = False
         x.quickened = False
         if getattr(cr, "summoned", False) and not cr.get_effect("Summoned"):
@@ -810,6 +811,19 @@ class Combat(ManeuversMixin, MonstersMixin, PlayerMixin):
         roll = dice.d20()
         total = roll + bonus
         hit = roll == 20 or (roll != 1 and total >= ac)
+        if hit and not ranged and target.get_effect("Mounted") and target.uid in self.st \
+                and target.has_feat("Mounted Combat") and target.conscious \
+                and not getattr(self.s(target), "mc_used", False):
+            self.s(target).mc_used = True
+            with dice.rolling(target, "Ride (Mounted Combat)"):
+                rr = dice.d20()
+            ride = rr + target.skill_total("Ride")
+            ui.roll(f"{target.name} Ride: d20={rr} {target.skill_total('Ride'):+d} = {ride} "
+                    f"vs the attack roll {total}")
+            if ride > total:
+                hit = False
+                ui.good(f"  {target.name} swerves the mount and the blow goes wide "
+                        f"(Mounted Combat).")
         label = "AoO! " if aoo else ""
         if feinted:
             sit.append(("untyped", 0, "feinted: no Dex to AC"))
@@ -883,7 +897,7 @@ class Combat(ManeuversMixin, MonstersMixin, PlayerMixin):
         ui = self.ui
         dice_expr, comps = attacker.damage_profile(w, target, offhand=offhand, power=power)
         static = sum(v for _, v, _ in comps) + extra_damage
-        mult = w.get("crit_mult", 2) if crit else 1
+        mult = (w.get("crit_mult", 2) if crit else 1) + getattr(self, "charge_mult", 1) - 1
         total = 0
         rolls = []
         for _ in range(mult):

@@ -67,6 +67,8 @@ WEAPONS = {
                    ranged=True, ammo="arrows", bow=True),
     # reach weapons (strike foes 10 ft. away)
     "longspear": _w("Longspear", "simple", "simple", "1d8", 20, 3, 5, 9, "P", "two", reach=True),
+    "lance": _w("Lance", "martial", "martial", "1d8", 20, 3, 10, 10, "P", "two", reach=True,
+                lance=True),
     "glaive": _w("Glaive", "martial", "martial", "1d10", 20, 3, 8, 10, "S", "two", reach=True),
     "guisarme": _w("Guisarme", "martial", "martial", "2d4", 20, 3, 9, 12, "S", "two",
                    reach=True, trip_bonus=2),
@@ -254,12 +256,44 @@ MAGIC = {
 }
 
 
+def stuck(entry: dict) -> bool:
+    """A cursed item that has been put on can't be taken off without Remove Curse."""
+    return bool(entry.get("slot")) and bool(item_data(entry).get("cursed"))
+
+
+def shown_data(entry: dict) -> dict:
+    """What the players believe an item is: a cursed item passes for something useful
+    until someone puts it on (or a sage sees through it)."""
+    d = item_data(entry)
+    if d.get("cursed") and not entry.get("curse_known"):
+        fake = dict(MAGIC[d["disguise"]])
+        fake["kind"] = d["kind"]
+        return fake
+    return d
+
+
 def _wi(kind, name, gp, bonuses, desc, weight=0):
     return {"kind": kind, "name": name, "cost": gp * GP, "weight": weight, "bonuses": bonuses,
             "desc": desc}
 
 
 MAGIC.update({
+    # cursed items: each passes for something good until it's on your hand
+    "ring of clumsiness": dict(_wi("ring", "Ring of clumsiness (cursed)", 0,
+                                   [("dex", "untyped", -4)],
+                                   "CURSED: -4 Dexterity. It won't come off without "
+                                   "Remove Curse."),
+                               cursed=True, disguise="ring of protection +1"),
+    "gauntlets of fumbling": dict(_wi("gloves", "Gauntlets of fumbling (cursed)", 0,
+                                      [("attack", "untyped", -2)],
+                                      "CURSED: -2 on attack rolls. They won't come off "
+                                      "without Remove Curse.", 4),
+                                  cursed=True, disguise="gauntlets of ogre power"),
+    "bracers of defenselessness": dict(_wi("bracers", "Bracers of defenselessness (cursed)",
+                                           0, [("ac", "untyped", -5)],
+                                           "CURSED: -5 to AC. They won't come off without "
+                                           "Remove Curse.", 1),
+                                       cursed=True, disguise="bracers of armor +2"),
     "ring of protection +2": _wi("ring", "Ring of protection +2", 8000,
                                  [("ac", "deflection", 2)], "+2 deflection bonus to AC."),
     "cloak of resistance +2": _wi("cloak", "Cloak of resistance +2", 4000,
@@ -478,9 +512,9 @@ def item_data(entry: dict) -> dict:
 def item_name(entry: dict) -> str:
     d = item_data(entry)
     if entry.get("unidentified"):
-        return {"potion": "Unidentified potion", "wand": "Unidentified wand",
-                "ring": "Unidentified ring", "staff": "Unidentified staff"}.get(
-                    d["kind"], f"Unidentified {d['kind']} item")
+        return f"Unidentified {'item' if d['kind'] == 'wondrous' else d['kind']}"
+    if d.get("cursed") and not entry.get("curse_known"):
+        return shown_data(entry)["name"]
     name = d["name"]
     if entry.get("enhancement"):
         name = f"{name} +{entry['enhancement']}"

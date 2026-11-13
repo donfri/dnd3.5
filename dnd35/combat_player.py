@@ -739,7 +739,20 @@ class PlayerMixin:
         if not self.close_in(p, tgt, budget=2 * self.speed_of(p)):
             return
         sit = [("untyped", 2, "charge")]
-        self.make_attack(p, tgt, w, p.bab(), sit, power=p.power_attack)
+        if p.get_effect("Mounted"):
+            # a lance doubles damage on a mounted charge; Spirited Charge adds one more
+            self.charge_mult = (2 if w.get("wid") == "lance" else 1) + \
+                (1 if p.has_feat("Spirited Charge") else 0)
+            if self.charge_mult > 1:
+                self.ui.out(f"  Mounted charge: damage x{self.charge_mult}!", ("byellow",))
+        try:
+            self.make_attack(p, tgt, w, p.bab(), sit, power=p.power_attack)
+        finally:
+            self.charge_mult = 1
+        if p.get_effect("Mounted") and p.has_feat("Ride-By Attack") and p.conscious:
+            self.s(p).provoked_by = set(getattr(self.s(p), "provoked_by", ())) | {tgt.uid}
+            self.disengage_all(p, retreat=self.speed_of(p))
+            self.ui.out(f"{p.name} thunders past and wheels away (Ride-By Attack).")
 
     def act_approach(self, x: CState) -> None:
         p = x.c

@@ -314,8 +314,10 @@ class GM:
             if len(gs.living()) > 1 and not eff.get("to_actor"):
                 to = self.pick_hero(f"Who takes the {item_name(make_item(eff['id']))}?") or to
             new = make_item(eff["id"], eff.get("qty", 1))
-            if item_data(new)["kind"] in ("potion", "wand", "ring", "wondrous", "staff",
-                                           "rod") and not to.has_item(eff["id"]):
+            from ..data.items import MAGIC
+            if (eff["id"] in MAGIC or item_data(new)["kind"] in (
+                    "potion", "wand", "ring", "wondrous", "staff", "rod")) \
+                    and not to.has_item(eff["id"]):
                 new["unidentified"] = True
             entry = to.add_item(new)
             if entry.get("unidentified"):
@@ -1237,6 +1239,9 @@ class GM:
                     "Healing: cure moderate wounds (60 gp)",
                     "Lesser restoration: heal all ability damage on one hero (60 gp)",
                     "Remove disease (150 gp)"]
+            from ..data.items import stuck
+            if any(stuck(e) for p in gs.living() for e in p.inventory):
+                opts.append("Remove curse: free a hero from a cursed item (150 gp)")
             if any(getattr(p, "fallen", False) for p in gs.living()):
                 opts.append("Atonement: restore a fallen paladin's oath (450 gp)")
             if any(p.get_effect("Negative levels") for p in gs.living()):
@@ -1278,6 +1283,16 @@ class GM:
                     ui.good(f"{who.name} is cured of disease.")
                 elif who:
                     ui.out(f"{who.name} isn't sick.")
+            elif opts[i].startswith("Remove curse"):
+                bound = [p for p in gs.living() if any(stuck(e) for e in p.inventory)]
+                who = bound[0] if len(bound) == 1 else self.pick_hero("Who?", heroes=bound)
+                payer = who and self._payer(150)
+                if payer:
+                    payer.cp -= 150 * 100
+                    for e in [e for e in who.inventory if stuck(e)]:
+                        ui.good(f"The priestess speaks a word and {item_name(e)} falls from "
+                                f"{who.name}, crumbling to rust and ash.")
+                        who.inventory.remove(e)
             elif opts[i].startswith("Atonement"):
                 fallen = [p for p in gs.living() if getattr(p, "fallen", False)]
                 who = fallen[0] if len(fallen) == 1 else self.pick_hero("Who?", heroes=fallen)
@@ -1409,9 +1424,15 @@ class GM:
             ui.out("None of you can tell what its magic does. (A sage in town can.)")
             return False
         h = max(sages, key=lambda p: p.skill_total("Spellcraft"))
-        if self.roll_check(h, "Spellcraft", 20) >= 20:
+        total = self.roll_check(h, "Spellcraft", 20)
+        if total >= 20:
             entry.pop("unidentified", None)
-            ui.good(f"{h.name} recognizes it: {item_name(entry)}.")
+            if item_data(entry).get("cursed") and total >= 30:
+                entry["curse_known"] = True      # only a master sees through a curse
+                ui.warn(f"{h.name} looks closer and goes pale: {item_name(entry)}. "
+                        f"Don't put it on.")
+            else:
+                ui.good(f"{h.name} recognizes it: {item_name(entry)}.")
             return True
         ui.out(f"{h.name} can't work out what its magic does. (A sage in town can.)")
         return False
@@ -1429,8 +1450,13 @@ class GM:
                     q.cp -= take
                     left -= take
                 e.pop("unidentified", None)
-                ui.good(f"The sage turns it over twice: {p.name}'s item is "
-                        f"{item_name(e)}. (100 gp)")
+                if item_data(e).get("cursed"):
+                    e["curse_known"] = True
+                    ui.warn(f"The sage drops {p.name}'s item as if it burned: 'That is "
+                            f"{item_name(e)}. Do not wear it.' (100 gp)")
+                else:
+                    ui.good(f"The sage turns it over twice: {p.name}'s item is "
+                            f"{item_name(e)}. (100 gp)")
 
     def call_cohort(self) -> None:
         """Leadership: each leader may have one cohort, two levels lower."""

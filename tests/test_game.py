@@ -110,6 +110,36 @@ class TestTrapCrossing(unittest.TestCase):
         self.assertTrue(any("Everyone is across" in t for t in ui.transcript))
 
 
+class TestCursedItems(unittest.TestCase):
+    def test_disguised_until_worn_then_stuck(self):
+        from dnd35.data.items import item_name, make_item, stuck
+        ch = build_pregen("thorgar")
+        ac = ch.ac()
+        e = ch.add_item(make_item("bracers of defenselessness"))
+        self.assertEqual(item_name(e), "Bracers of armor +2")       # it looks useful
+        msg = ch.equip(e)
+        self.assertIn("CURSED", msg)
+        self.assertEqual(ch.ac(), ac - 5)
+        self.assertTrue(stuck(e))
+        self.assertFalse(ch.unequip(e))                              # it won't come off
+        self.assertIn("cursed", item_name(e).lower())
+        good = ch.add_item(make_item("bracers of armor +2"))
+        self.assertIn("no room", ch.equip(good))
+
+    def test_found_magic_is_unidentified(self):
+        from dnd35.data.items import item_name
+        gs = engine.GameState(ember_barrow, [build_pregen("thorgar")], {})
+        gm = engine.GM(AutoUI(), gs)
+        gm.run([{"do": "item", "id": "gauntlets of fumbling"}])
+        e = gs.party[0].find_item("gauntlets of fumbling")
+        self.assertTrue(e.get("unidentified"))
+        self.assertEqual(item_name(e), "Unidentified gloves")
+        self.assertIn("Nobody knows", gs.party[0].equip(e))
+        gs.party[0].cp = 100 * 100
+        gm.identify_items()
+        self.assertTrue(e.get("curse_known"))                        # the sage sees it
+
+
 class TestSafeSaves(unittest.TestCase):
     def test_backup_used_when_save_is_damaged(self):
         engine.SAVE_DIR = tempfile.mkdtemp()

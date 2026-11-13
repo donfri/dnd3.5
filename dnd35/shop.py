@@ -195,8 +195,10 @@ def _inventory_loop(ui, party, who) -> None:
         elif act == "Equip in off hand":
             ui.out(who.equip(e, "off"))
         elif act == "Unequip":
-            who.unequip(e)
-            ui.out(f"{who.name} unequips {item_name(e)}.")
+            if who.unequip(e):
+                ui.out(f"{who.name} unequips {item_name(e)}.")
+            else:
+                ui.bad(f"{item_name(e)} is cursed. It won't come off without Remove Curse.")
         elif act in ("Use / drink", "Read scroll"):
             from .magic import use_consumable_out_of_combat
             use_consumable_out_of_combat(ui, who, e, party)

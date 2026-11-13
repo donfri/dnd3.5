@@ -333,8 +333,10 @@ ROOMS = {
         "secrets": [
             {"id": "niche", "search_dc": 22, "effects": [
                 T("Behind a loose capstone in the knight's own niche: an amulet of green "
-                  "stone, still warm."),
-                {"do": "item", "id": "amulet of natural armor +2"}]},
+                  "stone, still warm, and a pair of blackened bracers laid across a "
+                  "squire's bones."),
+                {"do": "item", "id": "amulet of natural armor +2"},
+                {"do": "item", "id": "bracers of defenselessness"}]},
         ],
         "features": [
             {"id": "tomb", "label": "Open the Fen Knight's tomb",

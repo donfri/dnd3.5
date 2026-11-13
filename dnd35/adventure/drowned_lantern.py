@@ -426,9 +426,11 @@ ROOMS = {
              "requires": {"enc_cleared": "drowned"},
              "check": {"skill": "Swim", "dc": 12, "take10_ok": True},
              "success": [T("Your lungs burn, but your hands find a small iron chest. Back on "
-                           "the rocks, it holds coins, a ring, and a sealed bottle."),
+                           "the rocks, it holds coins, two rings, and a sealed bottle. One "
+                           "ring is bright; the other is dull, and oddly cold."),
                          {"do": "gold", "gp": 90},
                          {"do": "item", "id": "ring of protection +1"},
+                         {"do": "item", "id": "ring of clumsiness"},
                          {"do": "item", "id": "potion of cure light wounds"}],
              "failure": [T("The cold water drives you back up, gasping."),
                          {"do": "damage", "dice": "1d4", "who": "actor"}]},

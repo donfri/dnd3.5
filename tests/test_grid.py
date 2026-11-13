@@ -274,6 +274,32 @@ class TestBigAndStrange(unittest.TestCase):
             res = Combat(AutoUI(seed=i), party, [Monster(foe)]).run()
             self.assertIn(res, ("victory", "defeat", "fled"), foe)
 
+    def test_mounted_lance_charge(self):
+        dice.seed(3)
+        p = build_pregen("elowen", "a", level=6)
+        p.feats += ["Mounted Combat", "Ride-By Attack", "Spirited Charge"]
+        lance = p.add_item("lance")
+        p.equip(lance)
+        cb = Combat(AutoUI(), [p], [Monster("ogre")])
+        cb.order, cb.acted = list(cb.st.values()), set()
+        cb.terrain = grid.Terrain()
+        x, ogre = cb.s(p), cb.monsters[0]
+        self.assertIsNotNone(cb.my_mount(p))
+        cb.act_mount(x)
+        x.std = x.move = True
+        seen = []
+        real = cb.apply_hit
+        cb.apply_hit = lambda *a, **k: (seen.append(cb.charge_mult), real(*a, **k))[1]
+        old = dice.d20
+        dice.d20 = lambda: 19
+        try:
+            cb.act_charge(x, ogre)
+        finally:
+            dice.d20 = old
+        self.assertEqual(seen, [3])                        # lance x2, Spirited Charge +1
+        self.assertFalse(cb.is_engaged(p, ogre))           # Ride-By: rode on past
+        self.assertEqual(cb.charge_mult, 1)
+
     def test_close_range_spells(self):
         from dnd35.magic import spell_range
         self.assertEqual(spell_range("Ray of Frost", 1), 25)

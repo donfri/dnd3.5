@@ -7,7 +7,7 @@ from . import rules
 from .character import Character
 from .data.classes import CLASSES
 from .data.feats import FEATS
-from .data.items import item_data, item_name
+from .data.items import item_data, item_name, shown_data
 from .data.skills import SKILL_ORDER, SKILLS
 from .data.spells import SPELLS
 from .rules import fmt_mod
@@ -367,7 +367,7 @@ def sheet_data(ch: Character) -> dict:
             weight = round(weight / d["ammo_count"] * e.get("qty", 1), 1)
             desc = ""
         else:
-            desc = d.get("desc", "")
+            desc = "" if e.get("unidentified") else shown_data(e).get("desc", "")
         equipment.append({"idx": idx, "name": item_name(e), "qty": e.get("qty", 1),
                           "slot": slot, "weight": weight, "desc": desc,
                           "kind": d["kind"], "equipped": bool(e.get("slot")),

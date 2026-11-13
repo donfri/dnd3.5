@@ -592,6 +592,9 @@ class Table:
             if e.get("unidentified") and action in ("use", "equip", "equip_off"):
                 return False, ("Nobody knows what that does yet. Have it identified in "
                                "town, or let a spellcaster study it.")
+            from .data.items import stuck
+            if stuck(e) and action in ("unequip", "drop", "give", "equip", "equip_off"):
+                return False, f"{name} is cursed. It won't come off without Remove Curse."
             if action in ("equip", "equip_off"):
                 if d["kind"] not in EQUIPPABLE_KINDS:
                     return False, "That can't be equipped."
