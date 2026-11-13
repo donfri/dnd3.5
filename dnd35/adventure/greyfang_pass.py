@@ -59,6 +59,8 @@ RUMORS = [
 ]
 
 WANDERING = [
+    {"text": "A sunning rock-snake as thick as your thigh takes exception to your boots.",
+     "monsters": ["constrictor snake"]},
     {"text": "A pair of gnoll scouts comes loping down the trail!",
      "monsters": ["gnoll", "gnoll"], "requires": {"not_flag": "enc:hall"}},
     {"text": "A worg howls nearby, and then it's on you!",

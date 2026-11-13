@@ -113,8 +113,14 @@ def deal_damage(ui, target: Creature, amount: int, dtype: str, combat=None,
                                                       "holy") and dice.percent() <= 50:
         ui.out(f"  The magic passes harmlessly through {target.name}'s ghostly form.")
         return 0
+    if getattr(target, "block", {}).get("swarm") and not magic and dtype.strip("*") and \
+            set(dtype.strip("*")) <= set("PS"):
+        amount //= 2       # blades and arrows only thin a swarm
     dealt, note = target.take_damage(amount, dtype, magic=magic)
     extra = f" ({note})" if note else ""
+    if getattr(target, "block", {}).get("swarm") and not magic and dtype.strip("*") and \
+            set(dtype.strip("*")) <= set("PS"):
+        extra += " (half: it's a swarm)"
     shown = dtype.replace("*", "")
     ui.out(f"  {target.name} takes {dealt} {shown} damage{extra}." if dealt else
            f"  {target.name} takes no damage{extra}.")

@@ -247,5 +247,39 @@ class TestTerrain(unittest.TestCase):
             self.assertIn(res, ("victory", "defeat", "fled"))
 
 
+class TestBigAndStrange(unittest.TestCase):
+    def test_large_creature_fills_four_squares(self):
+        cb, (p,), (ogre,) = fight("ogre")
+        cb.s(ogre).pos, cb.s(p).pos = (6, 3), (2, 4)
+        self.assertEqual(len(cb.cells(ogre)), 4)
+        self.assertEqual(cb.distance(p, ogre), 20)        # measured to its near edge
+        cb.s(p).pos = (5, 4)
+        self.assertTrue(cb.near(p, ogre))
+        self.assertIn((7, 4), cb.occupied())
+        self.assertEqual([t["size"] for t in cb.battle_tokens() if t["side"] == "foe"], [2])
+
+    def test_moving_past_a_foe_provokes(self):
+        cb, (p,), (o1, o2) = fight("orc", "orc")
+        cb.terrain = grid.Terrain()
+        cb.s(p).pos, cb.s(o1).pos, cb.s(o2).pos = (2, 4), (4, 5), (9, 4)
+        cb.travel(p, [(3, 4), (4, 4), (5, 4), (6, 4)])
+        self.assertEqual(cb.s(o1).aoo_used, 1)             # walked through its reach
+        self.assertEqual(cb.s(o2).aoo_used, 0)
+
+    def test_swarm_gaze_trample_swallow_fights_finish(self):
+        for i, foe in enumerate(("rat swarm", "basilisk", "elephant", "tyrannosaurus",
+                                 "giant constrictor snake")):
+            dice.seed(i)
+            party = [build_pregen(k, "a", level=8) for k in ("thorgar", "lyra", "aldric")]
+            res = Combat(AutoUI(seed=i), party, [Monster(foe)]).run()
+            self.assertIn(res, ("victory", "defeat", "fled"), foe)
+
+    def test_close_range_spells(self):
+        from dnd35.magic import spell_range
+        self.assertEqual(spell_range("Ray of Frost", 1), 25)
+        self.assertEqual(spell_range("Cure Light Wounds", 5), 5)
+        self.assertGreaterEqual(spell_range("Magic Missile", 1), 110)
+
+
 if __name__ == "__main__":
     unittest.main()

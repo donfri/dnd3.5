@@ -296,6 +296,9 @@ class Character(Creature):
         return True
 
     def equip(self, entry: dict, slot: Optional[str] = None) -> str:
+        if entry.get("unidentified"):
+            return ("Nobody knows what that does yet. Have it identified in town, or let a "
+                    "spellcaster study it.")
         d = item_data(entry)
         kind = d["kind"]
         if slot is None:
@@ -1092,6 +1095,7 @@ class Character(Creature):
             "weight": self.weight, "languages": self.languages,
             "focus_given": self.__dict__.get("focus_given", []),
             "hungry_days": self.__dict__.get("hungry_days", 0),
+            "cohort_of": self.__dict__.get("cohort_of", ""),
             "favored_enemies": self.favored_enemies, "combat_style": self.combat_style,
             "spellbook": self.spellbook,
             "spells_known": {str(k): v for k, v in self.spells_known.items()},
@@ -1115,7 +1119,7 @@ class Character(Creature):
         for k in ("class_levels", "base_abilities", "ability_increases", "hp_rolls",
                   "skill_ranks", "feats", "alignment", "deity", "domains", "gender", "age",
                   "height", "weight", "languages", "favored_enemies", "combat_style",
-                  "focus_given", "hungry_days", "spellbook", "inventory", "cp", "xp", "notes", "damage", "temp_hp",
+                  "focus_given", "hungry_days", "cohort_of", "spellbook", "inventory", "cp", "xp", "notes", "damage", "temp_hp",
                   "ability_damage", "stable", "dead", "afflictions", "daily",
                   "power_attack", "bonus_hp", "companion", "familiar", "nonlethal", "energy", "specialty",
                   "prohibited", "mount", "fallen", "rogue_specials",

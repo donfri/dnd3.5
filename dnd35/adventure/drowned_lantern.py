@@ -62,6 +62,8 @@ WANDERING = [
      "monsters": ["dire rat", "dire rat"]},
     {"text": "A kobold patrol with a hooded lantern stumbles onto you!",
      "monsters": ["kobold", "kobold", "kobold"], "requires": {"not_flag": "enc:yard"}},
+    {"text": "The floor ahead ripples: a squealing tide of rats pours out of the cracks!",
+     "monsters": ["rat swarm"]},
     {"text": "Something big skitters down the wall toward you...",
      "monsters": ["monstrous spider"]},
 ]

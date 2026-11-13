@@ -224,6 +224,8 @@ def feat_eligible(ch: Character, feat: str, param: Optional[str] = None,
             return False
     if ch.bab() < pre.get("bab", 0):
         return False
+    if ch.level < pre.get("level", 0):
+        return False
     for f in pre.get("feats", []):
         if f == "Weapon Focus" and param:
             if f"Weapon Focus ({param})" not in have:

@@ -35,6 +35,8 @@ FEATS = {
     "Toughness": {"desc": "+3 hit points."},
     "Endurance": {"desc": "+4 on checks to resist fatigue, cold, running, etc. (flavor)."},
     "Run": {"desc": "Run at x5 speed (flavor)."},
+    "Leadership": {"desc": "A loyal cohort two levels below you joins the party (call "
+                           "them in any town).", "prereq": {"level": 6}},
     "Improved Initiative": {"desc": "+4 on initiative checks.", "fighter": True},
     "Blind-Fight": {"desc": "Reroll miss chance from concealment once.", "fighter": True},
     "Combat Expertise": {"desc": "Option: take up to -5 on attacks (max BAB) for an equal "

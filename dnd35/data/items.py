@@ -477,6 +477,10 @@ def item_data(entry: dict) -> dict:
 
 def item_name(entry: dict) -> str:
     d = item_data(entry)
+    if entry.get("unidentified"):
+        return {"potion": "Unidentified potion", "wand": "Unidentified wand",
+                "ring": "Unidentified ring", "staff": "Unidentified staff"}.get(
+                    d["kind"], f"Unidentified {d['kind']} item")
     name = d["name"]
     if entry.get("enhancement"):
         name = f"{name} +{entry['enhancement']}"

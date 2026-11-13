@@ -66,6 +66,11 @@ WANDERING = [
      "monsters": ["lizardfolk", "lizardfolk"], "requires": {"not_flag": "lizards_free"}},
     {"text": "The reeds part and a dire boar charges, squealing!",
      "monsters": ["dire boar"]},
+    {"text": "A branch overhead uncoils. It isn't a branch.",
+     "monsters": ["giant constrictor snake"]},
+    {"text": "Grey statues of herons and one very surprised lizardfolk stand among the "
+             "reeds. Something with too many legs is watching you from the mud.",
+     "monsters": ["basilisk"]},
     {"text": "A ragged pack of wolves, starving in the fen, closes in!",
      "monsters": ["wolf", "wolf", "wolf"]},
 ]

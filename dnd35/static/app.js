@@ -279,7 +279,7 @@ function mapTap(e){const svg=e.target.closest('.bmap svg');if(!svg||!lastBattle|
  const r=svg.getBoundingClientRect(),vb=svg.viewBox.baseVal,S=26;
  const x=Math.floor(((e.clientX-r.left)/r.width*vb.width+vb.x-1)/S),y=Math.floor(((e.clientY-r.top)/r.height*vb.height+vb.y-1)/S);
  if(x<0||y<0||x>=lastBattle.w||y>=lastBattle.h)return;
- const tok=lastBattle.tokens.find(t=>t.x==x&&t.y==y),keys=curPrompt.keys||[];
+ const tok=lastBattle.tokens.find(t=>x>=t.x&&x<t.x+(t.size||1)&&y>=t.y&&y<t.y+(t.size||1)),keys=curPrompt.keys||[];
  if(/^Move to which square/.test(curPrompt.text)){if(!tok)send(x+','+y);return}
  if(!keys.length){return}
  if(tok&&tok.side=='foe'){const i=keys.indexOf('attack');if(i<0){flash('No attack left this turn.');return}
@@ -309,12 +309,12 @@ function battleHtml(b,crop){const S=26,W=b.w*S,H=b.h*S;
   if(c.k=='brush')svg+=`<path d="M${X+6} ${Y+20}l3-9l3 9M${X+14} ${Y+21}l3-11l3 11" stroke="#7fa35a" fill="none"/>`;
   if(c.k=='water'||c.k=='deep')svg+=`<path d="M${X+4} ${Y+12}q4-4 8 0t8 0" stroke="#7fb0d9" fill="none" opacity=".7"/>`;
   if(c.k=='crate')svg+=`<rect x="${X+3}" y="${Y+3}" width="${S-6}" height="${S-6}" fill="none" stroke="#2d2010"/><path d="M${X+3} ${Y+3}L${X+S-3} ${Y+S-3}" stroke="#2d2010"/>`}
- const at={};b.tokens.forEach(t=>at[t.name]=t);const cx=t=>t.x*S+S/2+1,cy=t=>t.y*S+S/2+1;
+ const at={};b.tokens.forEach(t=>at[t.name]=t);const cx=t=>t.x*S+S*(t.size||1)/2+1,cy=t=>t.y*S+S*(t.size||1)/2+1;
  const drawn=new Set();
  for(const t of b.tokens)for(const n of t.engaged){const o=at[n];if(!o)continue;const k=[t.name,n].sort().join('|');if(drawn.has(k))continue;drawn.add(k);
   svg+=`<line x1="${cx(t)}" y1="${cy(t)}" x2="${cx(o)}" y2="${cy(o)}" stroke="#e0b44c" stroke-width="2" opacity=".55"/>`}
  for(const t of b.tokens){const col=t.down?'#6b5d50':TOKC[t.side];
-  svg+=`<circle cx="${cx(t)}" cy="${cy(t)}" r="${S/2-2}" fill="${col}" stroke="${t.flying?'#fff':'#111'}" stroke-width="${t.flying?2:1}"${t.flying?' stroke-dasharray="3 2"':''}><title>${esc(t.name)} (${esc(t.hp)})</title></circle>`;
+  svg+=`<circle cx="${cx(t)}" cy="${cy(t)}" r="${S*(t.size||1)/2-2}" fill="${col}" stroke="${t.flying?'#fff':'#111'}" stroke-width="${t.flying?2:1}"${t.flying?' stroke-dasharray="3 2"':''}><title>${esc(t.name)} (${esc(t.hp)})</title></circle>`;
   svg+=`<text x="${cx(t)}" y="${cy(t)+4}" text-anchor="middle" font-size="12" font-weight="bold" fill="#111">${esc(t.label)}</text>`}
  svg+='</svg>';
  const leg=b.tokens.map(t=>`<span style="white-space:nowrap"><b style="background:${t.down?'#6b5d50':TOKC[t.side]}">${esc(t.label)}</b>${esc(t.name)} <span style="opacity:.8">${esc(t.hp)}${t.down?', down':''}${t.flying?', flying':''}</span></span>`).join(' &nbsp; ');

@@ -141,7 +141,7 @@ class Combat:
 
     def active(self, cr: Creature) -> bool:
         st = self.s(cr)
-        return not cr.dead and not st.fled
+        return not cr.dead and not st.fled and not getattr(st, "ridden", False)
 
     def allies(self, cr: Creature) -> List[Creature]:
         side = self.s(cr).side
@@ -158,7 +158,7 @@ class Combat:
         return [self.st[u].c for u in self.s(a).engaged if u in self.st and self.active(self.st[u].c)]
 
     def engage(self, a: Creature, b: Creature) -> None:
-        if not grid.adjacent(self.s(a).pos, self.s(b).pos):
+        if not self.near(a, b):
             self.s(a).pos = self.melee_square(a, b)
         self.s(a).engaged.add(b.uid)
         self.s(b).engaged.add(a.uid)
@@ -175,7 +175,8 @@ class Combat:
             here = self.s(a).pos
             costs, _ = self.terrain.costs(here, self.foe_squares(a))
             occ = set(self.occupied(a))
-            opts = [q for q, cst in costs.items() if cst <= retreat and q not in occ] or [here]
+            opts = [q for q, cst in costs.items() if cst <= retreat
+                    and self.fits(a, q, occ)] or [here]
             self.s(a).pos = max(opts, key=lambda q: (
                 min((grid.dist(q, t) for t in threats), default=0), -costs.get(q, 0)))
 
@@ -186,20 +187,40 @@ class Combat:
         fly = getattr(cr, "block", {}).get("fly")
         if isinstance(fly, int) and fly > sp:
             sp = fly
+        ride = cr.get_effect("Mounted")
+        if ride:
+            sp = ride.data["speed"]
         if cr.has_tag("slowed"):
             sp //= 2
         return max(5, sp or 30)
 
     def occupied(self, but: Optional[Creature] = None) -> List[Tuple[int, int]]:
-        return [x.pos for x in self.st.values()
+        return [q for x in self.st.values() for q in self.cells(x.c)
                 if x.c is not but and not x.c.dead and not x.fled]
 
     def distance(self, a: Creature, b: Creature) -> int:
-        return grid.dist(self.s(a).pos, self.s(b).pos)
+        return min(grid.dist(p, q) for p in self.cells(a) for q in self.cells(b))
+
+    def big(self, cr: Creature) -> bool:
+        """Large and bigger monsters fill a 10-ft (2 x 2) space."""
+        return not cr.is_pc and cr.size in ("large", "huge", "gargantuan", "colossal")
+
+    def cells(self, cr: Creature, at=None) -> List[Tuple[int, int]]:
+        x, y = at or self.s(cr).pos
+        if not self.big(cr):
+            return [(x, y)]
+        return [(x, y), (x + 1, y), (x, y + 1), (x + 1, y + 1)]
+
+    def fits(self, cr: Creature, at, occ) -> bool:
+        return all(grid.in_bounds(q) and self.terrain.walkable(q) and q not in occ
+                   for q in self.cells(cr, at))
+
+    def near(self, a: Creature, b: Creature) -> bool:
+        return self.distance(a, b) <= 5
 
     def foe_squares(self, cr: Creature) -> List[Tuple[int, int]]:
         """Squares cr can't move through (living foes)."""
-        return [self.s(f).pos for f in self.enemies(cr)]
+        return [q for f in self.enemies(cr) for q in self.cells(f)]
 
     def place_tokens(self) -> None:
         """Party on the west edge, foes to the east, 30-45 feet apart (20 in the dark),
@@ -216,7 +237,7 @@ class Combat:
 
         def put(group, col, ahead_cost):
             for st in group:
-                spots = [q for q in free if q not in taken]
+                spots = [q for q in free if self.fits(st.c, q, taken)]
                 if not spots:
                     st.pos = (col, grid.H // 2)
                     continue
@@ -224,7 +245,7 @@ class Combat:
                                               + (1 if self.terrain.difficult(q) else 0),
                                               abs(q[1] - 4)))
                 st.pos = q
-                taken.add(q)
+                taken.update(self.cells(st.c, q))
         put(pcs, front, lambda dx: dx * 3 if dx > 0 else -dx)
         put(mons, mcol, lambda dx: -dx * 3 if dx < 0 else dx)
 
@@ -232,12 +253,18 @@ class Combat:
         """Best square next to b for a to fight from: (square, cost in feet, path).
         Prefers flanking squares for a little extra walking. (None, INF, []) if no way."""
         bp, ap = self.s(b).pos, self.s(a).pos
-        if grid.adjacent(ap, bp):
+        if self.near(a, b):
             return ap, 0, []
         blocked = self.foe_squares(a)
         costs, _ = self.terrain.costs(ap, blocked)
         occ = set(self.occupied(a))
-        cands = [q for q in grid.neighbors(bp) if q in costs and q not in occ]
+        bcells = self.cells(b)
+        if self.big(a):      # a big mover needs room for its whole body
+            cands = [q for q in costs if self.fits(a, q, occ) and min(
+                grid.dist(c1, c2) for c1 in self.cells(a, q) for c2 in bcells) == 5]
+        else:
+            cands = list({q for bc in bcells for q in grid.neighbors(bc)
+                          if q in costs and q not in occ and q not in bcells})
         if not cands:
             return None, grid.INF, []
         mates = [self.s(o).pos for o in self.allies(a) if o is not a and self.is_engaged(o, b)]
@@ -263,7 +290,7 @@ class Combat:
     def route_to_ally(self, a: Creature, b: Creature):
         """Nearest free square next to a friend: (square, cost, path)."""
         ap, bp = self.s(a).pos, self.s(b).pos
-        if grid.adjacent(ap, bp):
+        if self.near(a, b):
             return ap, 0, []
         costs, _ = self.terrain.costs(ap, self.foe_squares(a))
         occ = set(self.occupied(a))
@@ -274,7 +301,7 @@ class Combat:
         return dest, costs[dest], self.terrain.path(ap, dest, self.foe_squares(a))
 
     def feet_to_melee(self, a: Creature, b: Creature) -> int:
-        if self.is_engaged(a, b) or grid.adjacent(self.s(a).pos, self.s(b).pos):
+        if self.is_engaged(a, b) or self.near(a, b):
             return 0
         return self.route(a, b)[1]
 
@@ -329,7 +356,8 @@ class Combat:
         at = aim if isinstance(aim, tuple) else self.s(aim).pos
         sq = set(grid.area_squares(kind, size, self.s(caster).pos, at, self.terrain))
         return [x.c for x in self.st.values()
-                if self.active(x.c) and x.pos in sq and not (kind != "burst" and x.c is caster)]
+                if self.active(x.c) and any(q in sq for q in self.cells(x.c))
+                and not (kind != "burst" and x.c is caster)]
 
     def _area_catch(self, p, spell, aim, cap):
         """(foes, allies) an area spell aimed here would affect."""
@@ -393,7 +421,7 @@ class Combat:
         mi = 0
         for x in self.st.values():
             cr = x.c
-            if cr.dead or x.fled:
+            if cr.dead or x.fled or getattr(x, "ridden", False):
                 continue
             if x.side == "pc":
                 base = cr.name[:1].upper() if cr.is_pc else cr.name[:1].lower()
@@ -410,6 +438,7 @@ class Combat:
             used.add(lab)
             hp = (f"{cr.hp}/{cr.max_hp()}" if x.side == "pc" else wound_word(cr))
             out.append({"x": x.pos[0], "y": x.pos[1], "label": lab, "name": cr.name,
+                        "size": 2 if self.big(cr) else 1,
                         "side": kind, "hp": hp, "down": not cr.conscious,
                         "flying": self.airborne(cr) if x.side != "pc" else cr.has_tag("flying"),
                         "engaged": [self.st[u].c.name for u in x.engaged if u in self.st]})
@@ -418,7 +447,7 @@ class Combat:
     def battle_state(self) -> dict:
         order = []
         for x in self.order:
-            if x.c.dead or x.fled:
+            if x.c.dead or x.fled or getattr(x, "ridden", False):
                 continue
             order.append({"name": x.c.name, "side": "foe" if x.side != "pc" else
                           ("pc" if x.c.is_pc else "ally"),
@@ -446,7 +475,10 @@ class Combat:
         for t in toks:
             lab = (t["label"] + " ")[:2]
             colr = {"pc": "bgreen", "ally": "green", "foe": "bred"}[t["side"]]
-            cells[(t["x"], t["y"])] = c(lab, colr) if not t["down"] else c(lab, "dim")
+            for dx in range(t["size"]):
+                for dy in range(t["size"]):
+                    cells[(t["x"] + dx, t["y"] + dy)] = c(lab, colr) if not t["down"] \
+                        else c(lab, "dim")
         legend = []
         for t in toks:
             extra = " (down)" if t["down"] else (" (flying)" if t["flying"] else "")
@@ -644,6 +676,12 @@ class Combat:
                 from .companions import sync_companion
                 sync_companion(comp.owner)
         for p in self.party:
+            if p.get_effect("Petrified") and result == "victory":
+                p.remove_effect("Petrified")
+                ui.good(f"The beast's fresh blood, smeared on the statue, turns {p.name} "
+                        f"back to flesh.")
+            p.remove_effect("Swallowed")
+            self.dismount(p, msg=False)
             for e in list(p.effects):
                 if e.tags & {"prone", "charging", "total_defense", "fighting_defensively",
                              "_spiritual_weapon", "_sphere", "_stun_primed", "_smite",
@@ -682,6 +720,8 @@ class Combat:
             x.readied = None
             ui.out(f"{cr.name}'s readied action lapses.", ("dim",))
         self.check_grapple(cr)
+        if x.side == "pc" and cr.conscious:
+            self.gaze_check(x)
         # dying
         if cr.is_pc and cr.hp < 0 and not cr.dead:
             if cr.stable:
@@ -775,6 +815,9 @@ class Combat:
                          and attacker.has_feat("Improved Unarmed Strike")):
             sit.append(("untyped", -4, "subduing"))
         if not ranged:
+            if attacker.get_effect("Mounted") and not target.get_effect("Mounted") and \
+                    rules.SIZES.index(target.size) <= rules.SIZES.index("medium"):
+                sit.append(("untyped", 1, "mounted (higher ground)"))
             if self.flanked(attacker, target):
                 sit.append(("untyped", 2, "flanking"))
             if target.helpless():
@@ -787,7 +830,8 @@ class Combat:
                 if self.terrain.cover(self.s(attacker).pos, self.s(target).pos):
                     sit.append(("untyped", -4, "target behind cover"))
                 elif not attacker.has_feat("Improved Precise Shot") and any(
-                        o.pos in between and not o.c.dead and not o.fled
+                        any(q in between for q in self.cells(o.c)) and not o.c.dead
+                        and not o.fled
                         and o.c is not attacker and o.c is not target and o.c.conscious
                         for o in self.st.values()):
                     sit.append(("untyped", -4, "someone in the way (cover)"))
@@ -1511,6 +1555,9 @@ class Combat:
                          power=getattr(attacker, "power_attack", 0))
 
     def after_damage(self, target: Creature) -> None:
+        if target.get_effect("Mounted") and not target.conscious:
+            self.ui.bad(f"  {target.name} topples from the saddle!")
+            self.dismount(target, msg=False)
         ui = self.ui
         if target.dead or target.helpless():
             if target.get_effect("Grappling"):
@@ -1636,7 +1683,7 @@ class Combat:
     def threat_at(self, foe: Creature, sq) -> bool:
         """Does foe threaten this square? (5 ft; 10 ft for big creatures; exactly 10 ft
         for a reach weapon.) Walls block."""
-        d = grid.dist(self.s(foe).pos, sq)
+        d = min(grid.dist(q, sq) for q in self.cells(foe))
         if foe.size in ("large", "huge") or getattr(foe, "block", {}).get("reach"):
             ok = d <= 10
         elif self.has_reach(foe):
@@ -1700,11 +1747,11 @@ class Combat:
         if mover.has_tag("grappled"):
             return
         for u in list(x.engaged):
-            if u in self.st and not grid.adjacent(x.pos, self.st[u].pos):
+            if u in self.st and not self.near(mover, self.st[u].c):
                 x.engaged.discard(u)
                 self.st[u].engaged.discard(mover.uid)
         for f in self.enemies(mover):
-            if grid.adjacent(x.pos, self.s(f).pos) and not f.dead \
+            if self.near(mover, f) and not f.dead \
                     and not self.airborne(f) and mover.conscious:
                 x.engaged.add(f.uid)
                 self.s(f).engaged.add(mover.uid)
@@ -1740,7 +1787,13 @@ class Combat:
         partner = self.grapple_partner(cr)
         cr.remove_effect("Grappling")
         cr.remove_effect("Pinned")
+        if cr.get_effect("Swallowed"):
+            cr.remove_effect("Swallowed")
+            self.ui.good(f"{cr.name} tears free of the beast's gullet!")
         if partner is not None:
+            if partner.get_effect("Swallowed"):
+                partner.remove_effect("Swallowed")
+                self.ui.good(f"{partner.name} is cut free of the carcass.")
             partner.remove_effect("Grappling")
             partner.remove_effect("Pinned")
             if msg:
@@ -1962,6 +2015,12 @@ class Combat:
                     and not p.has_tag("fatigued"):
                 add("Run (full round: up to 4x speed in a straight dash, lose Dex bonus to AC)",
                     self.act_move_to, x, True)
+            if x.move and p.get_effect("Mounted"):
+                add("Dismount (move action)", self.act_dismount, x)
+            elif x.move and not p.wild_form() and not grappled and self.my_mount(p) \
+                    and self.distance(p, self.my_mount(p)) <= self.speed_of(p):
+                add("Mount your warhorse (move action: ride at its speed, +1 to hit foes "
+                    "on foot)", self.act_mount, x)
             if x.move:
                 if p.has_tag("prone"):
                     add("Stand up (move action, provokes)", self.act_stand, x)
@@ -2003,7 +2062,7 @@ class Combat:
             MAIN = ("Attack", "Full attack", "Charge", "Cast", "Use an item", "Turn undead",
                     "Rage", "Smite", "Stunning", "Call down", "Bardic", "Lay on", "Wild shape",
                     "Return to", "Grapple:", "Coup de grace", "Stabilize")
-            MOVE = ("Move t", "Stand", "5-foot", "Move away")
+            MOVE = ("Move t", "Stand", "5-foot", "Move away", "Mount", "Dismount")
             groups, keys = [], []
             for a in acts:
                 lab = a[0]
@@ -2560,6 +2619,47 @@ class Combat:
         ui.out(f"{p.name} {'RUNS' if run else 'moves'} {ok[(cx, cy)]} ft.")
         self.travel(p, path)
 
+    def my_mount(self, p: Creature) -> Optional[Creature]:
+        from .companions import Mount
+        for comp in self.companions:
+            if isinstance(comp, Mount) and getattr(comp, "owner", None) is p \
+                    and not comp.dead and comp.conscious and not self.s(comp).fled:
+                return comp
+        return None
+
+    def act_mount(self, x: CState) -> None:
+        p = x.c
+        m = self.my_mount(p)
+        x.move = False
+        self.disengage_all(m)
+        x.pos = self.s(m).pos if self.near(p, m) else x.pos
+        self.s(m).ridden = True
+        p.add_effect(Effect("Mounted", None, tags=["mounted"],
+                            data={"mount": m.uid, "speed": self.speed_of(m)}, hidden=False))
+        self.sync_engagement(p)
+        self.ui.out(f"{p.name} swings into {m.name}'s saddle (rides at {self.speed_of(p)} ft, "
+                    f"+1 to hit foes on foot).")
+
+    def dismount(self, p: Creature, msg: bool = True) -> None:
+        e = p.get_effect("Mounted")
+        if not e:
+            return
+        p.remove_effect("Mounted")
+        mx = self.st.get(e.data["mount"])
+        if mx is not None:
+            mx.ridden = False
+            occ = set(self.occupied(mx.c))
+            spots = [q for q in grid.neighbors(self.s(p).pos) if self.fits(mx.c, q, occ)]
+            if spots:
+                mx.pos = spots[0]
+            self.sync_engagement(mx.c)
+        if msg:
+            self.ui.out(f"{p.name} is out of the saddle.")
+
+    def act_dismount(self, x: CState) -> None:
+        x.move = False
+        self.dismount(x.c)
+
     def act_move_away(self, x: CState) -> None:
         p = x.c
         x.move = False
@@ -2806,6 +2906,8 @@ class Combat:
         out = []
         for e in p.inventory:
             d = item_data(e)
+            if e.get("unidentified"):
+                continue
             if d["kind"] in ("wand", "staff"):
                 out.append(e)
                 continue
@@ -3163,8 +3265,30 @@ class Combat:
         partner = self.grapple_partner(m)
         hold = m.get_effect("Grappling")
         if partner is not None and hold and hold.data.get("holder"):
-            ui.out(f"{m.name} crushes {partner.name} in its grip!")
-            self.monster_melee(m, partner, full=True)
+            if partner.get_effect("Swallowed"):
+                ui.out(f"{m.name}'s belly heaves as {partner.name} struggles inside.")
+            elif block.get("swallow") and rules.SIZES.index(partner.size) < \
+                    rules.SIZES.index(m.size) - 1 and \
+                    self.grapple_check(m, partner, "Swallow whole"):
+                partner.add_effect(Effect("Swallowed", None, tags=["_dot"],
+                                          data={"dot": block["swallow"], "dtype": "acid"}))
+                ui.bad(f"{m.name} throws back its head and SWALLOWS {partner.name} whole! "
+                       f"(Cut your way out with the grapple options, or break free.)")
+            else:
+                ui.out(f"{m.name} crushes {partner.name} in its grip!")
+                self.monster_melee(m, partner, full=True)
+                if block.get("constrict") and not partner.dead and \
+                        self.grapple_check(m, partner, "Constrict"):
+                    r = dice.roll(block["constrict"])
+                    ui.out(f"  The coils tighten ({r.detail()}).")
+                    deal_damage(ui, partner, r.total, "B", self, magic=False)
+            return
+        if block.get("swarm"):
+            self.swarm_turn(m, targets, block["swarm"])
+            return
+        if block.get("trample") and not surprise and not single and len(targets) >= 1 \
+                and not self.engaged_foes(m) and dice.percent() <= 50:
+            self.trample(m, targets, block["trample"])
             return
         if partner is not None:
             if dice.percent() <= 50 and self.grapple_check(m, partner, f"{m.name} struggles"):
@@ -3244,6 +3368,67 @@ class Combat:
         else:
             ui.out(f"{m.name} {'runs' if not single else 'moves'} toward {tgt.name}.")
             self.close_in(m, tgt, budget=sp if (surprise or single) else 2 * sp)
+
+    def swarm_turn(self, m: Creature, targets, sw: dict) -> None:
+        """A swarm flows over its victims: automatic damage, no attack roll, and the
+        crawling mass is distracting (Fortitude or sickened for a round)."""
+        ui = self.ui
+        near = [t for t in targets if self.near(m, t)]
+        if not near:
+            tgt = min(targets, key=lambda t: self.distance(m, t))
+            ui.out(f"{m.name} pours across the ground toward {tgt.name}!")
+            self.close_in(m, tgt)
+            near = [t for t in targets if self.near(m, t)]
+        for t in near:
+            r = dice.roll(sw["damage"])
+            ui.out(f"{m.name} swarms over {t.name}, biting and clawing!", ("bred",))
+            deal_damage(ui, t, r.total, "P", self, magic=False)
+            if t.conscious and not saving_throw(ui, t, "fort", sw["dc"], [], "distraction"):
+                t.add_effect(Effect("Distracted by the swarm", 1, tags=["shaken"]))
+                ui.bad(f"  {t.name} is distracted (-2 on attacks, saves and checks).")
+
+    def trample(self, m: Creature, targets, tr: dict) -> None:
+        """A huge beast simply runs its victims down: Reflex for half, no attack roll."""
+        ui = self.ui
+        line = sorted(targets, key=lambda t: self.distance(m, t))
+        line = [t for t in line if self.distance(m, t) <= 2 * self.speed_of(m)][:3]
+        if not line:
+            return
+        ui.out(f"{m.name} lowers its head and TRAMPLES straight through "
+               f"{', '.join(t.name for t in line)}!", ("bred",))
+        r = dice.roll(tr["damage"])
+        ui.roll(r.detail())
+        from .magic import _area_damage
+        for t in line:
+            _area_damage(ui, t, r.total, "B", tr["dc"], [], self)
+        self.disengage_all(m)
+        occ = set(self.occupied(m))
+        costs, _ = self.terrain.costs(self.s(m).pos, [])
+        last = self.s(line[-1]).pos
+        spots = [q for q in costs if self.fits(m, q, occ)]
+        if spots:
+            self.s(m).pos = min(spots, key=lambda q: (abs(grid.dist(q, last) - 10), costs[q]))
+        self.sync_engagement(m)
+
+    def gaze_check(self, x: CState) -> None:
+        """Start of a hero's turn near a creature with a petrifying gaze."""
+        cr, ui = x.c, self.ui
+        if cr.has_tag("blinded") or cr.get_effect("Petrified"):
+            return
+        for f in self.enemies(cr):
+            g = getattr(f, "block", {}).get("gaze")
+            if not g or not f.conscious or self.distance(cr, f) > g["range"] \
+                    or not self.clear_shot(cr, f):
+                continue
+            if dice.percent() <= 50:
+                ui.out(f"{cr.name} keeps their eyes off {f.name}.", ("dim",))
+                continue
+            ui.warn(f"{cr.name} meets {f.name}'s terrible gaze!")
+            if not saving_throw(ui, cr, "fort", g["dc"], [], "petrifying gaze"):
+                cr.add_effect(Effect("Petrified", None, tags=["paralyzed", "petrified"],
+                                     hidden=False))
+                ui.bad(f"  {cr.name} stiffens, greys, and turns to STONE!")
+                return
 
     def add_summon(self, caster: Creature, key: str, rounds: int) -> None:
         from .monster import Monster

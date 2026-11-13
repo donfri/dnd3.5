@@ -313,7 +313,13 @@ class GM:
             to = actor or (gs.living()[0] if gs.living() else None)
             if len(gs.living()) > 1 and not eff.get("to_actor"):
                 to = self.pick_hero(f"Who takes the {item_name(make_item(eff['id']))}?") or to
-            entry = to.add_item(make_item(eff["id"], eff.get("qty", 1)))
+            new = make_item(eff["id"], eff.get("qty", 1))
+            if item_data(new)["kind"] in ("potion", "wand", "ring", "wondrous", "staff",
+                                           "rod") and not to.has_item(eff["id"]):
+                new["unidentified"] = True
+            entry = to.add_item(new)
+            if entry.get("unidentified"):
+                self.study_item(entry)
             ui.good(f"{to.name} takes {item_name(entry)}" +
                     (f" x{eff.get('qty')}" if eff.get("qty", 1) > 1 else "") + ".")
         elif do == "items_each":
@@ -1391,6 +1397,65 @@ class GM:
         if not got:
             ui.out("You hear nothing new (or nothing true).")
 
+    def study_item(self, entry: dict) -> bool:
+        """Found magic is a mystery until someone works it out: Spellcraft DC 20
+        (trained only), once per item. Otherwise pay a sage in town."""
+        ui, gs = self.ui, self.gs
+        if entry.get("studied"):
+            return False
+        entry["studied"] = True
+        sages = [p for p in gs.able() if p.can_use_skill("Spellcraft")]
+        if not sages:
+            ui.out("None of you can tell what its magic does. (A sage in town can.)")
+            return False
+        h = max(sages, key=lambda p: p.skill_total("Spellcraft"))
+        if self.roll_check(h, "Spellcraft", 20) >= 20:
+            entry.pop("unidentified", None)
+            ui.good(f"{h.name} recognizes it: {item_name(entry)}.")
+            return True
+        ui.out(f"{h.name} can't work out what its magic does. (A sage in town can.)")
+        return False
+
+    def identify_items(self) -> None:
+        ui, gs = self.ui, self.gs
+        for p in gs.living():
+            for e in [e for e in p.inventory if e.get("unidentified")]:
+                if sum(q.cp for q in gs.living()) < 100 * 100:
+                    ui.bad("The sage charges 100 gp per item, and you can't afford it.")
+                    return
+                left = 100 * 100
+                for q in sorted(gs.living(), key=lambda q: -q.cp):
+                    take = min(q.cp, left)
+                    q.cp -= take
+                    left -= take
+                e.pop("unidentified", None)
+                ui.good(f"The sage turns it over twice: {p.name}'s item is "
+                        f"{item_name(e)}. (100 gp)")
+
+    def call_cohort(self) -> None:
+        """Leadership: each leader may have one cohort, two levels lower."""
+        ui, gs = self.ui, self.gs
+        from ..creation import choose_pregen
+        from ..levelup import gain_level
+        leaders = [p for p in gs.living() if p.has_feat("Leadership") and not any(
+            q.__dict__.get("cohort_of") == p.name and not q.dead for q in gs.party)]
+        if not leaders:
+            return
+        boss = leaders[0]
+        with ui.acting(boss.player):
+            ch = choose_pregen(ui, boss.player, [])
+            cls = ch.class_levels[0]
+            while ch.level < max(1, boss.level - 2):
+                gain_level(ch, cls, ui, auto=True)
+            ch.xp = rules.xp_for_level(ch.level)
+            prepare_spells(ch, ui, auto=True)
+        ch.__dict__["cohort_of"] = boss.name
+        if gs.settings.get("heroic"):
+            from ..game import make_heroic
+            make_heroic(ch)
+        gs.party.append(ch)
+        ui.good(f"{ch.name} swears to follow {boss.name} as a loyal cohort.")
+
     def recruit(self) -> None:
         ui, gs = self.ui, self.gs
         from ..creation import choose_pregen, create_character
@@ -1496,6 +1561,15 @@ class GM:
         if not room.get("town") and any(p.familiar and p.conscious for p in gs.living()) \
                 and self.exits():
             opts.append(("Send a familiar to scout ahead", "scout", None))
+        if room.get("town") and any(e.get("unidentified") for p in gs.living()
+                                    for e in p.inventory):
+            opts.append(("Have a sage identify your magic items (100 gp each)", "identify",
+                         None))
+        if room.get("town") and any(
+                p.has_feat("Leadership") and not any(
+                    q.__dict__.get("cohort_of") == p.name and not q.dead for q in gs.party)
+                for p in gs.living()):
+            opts.append(("Call your cohort (Leadership)", "cohort", None))
         if room.get("town") and can_anyone_craft(gs.living()):
             opts.append(("Craft magic items (downtime: days pass)", "craft", None))
         if has_usable(gs.living()):
@@ -1509,7 +1583,8 @@ class GM:
         group_of = {"feature": "Actions", "exit": "Travel", "search": "Explore",
                     "sneak": "Explore", "rest": "Explore", "levelup": "Party",
                     "sheet": "Party", "inv": "Party", "cast": "Party", "ability": "Party",
-                    "scout": "Explore", "craft": "Party", "track": "Explore"}
+                    "scout": "Explore", "craft": "Party", "track": "Explore",
+                    "identify": "Party", "cohort": "Party"}
         i = ui.choose("What do you do?", [o[0] for o in opts],
                       groups=[group_of.get(o[1], "Game") for o in opts])
         _, kind, data = opts[i]
@@ -1537,6 +1612,10 @@ class GM:
             inventory_menu(ui, gs.living())
         elif kind == "cast":
             cast_out_of_combat(ui, gs.party)
+        elif kind == "identify":
+            self.identify_items()
+        elif kind == "cohort":
+            self.call_cohort()
         elif kind == "craft":
             craft_menu(ui, gs.living(), gs)
         elif kind == "scout":
