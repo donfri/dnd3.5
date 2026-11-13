@@ -166,6 +166,14 @@ by default (settings → Turn alerts). Answers given for someone else show in th
 story as "> Alice (for Bob): Attack", and when Bob comes back he's told how many
 choices the party and the computer made for his heroes while he was away.
 
+### Creating a hero
+
+On the web page, "Create a new character" opens a four-step form: name and race,
+class, ability scores (standard array, rolled dice or point buy, with a
+one-tap recommended spread), then alignment, build and gear. Everything is
+checked again on the server. Prefer the old way? Choose "Answer questions one at
+a time instead".
+
 ### On a phone
 
 Character sheets keep their **Close** button pinned at the top (the phone's
@@ -329,6 +337,12 @@ Command-line options:
   sage (100 gp) works them out, rangers can **read tracks** to learn what waits
   beyond each exit, Appraise gets a better price when selling, and the
   **Leadership** feat (level 6) brings a cohort.
+- **Cursed items** hide in a few treasure hoards. They look like something useful
+  (even to a successful Spellcraft check under 30; a town sage sees the truth),
+  and once worn they won't come off until the temple casts Remove Curse (150 gp).
+- **Mounted feats:** Mounted Combat (a Ride check turns aside one melee hit a
+  round), Ride-By Attack and Spirited Charge. A **lance** deals double damage on
+  a mounted charge (triple with Spirited Charge).
 - **Terrain** fits the place you're fighting: trees and undergrowth on the forest
   road, pillars and rubble in crypts, rock walls in caves, deep pools and reeds
   in the fen, carts and mud in villages, and a narrow bridge or ledge where
@@ -468,9 +482,8 @@ python3 -m unittest discover -s tests
 - Battlefields are generated fresh for each fight. Large and bigger monsters fill
   a 10-ft (2 x 2) space; even bigger ones don't take more. Heroes in a large wild
   shape still take one square.
-- Not in the game: intelligent and cursed items, the Mounted Combat feat chain and
-  lances, Forgery and Decipher Script uses, overland travel rules, and a stepped
-  character-creation form for phones. Spell ranges are touch, close, or
+- Not in the game: intelligent items, Forgery and Decipher Script uses, and
+  overland travel rules. Spell ranges are touch, close, or
   "anywhere on this battlefield".
 - Levels go to 20 (no epic levels), and the adventures cover levels 1 to 8.
   Higher-level heroes can still start any adventure, but it won't be a challenge.

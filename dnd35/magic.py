@@ -490,7 +490,15 @@ def _cast_spell(ui, caster, spell_name, targets, cl, dc, combat, allies, enemies
         ui.good(f"  {target.name}: {e.describe()}")
         return e
 
-    # ------------------------------------------------------------ cantrips
+    ctx = (ui, caster, targets, cl, dc, combat, allies, enemies, sp, stags, t0, n, buff, spell_name)
+    if not any(part(ctx) for part in _SPELL_GROUPS):
+        ui.out(f"  ({n} has no mechanical effect in this version.)")
+    return True
+
+
+def _spells_cantrips(ctx) -> bool:
+    """One group of spell effects. Returns False if the spell isn't in this group."""
+    (ui, caster, targets, cl, dc, combat, allies, enemies, sp, stags, t0, n, buff, spell_name) = ctx
     if n in ("Acid Splash", "Ray of Frost"):
         if touch_attack(ui, caster, t0, True, combat):
             deal_damage(ui, t0, _sroll("1d3").total, "acid" if n == "Acid Splash" else "cold",
@@ -511,8 +519,15 @@ def _cast_spell(ui, caster, spell_name, targets, cl, dc, combat, allies, enemies
         buff(t0, "Endure Elements", dur=24 * ROUNDS_PER_HOUR)
     elif n in ("Detect Magic", "Light", "Mage Hand", "Prestidigitation", "Know Direction"):
         ui.out(f"  {sp['desc']}")
-    # ------------------------------------------------------------ arcane 1
-    elif n == "Magic Missile":
+    else:
+        return False
+    return True
+
+
+def _spells_arcane_1(ctx) -> bool:
+    """One group of spell effects. Returns False if the spell isn't in this group."""
+    (ui, caster, targets, cl, dc, combat, allies, enemies, sp, stags, t0, n, buff, spell_name) = ctx
+    if n == "Magic Missile":
         missiles = min(5, 1 + (cl - 1) // 2)
         for i in range(missiles):
             tgt = targets[i % len(targets)] if targets else t0
@@ -577,8 +592,15 @@ def _cast_spell(ui, caster, spell_name, targets, cl, dc, combat, allies, enemies
         else:
             buff(t0, "Enlarge Person", [("str", "size", 2), ("dex", "size", -2)],
                  tags=["enlarged"])
-    # ------------------------------------------------------------ arcane 2
-    elif n == "Scorching Ray":
+    else:
+        return False
+    return True
+
+
+def _spells_arcane_2(ctx) -> bool:
+    """One group of spell effects. Returns False if the spell isn't in this group."""
+    (ui, caster, targets, cl, dc, combat, allies, enemies, sp, stags, t0, n, buff, spell_name) = ctx
+    if n == "Scorching Ray":
         rays = 1 if cl < 7 else (2 if cl < 11 else 3)
         for _ in range(rays):
             if touch_attack(ui, caster, t0, True, combat):
@@ -602,8 +624,15 @@ def _cast_spell(ui, caster, spell_name, targets, cl, dc, combat, allies, enemies
         buff(t0, "Bear's Endurance", [("con", "enhancement", 4)])
     elif n == "Blur":
         buff(t0, "Blur", [("concealment", "concealment", 20)])
-    # ------------------------------------------------------------ arcane 3
-    elif n in ("Fireball", "Lightning Bolt"):
+    else:
+        return False
+    return True
+
+
+def _spells_arcane_3(ctx) -> bool:
+    """One group of spell effects. Returns False if the spell isn't in this group."""
+    (ui, caster, targets, cl, dc, combat, allies, enemies, sp, stags, t0, n, buff, spell_name) = ctx
+    if n in ("Fireball", "Lightning Bolt"):
         r = _sroll(f"{min(10, cl)}d6")
         ui.roll(r.detail())
         dtype = "fire" if n == "Fireball" else "electricity"
@@ -616,8 +645,15 @@ def _cast_spell(ui, caster, spell_name, targets, cl, dc, combat, allies, enemies
             buff(a, "Haste", [("attack", "haste", 1), ("ac", "dodge", 1),
                               ("save_ref", "dodge", 1), ("speed", "enhancement", 30)],
                  tags=["hasted"])
-    # ------------------------------------------------------------ divine 0
-    elif n == "Guidance":
+    else:
+        return False
+    return True
+
+
+def _spells_divine_0(ctx) -> bool:
+    """One group of spell effects. Returns False if the spell isn't in this group."""
+    (ui, caster, targets, cl, dc, combat, allies, enemies, sp, stags, t0, n, buff, spell_name) = ctx
+    if n == "Guidance":
         buff(t0, "Guidance", [("attack", "competence", 1), ("saves", "competence", 1),
                               ("skills", "competence", 1)], tags=["consume_any"])
     elif n == "Virtue":
@@ -660,8 +696,15 @@ def _cast_spell(ui, caster, spell_name, targets, cl, dc, combat, allies, enemies
         buff(caster, "Longstrider", [("speed", "enhancement", 10)])
     elif n == "Resist Energy":
         buff(t0, "Resist Energy (fire)", [("resist_fire", "resistance", 10 if cl < 7 else 20)])
-    # ------------------------------------------------------------ divine 2
-    elif n == "Aid":
+    else:
+        return False
+    return True
+
+
+def _spells_divine_2(ctx) -> bool:
+    """One group of spell effects. Returns False if the spell isn't in this group."""
+    (ui, caster, targets, cl, dc, combat, allies, enemies, sp, stags, t0, n, buff, spell_name) = ctx
+    if n == "Aid":
         hp = _sroll("1d8").total + min(10, cl)
         t0.temp_hp += hp
         buff(t0, "Aid", [("attack", "morale", 1), ("saves_vs_fear", "morale", 1)],
@@ -683,8 +726,15 @@ def _cast_spell(ui, caster, spell_name, targets, cl, dc, combat, allies, enemies
     elif n == "Hold Monster":
         _hold(ui, t0, dc, stags, n, buff, t0.is_living() and not _mind_immune(t0, sp["tags"]),
               "mindless or not alive")
-    # ------------------------------------------------------------ divine 3
-    elif n == "Prayer":
+    else:
+        return False
+    return True
+
+
+def _spells_divine_3(ctx) -> bool:
+    """One group of spell effects. Returns False if the spell isn't in this group."""
+    (ui, caster, targets, cl, dc, combat, allies, enemies, sp, stags, t0, n, buff, spell_name) = ctx
+    if n == "Prayer":
         for a in allies:
             if not a.dead:
                 buff(a, "Prayer", [("attack", "luck", 1), ("damage", "luck", 1),
@@ -708,8 +758,15 @@ def _cast_spell(ui, caster, spell_name, targets, cl, dc, combat, allies, enemies
             if not a.dead:
                 buff(a, "Magic Circle against Evil", [("ac_vs_evil", "deflection", 2),
                                                       ("saves_vs_evil", "resistance", 2)])
-    # ------------------------------------------------------------ v2 spells
-    elif n == "Flare":
+    else:
+        return False
+    return True
+
+
+def _spells_mid_levels_1(ctx) -> bool:
+    """One group of spell effects. Returns False if the spell isn't in this group."""
+    (ui, caster, targets, cl, dc, combat, allies, enemies, sp, stags, t0, n, buff, spell_name) = ctx
+    if n == "Flare":
         if not saving_throw(ui, t0, "fort", dc, stags):
             buff(t0, "Dazzled", [("attack", "untyped", -1)])
     elif n == "Grease":
@@ -852,7 +909,15 @@ def _cast_spell(ui, caster, spell_name, targets, cl, dc, combat, allies, enemies
                         report_down(ui, t0)
                 elif combat is not None:
                     combat.after_damage(t0)
-    elif n == "Remove Disease":
+    else:
+        return False
+    return True
+
+
+def _spells_mid_levels_2(ctx) -> bool:
+    """One group of spell effects. Returns False if the spell isn't in this group."""
+    (ui, caster, targets, cl, dc, combat, allies, enemies, sp, stags, t0, n, buff, spell_name) = ctx
+    if n == "Remove Disease":
         if t0.afflictions:
             ui.good(f"  {t0.name} is cured of " + ", ".join(a["name"] for a in t0.afflictions)
                     + ".")
@@ -993,7 +1058,15 @@ def _cast_spell(ui, caster, spell_name, targets, cl, dc, combat, allies, enemies
     elif n == "Invisibility":
         buff(t0, "Invisibility", [("concealment", "concealment", 50), ("attack", "untyped", 2)],
              tags=["invisible"])
-    elif n == "Fly":
+    else:
+        return False
+    return True
+
+
+def _spells_mid_levels_3(ctx) -> bool:
+    """One group of spell effects. Returns False if the spell isn't in this group."""
+    (ui, caster, targets, cl, dc, combat, allies, enemies, sp, stags, t0, n, buff, spell_name) = ctx
+    if n == "Fly":
         buff(t0, "Fly", [("speed", "enhancement", 30)], tags=["flying"])
     elif n in ("Dispel Magic", "Greater Dispel Magic"):
         dispel(ui, caster, t0, cl, allies or [caster], greater=n.startswith("Greater"))
@@ -1007,8 +1080,15 @@ def _cast_spell(ui, caster, spell_name, targets, cl, dc, combat, allies, enemies
                 "Summon which creature?", [MONSTERS[k]["name"] for k in pool], default=0)]
             rounds = cl * (2 if "Extend Spell" in _META else 1)
             combat.add_summon(caster, key, rounds)
-    # ------------------------------------------------------------ 5th-9th (v4)
-    elif n in ("Mass Bull's Strength", "Mass Cat's Grace", "Mass Bear's Endurance",
+    else:
+        return False
+    return True
+
+
+def _spells_high_levels_1(ctx) -> bool:
+    """One group of spell effects. Returns False if the spell isn't in this group."""
+    (ui, caster, targets, cl, dc, combat, allies, enemies, sp, stags, t0, n, buff, spell_name) = ctx
+    if n in ("Mass Bull's Strength", "Mass Cat's Grace", "Mass Bear's Endurance",
                "Mass Owl's Wisdom", "Mass Eagle's Splendor"):
         ab = {"Bull's": "str", "Cat's": "dex", "Bear's": "con", "Owl's": "wis",
               "Eagle's": "cha"}[n.split()[1]]
@@ -1150,7 +1230,15 @@ def _cast_spell(ui, caster, spell_name, targets, cl, dc, combat, allies, enemies
             elif hd <= cl:
                 buff(t, "Deafened (holy word)", [("init", "untyped", -4)],
                      dur=_sroll("1d4").total)
-    elif n == "Creeping Doom":
+    else:
+        return False
+    return True
+
+
+def _spells_high_levels_2(ctx) -> bool:
+    """One group of spell effects. Returns False if the spell isn't in this group."""
+    (ui, caster, targets, cl, dc, combat, allies, enemies, sp, stags, t0, n, buff, spell_name) = ctx
+    if n == "Creeping Doom":
         for t in targets:
             if not t.dead:
                 buff(t, "Creeping Doom", tags=["_dot"], dur=cl,
@@ -1269,8 +1357,24 @@ def _cast_spell(ui, caster, spell_name, targets, cl, dc, combat, allies, enemies
             else:
                 buff(t, "Fatigued", tags=["fatigued"], dur=None)
     else:
-        ui.out(f"  ({n} has no mechanical effect in this version.)")
+        return False
     return True
+
+
+_SPELL_GROUPS = (
+    _spells_cantrips,
+    _spells_arcane_1,
+    _spells_arcane_2,
+    _spells_arcane_3,
+    _spells_divine_0,
+    _spells_divine_2,
+    _spells_divine_3,
+    _spells_mid_levels_1,
+    _spells_mid_levels_2,
+    _spells_mid_levels_3,
+    _spells_high_levels_1,
+    _spells_high_levels_2,
+)
 
 
 def call_bolt(ui, caster, e, target, combat=None) -> None:
