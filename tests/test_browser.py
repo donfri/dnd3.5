@@ -94,6 +94,36 @@ class TestBrowser(unittest.TestCase):
         self.assertLess(box["height"], 780 * 0.5)
         self.assertEqual(pg.errors, [])
 
+    def test_hero_form(self):
+        pg = self.page("bx4", "Chris", phone=True)
+        want = ["New game", "Ember King", "New heroes", "No", "Chris", "Create a new"]
+        for _ in range(30):
+            if pg.locator(".fform").count() and pg.locator("#modal").evaluate(
+                    "e=>e.style.display") == "flex":
+                break
+            texts = pg.locator("#opts button").all_inner_texts()
+            if not texts:
+                if pg.locator("#inp").is_visible():
+                    pg.fill("#inp", "1")
+                    pg.click("#textrow button")
+                pg.wait_for_timeout(400)
+                continue
+            idx = next((i for w in want for i, t in enumerate(texts) if w in t), 0)
+            pg.locator("#opts button").nth(idx).click()
+            pg.wait_for_timeout(500)
+        pg.fill("#f-name", "Mira <b>Stonehand</b>")
+        pg.click('.fcard:has-text("Dwarf")')
+        pg.click(".fnav .go")
+        pg.click('.fcard:has-text("Fighter")')
+        pg.click(".fnav .go")
+        pg.click(".flink")
+        pg.click(".fnav .go")
+        pg.click(".fnav .go")
+        pg.wait_for_timeout(2500)
+        self.assertIn("What do you do", pg.locator("#prompt").inner_text())
+        self.assertEqual(pg.locator("#story b:text('Stonehand')").count(), 0)
+        self.assertEqual(pg.errors, [])
+
     def test_sheet_opens_and_closes(self):
         pg = self.page("bx3", "Chris", phone=True)
         self.begin(pg)

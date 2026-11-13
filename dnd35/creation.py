@@ -189,8 +189,70 @@ def point_buy(ui, ch: Character) -> bool:
 
 
 # ---------------------------------------------------------------- creation
+def form_schema(rolled: List[int]) -> dict:
+    """Everything the web page's character form needs to show."""
+    return {
+        "races": [{"id": r, "name": RACES[r]["name"], "traits": RACES[r]["traits"][:3],
+                   "adj": RACES[r]["ability_adj"]} for r in RACE_ORDER],
+        "classes": [{"id": k, "name": CLASSES[k]["name"], "hd": CLASSES[k]["hd"],
+                     "desc": CLASSES[k]["description"],
+                     "alignments": [a for a in ALIGNMENTS if alignment_allowed(k, a)],
+                     "order": RECOMMENDED.get(k, {}).get("abilities", rules.ABILITIES)}
+                    for k in CLASS_ORDER],
+        "abilities": [{"id": a, "name": rules.ABILITY_NAMES[a]} for a in rules.ABILITIES],
+        "array": list(ELITE_ARRAY), "rolled": rolled, "budget": 25,
+        "costs": {str(k): v for k, v in POINT_BUY_COST.items()},
+    }
+
+
+def check_form(spec: dict, rolled: List[int]) -> Optional[str]:
+    """Validate a submitted character form. Returns an error message or None."""
+    if not isinstance(spec, dict):
+        return "bad form"
+    name = " ".join(str(spec.get("name", "")).split())[:40]
+    if not name:
+        return "Give your hero a name."
+    if spec.get("race") not in RACES or spec.get("cls") not in CLASS_ORDER:
+        return "Pick a race and a class."
+    if spec.get("alignment") not in ALIGNMENTS or \
+            not alignment_allowed(spec["cls"], spec["alignment"]):
+        return f"A {CLASSES[spec['cls']]['name'].lower()} can't have that alignment."
+    sc = spec.get("scores")
+    if not isinstance(sc, dict) or set(sc) != set(rules.ABILITIES) or \
+            not all(isinstance(v, int) and not isinstance(v, bool) for v in sc.values()):
+        return "Set all six ability scores."
+    method = spec.get("method")
+    if method == "buy":
+        if any(v not in POINT_BUY_COST for v in sc.values()) or \
+                sum(POINT_BUY_COST[v] for v in sc.values()) > 25:
+            return "Those scores cost more than 25 points."
+    elif method in ("array", "roll"):
+        pool = ELITE_ARRAY if method == "array" else rolled
+        if sorted(sc.values()) != sorted(pool):
+            return "Use each score exactly once."
+    else:
+        return "Pick how to set ability scores."
+    return None
+
+
 def create_character(ui, player: str = "", start_level: int = 1) -> Character:
     ui.header("CHARACTER CREATION")
+    spec = None
+    if hasattr(ui, "character_form"):
+        rolled = sorted((sum(sorted(dice.die(6) for _ in range(4))[1:]) for _ in range(6)),
+                        reverse=True)
+        while True:
+            spec = ui.character_form(form_schema(rolled))
+            if not spec:
+                break                       # the player chose the step-by-step questions
+            err = check_form(spec, rolled)
+            if not err:
+                break
+            ui.bad(err)
+    if spec:
+        return _finish_character(ui, _from_form(spec, player), spec["cls"], start_level,
+                                 auto=spec.get("build") != "manual",
+                                 kit=spec.get("kit") is not False)
     ui.sub("Race")
     races = [k for k in RACE_ORDER]
     i = ui.choose("Choose a race", [
@@ -228,15 +290,30 @@ def create_character(ui, player: str = "", start_level: int = 1) -> Character:
     auto = ui.choose("How do you want to make the level-by-level choices (skills, feats, "
                      "spells)?", ["I'll choose everything myself",
                                   "Use the recommended build (fast)"], default=0) == 1
+    return _finish_character(ui, ch, cls, start_level, auto, None)
+
+
+def _from_form(spec: dict, player: str) -> Character:
+    ch = Character(" ".join(str(spec["name"]).split())[:40], spec["race"], player)
+    ch.gender = " ".join(str(spec.get("gender", "")).split())[:20]
+    for ab in rules.ABILITIES:
+        ch.base_abilities[ab] = spec["scores"][ab]
+    ch.alignment = spec["alignment"]
+    return ch
+
+
+def _finish_character(ui, ch: Character, cls: str, start_level: int, auto: bool,
+                      kit: Optional[bool]) -> Character:
+    """Levels, looks, gear and spells: the part shared by the form and the questions."""
     for _ in range(start_level):
         gain_level(ch, cls, ui, auto=auto, hp_method="average" if auto else "ask")
     ch.xp = rules.xp_for_level(ch.level)
     random_physical(ch, cls)
 
     ui.sub("Starting equipment")
-    e = ui.choose("Equipment", ["Take the standard class kit (quick)",
-                                f"Roll starting gold ({CLASSES[cls]['gold']} gp) and shop"],
-                  default=0)
+    e = 0 if kit else 1 if kit is False else ui.choose(
+        "Equipment", ["Take the standard class kit (quick)",
+                      f"Roll starting gold ({CLASSES[cls]['gold']} gp) and shop"], default=0)
     if e == 0:
         apply_kit(ch, cls)
     else:

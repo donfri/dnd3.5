@@ -110,6 +110,41 @@ class TestTrapCrossing(unittest.TestCase):
         self.assertTrue(any("Everyone is across" in t for t in ui.transcript))
 
 
+class TestCharacterForm(unittest.TestCase):
+    def spec(self, **kw):
+        d = {"name": "Mira", "race": "dwarf", "cls": "cleric", "alignment": "Neutral Good",
+             "method": "array", "build": "auto", "kit": True,
+             "scores": {"str": 13, "dex": 10, "con": 14, "int": 8, "wis": 15, "cha": 12}}
+        d.update(kw)
+        return d
+
+    def test_validation(self):
+        from dnd35.creation import check_form
+        rolled = [16, 14, 13, 12, 11, 9]
+        self.assertIsNone(check_form(self.spec(), rolled))
+        self.assertIn("name", check_form(self.spec(name="  "), rolled))
+        self.assertIsNotNone(check_form(self.spec(cls="paladin", alignment="Chaotic Evil"),
+                                        rolled))
+        cheat = dict(self.spec()["scores"], str=18)
+        self.assertIn("exactly once", check_form(self.spec(scores=cheat), rolled))
+        self.assertIsNotNone(check_form(self.spec(method="roll"), rolled))
+        rich = {a: 18 for a in ("str", "dex", "con", "int", "wis", "cha")}
+        self.assertIn("25 points", check_form(self.spec(method="buy", scores=rich), rolled))
+        self.assertIsNotNone(check_form(self.spec(race="dragon"), rolled))
+
+    def test_form_builds_a_hero(self):
+        from dnd35.creation import create_character
+
+        class FormUI(AutoUI):
+            def character_form(ui, schema):
+                self.assertEqual(len(schema["rolled"]), 6)
+                return self.spec()
+        ch = create_character(FormUI(), "Chris", start_level=2)
+        self.assertEqual((ch.name, ch.race, ch.level, ch.player), ("Mira", "dwarf", 2, "Chris"))
+        self.assertEqual(ch.ability("con"), 16)              # 14 + 2 racial
+        self.assertTrue(ch.has_item("holy symbol"))
+
+
 class TestCursedItems(unittest.TestCase):
     def test_disguised_until_worn_then_stuck(self):
         from dnd35.data.items import item_name, make_item, stuck

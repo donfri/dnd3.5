@@ -270,6 +270,26 @@ class WebUI(UI):
             return str(default + 1)
         return "1"
 
+    def character_form(self, schema: dict) -> Optional[dict]:
+        """Show the one-page character form. Returns the filled-in form, or None if
+        the player would rather answer the questions one at a time."""
+        owner = self.current_owner()
+        self.table.emit({"t": "prompt", "text": "Create your hero", "options": None,
+                         "kind": "form", "form": schema, "owner": owner, "groups": None})
+        text, who = self.table.wait_input(owner)
+        self.last_who = who
+        try:
+            spec = json.loads(text)
+        except ValueError:
+            spec = None
+        if not isinstance(spec, dict) or not spec.get("name"):
+            self.table.emit({"t": "line", "kind": "echo", "text": c(
+                f"> {who}: (step-by-step questions)", "bold")})
+            return None
+        self.table.emit({"t": "line", "kind": "echo", "text": c(
+            f"> {who}: creates {str(spec.get('name'))[:40]}", "bold")})
+        return spec
+
     def choose(self, prompt, options, allow_cancel=False, default=None, groups=None):
         if options:
             opts = [ANSI_RE.sub("", o) for o in options]
@@ -555,7 +575,7 @@ class Table:
                 return False, "The GM is not waiting for input right now."
             if not self.may_answer(who):
                 return False, f"It's {self.owner}'s decision. Wait for them (or chat)."
-            self.inputs.append((text[:200], who[:30]))
+            self.inputs.append((text[:2000], who[:30]))
             self.cond.notify_all()
             return True, ""
 

@@ -102,6 +102,58 @@ async function setAfkMode(m){await fetch('/api/afkmode',{method:'POST',headers:h
 function activity(){lastAct=Date.now();if(away=='idle'&&!afkPending)setAway(false)}
 ['mousemove','mousedown','keydown','touchstart','wheel'].forEach(ev=>window.addEventListener(ev,activity,{passive:true,capture:true}));
 setInterval(()=>{if(joined&&!away&&Date.now()-lastAct>IDLE_MS)setAway(true,true)},10000);
+// ---- the hero form: four short steps instead of a long run of questions
+let formSeq=-1,F=null;
+const sgnm=v=>{const m=Math.floor((v-10)/2);return (m>=0?'+':'')+m};
+function openForm(ev){const sc=ev.form,keep=F&&F.draft;
+ F={sc,step:keep?F.step:0,draft:keep?F.draft:{name:'',gender:'',race:sc.races[0].id,cls:sc.classes[0].id,alignment:'',method:'array',
+   scores:{},buy:Object.fromEntries(sc.abilities.map(a=>[a.id,8])),build:'auto',kit:true},msg:''};
+ $('mtitle').textContent='Create your hero';$('mplain').style.display='none';$('mbody').style.display='none';
+ $('msheet').style.display='block';$('modal').style.display='flex';modalOpened();drawForm()}
+function fcls(){return F.sc.classes.find(c=>c.id==F.draft.cls)}
+function frace(){return F.sc.races.find(r=>r.id==F.draft.race)}
+function fpool(){return F.draft.method=='roll'?F.sc.rolled:F.sc.array}
+function fAuto(){const pool=fpool().slice().sort((a,b)=>b-a);F.draft.scores={};fcls().order.forEach((a,i)=>F.draft.scores[a]=pool[i]);F.msg='';drawForm()}
+function fSpent(){return Object.values(F.draft.buy).reduce((n,v)=>n+F.sc.costs[v],0)}
+function fSet(k,v){F.draft[k]=v;if(k=='cls'){const al=fcls().alignments;if(!al.includes(F.draft.alignment))F.draft.alignment=al.includes('Neutral Good')?'Neutral Good':al[0]}
+ if(k=='method'||k=='cls')F.draft.scores={};drawForm()}
+function fPick(ab,v){const d=F.draft.scores;if(v==='')delete d[ab];else d[ab]=+v;F.msg='';drawForm()}
+function fBuy(ab,dv){const b=F.draft.buy,v=b[ab]+dv;if(v<8||v>18)return;const old=b[ab];b[ab]=v;if(fSpent()>F.sc.budget)b[ab]=old;drawForm()}
+function fScores(){return F.draft.method=='buy'?F.draft.buy:F.draft.scores}
+function fCheck(step){const d=F.draft;
+ if(step==0&&!d.name.trim())return 'Give your hero a name.';
+ if(step==2&&d.method!='buy'&&Object.keys(d.scores).length<6)return 'Give every ability a score (or tap "Recommended").';
+ if(step==3&&!d.alignment)return 'Pick an alignment.';return ''}
+function fGo(n){if(n>0){F.draft.name=($('f-name')||{value:F.draft.name}).value;F.draft.gender=($('f-gender')||{value:F.draft.gender}).value;
+  F.msg=fCheck(F.step);if(F.msg){drawForm();return}}
+ F.msg='';F.step=Math.max(0,Math.min(3,F.step+n));drawForm();$('msheet').scrollTop=0}
+function fSubmit(){F.msg=fCheck(3);if(F.msg){drawForm();return}
+ const d=F.draft;const spec={name:d.name.trim(),gender:d.gender.trim(),race:d.race,cls:d.cls,alignment:d.alignment,method:d.method,scores:fScores(),build:d.build,kit:d.kit};
+ closeModal();send(JSON.stringify(spec))}
+function drawForm(){const d=F.draft,sc=F.sc;if(!d.alignment)fSet('cls',d.cls);
+ const card=(on,click,title,sub)=>`<button class="fcard${on?' on':''}" onclick="${click}"><b>${esc(title)}</b><span>${sub}</span></button>`;
+ let h=`<div class="fsteps">${['Name & race','Class','Abilities','Finish'].map((t,i)=>`<span class="${i==F.step?'on':i<F.step?'done':''}">${i+1}. ${t}</span>`).join('')}</div>`;
+ if(F.step==0){h+=`<label class="fl">Hero's name</label><input id="f-name" class="fin" maxlength="40" value="${esc(d.name).replace(/"/g,'&quot;')}" placeholder="e.g. Mira Stonehand">
+  <label class="fl">Gender (optional)</label><input id="f-gender" class="fin" maxlength="20" value="${esc(d.gender).replace(/"/g,'&quot;')}">
+  <label class="fl">Race</label><div class="fgrid">`+sc.races.map(r=>card(r.id==d.race,`F.draft.name=$('f-name').value;F.draft.gender=$('f-gender').value;fSet('race','${r.id}')`,r.name,
+   esc(Object.entries(r.adj).map(([k,v])=>k.toUpperCase()+' '+(v>0?'+':'')+v).join(', ')||'no ability changes')+'<br>'+esc(r.traits.join('; ')))).join('')+'</div>'}
+ if(F.step==1){h+='<label class="fl">Class</label><div class="fgrid">'+sc.classes.map(c=>card(c.id==d.cls,`fSet('cls','${c.id}')`,c.name,'d'+c.hd+' hit die<br>'+esc(c.desc))).join('')+'</div>'}
+ if(F.step==2){const adj=frace().adj;
+  h+=`<label class="fl">How to set your scores</label><div class="fseg">${[['array','Standard array'],['roll','Rolled dice'],['buy','Point buy']].map(([k,t])=>`<button class="${d.method==k?'on':''}" onclick="fSet('method','${k}')">${t}</button>`).join('')}</div>`;
+  if(d.method!='buy'){const pool=fpool(),used=Object.values(d.scores);
+   h+=`<div class="why" style="margin:6px 0">${d.method=='roll'?'The dice gave you':'Use each of'}: <b>${pool.join(', ')}</b>. <button class="flink" onclick="fAuto()">Recommended for a ${esc(fcls().name.toLowerCase())}</button></div>`;
+   h+=sc.abilities.map(a=>{const left=pool.slice();used.forEach(u=>{if(u!==d.scores[a.id]){const i=left.indexOf(u);if(i>=0)left.splice(i,1)}});
+    const cur=d.scores[a.id],fin=cur!=null?cur+(adj[a.id]||0):null;
+    return `<div class="frow"><span class="fa">${esc(a.name)}${adj[a.id]?` <i>(${adj[a.id]>0?'+':''}${adj[a.id]} racial)</i>`:''}</span><select onchange="fPick('${a.id}',this.value)"><option value="">\u2013</option>${[...new Set(left)].map(v=>`<option${v===cur?' selected':''}>${v}</option>`).join('')}</select><span class="ff">${fin!=null?fin+' ('+sgnm(fin)+')':''}</span></div>`}).join('')}
+  else{h+=`<div class="why" style="margin:6px 0">Points left: <b>${sc.budget-fSpent()}</b> of ${sc.budget}. Higher scores cost more.</div>`+
+   sc.abilities.map(a=>{const v=d.buy[a.id],fin=v+(adj[a.id]||0);
+    return `<div class="frow"><span class="fa">${esc(a.name)}${adj[a.id]?` <i>(${adj[a.id]>0?'+':''}${adj[a.id]} racial)</i>`:''}</span><span class="fpm"><button onclick="fBuy('${a.id}',-1)">\u2212</button><b>${v}</b><button onclick="fBuy('${a.id}',1)">+</button></span><span class="ff">${fin} (${sgnm(fin)})</span></div>`}).join('')}}
+ if(F.step==3){h+=`<label class="fl">Alignment${fcls().alignments.length<9?' (limited for a '+esc(fcls().name.toLowerCase())+')':''}</label><div class="fseg wrap">${fcls().alignments.map(a=>`<button class="${d.alignment==a?'on':''}" onclick="fSet('alignment','${a}')">${a}</button>`).join('')}</div>
+  <label class="fl">Skills, feats and spells</label><div class="fgrid">${card(d.build=='auto',"fSet('build','auto')",'Recommended build','The game picks sensible skills, feats and spells. Fastest.')}${card(d.build=='manual',"fSet('build','manual')",'I\'ll choose','You pick everything, one question at a time.')}</div>
+  <label class="fl">Starting gear</label><div class="fgrid">${card(d.kit,"fSet('kit',true)",'Standard kit','The usual gear for your class.')}${card(!d.kit,"fSet('kit',false)",'Gold and shopping','Roll starting gold and buy your own.')}</div>
+  <div class="why" style="margin-top:10px">${esc(d.name||'Your hero')}: ${esc(frace().name)} ${esc(fcls().name)}, ${esc(d.alignment)}</div>`}
+ h+=`<div class="fmsg">${esc(F.msg)}</div><div class="fnav">${F.step?'<button onclick="fGo(-1)">\u2039 Back</button>':'<span></span>'}${F.step<3?'<button class="go" onclick="fGo(1)">Next \u203a</button>':'<button class="go" onclick="fSubmit()">Create hero</button>'}</div>`;
+ $('msheet').innerHTML='<div class="fform">'+h+'</div>'}
 // ---- dice pictures
 const DIE_SHAPE={4:'50,6 94,88 6,88',6:'12,12 88,12 88,88 12,88',8:'50,4 94,50 50,96 6,50',
  10:'50,4 92,40 76,92 24,92 8,40',12:'50,4 95,37 78,92 22,92 5,37',20:'50,3 92,27 92,73 50,97 8,73 8,27'};
@@ -177,7 +229,13 @@ function applyPanel(){const has=!!$('prompt').textContent;
 function togglePanel(){if(!phone())return;panelOpen=!panelOpen;applyPanel()}
 window.addEventListener('resize',applyPanel);
 function showPrompt(ev){curPrompt=ev;if(!showMore&&followIntent(ev))return;$('prompt').textContent=ev.text.replace(/:\s*$/,'');const box=$('opts');box.innerHTML='';
- const opts=ev.options||[];$('bottom').classList.toggle('hasopts',opts.length>0);applyPanel();
+ const opts=ev.options||[];$('bottom').classList.toggle('hasopts',opts.length>0||ev.kind=='form');applyPanel();
+ if(ev.kind=='form'){const row=document.createElement('div');row.className='row';row.style.display='flex';row.style.flexWrap='wrap';row.style.gap='6px';
+  const b1=document.createElement('button');b1.className='opt rollbtn';b1.textContent='\u270d Open the hero form';b1.onclick=()=>openForm(ev);
+  const b2=document.createElement('button');b2.className='opt';b2.textContent='Answer questions one at a time instead';b2.onclick=()=>send('{}');
+  row.appendChild(b1);row.appendChild(b2);box.appendChild(row);
+  if(formSeq!=ev.seq&&(!ev.owner||ev.owner.toLowerCase()==me.toLowerCase())){formSeq=ev.seq;openForm(ev)}
+  return}
  if(!ev.groups){const row=document.createElement('div');row.className='row';row.style.display='flex';row.style.flexWrap='wrap';row.style.gap='6px';
   opts.forEach((o,i)=>row.appendChild(optButton(ev,o,i)));box.appendChild(row);return}
  const by={};opts.forEach((o,i)=>{const g=ev.groups[i]||'Game';(by[g]=by[g]||[]).push([o,i])});
