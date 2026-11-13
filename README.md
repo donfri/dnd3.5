@@ -133,7 +133,8 @@ or a tunnel such as Tailscale, `cloudflared tunnel`, or `ngrok http 8080`.
   makes the roll, so nobody can fudge it; you just choose the moment. Secret
   checks (like spotting an ambush) are still rolled quietly by the GM, and if
   you're away or offline your rolls happen automatically so the game never
-  waits on you.
+  waits on you. If a hero's own player isn't at the table, whoever is playing
+  that hero gets the Roll button (if they roll their own dice).
 - **Dice animations:** rolls tumble across the top-right corner and land on the
   real result (natural 20s glow green, natural 1s red). Choose whose rolls to
   show: your heroes' (default), everyone's, only free rolls from the Dice tab,
@@ -167,8 +168,8 @@ choices the party and the computer made for his heroes while he was away.
 
 ### On a phone
 
-Character sheets have a big **✕ Close** button at the bottom right (the
-phone's Back button and Escape close them too).
+Character sheets keep their **Close** button pinned at the top (the phone's
+Back button and Escape close them too).
 
 The tabs, AFK and settings move into the menu at the top right: the button
 shows which tab you're on (for example **📖 Story ▾**) and a red dot means

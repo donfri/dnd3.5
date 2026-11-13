@@ -58,6 +58,25 @@ class TestSaveLoad(unittest.TestCase):
         self.assertIn("t", engine.list_saves())
 
 
+class TestAutosaveAfterFights(unittest.TestCase):
+    def test_a_won_fight_is_saved_at_once(self):
+        engine.SAVE_DIR = tempfile.mkdtemp()
+        party = [build_pregen("thorgar"), build_pregen("lyra")]
+        gs = engine.GameState(ember_barrow, party, {})
+        gs.room = "old_bridge"
+        ui = AutoUI()
+        ui.autosave_name = "afterfight"
+        gm = engine.GM(ui, gs)
+        old = engine.Combat.run
+        engine.Combat.run = lambda self: "victory"
+        try:
+            gm.start_encounter("ambush")
+        finally:
+            engine.Combat.run = old
+        saved = engine.load_game("afterfight", ember_barrow)
+        self.assertIn("enc:ambush", saved.flags)   # a restart now won't bring them back
+
+
 class TestTrapCrossing(unittest.TestCase):
     def test_everyone_jumps_once_and_the_party_moves_on(self):
         class UI(AutoUI):

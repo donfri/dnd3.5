@@ -177,6 +177,22 @@ class TestManualDice(unittest.TestCase):
         t.before_roll(hero, "attack", "1d20")
         self.assertLess(time.time() - start, 0.1)
 
+    def test_whoever_plays_an_absent_players_hero_rolls_for_it(self):
+        t = TestAway().bare_table()
+        t.manual = set()
+        t.ui.last_who = "Chris"
+        t.presence = {"Chris": time.time()}            # the hero's player "asdf" isn't here
+
+        class Hero:
+            is_pc, player, name = True, "asdf", "Bobby"
+        t.set_manual("Chris", True)
+        threading.Timer(0.2, lambda: t.submit("1", "Chris")).start()
+        start = time.time()
+        t.before_roll(Hero(), "attack", "1d20")
+        self.assertGreater(time.time() - start, 0.15)
+        prompt = [e for e in t.events if e.get("kind") == "roll"][-1]
+        self.assertEqual(prompt["owner"], "Chris")
+
     def test_dice_events_for_heroes_only(self):
         t = TestAway().bare_table()
 

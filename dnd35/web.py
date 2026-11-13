@@ -381,10 +381,17 @@ class Table:
         """A player who rolls their own dice presses Roll before their hero's roll.
         Away or offline players are never waited for."""
         player = self._hero_player(who)
-        if not player or self._norm(player) not in self.manual:
+        if not player:
             return
         here = {self._norm(n) for n in self.present()}
         if self._norm(player) not in here or self.is_afk(player):
+            # the hero's own player isn't here: whoever is playing it now rolls for it
+            last = getattr(self.ui, "last_who", "") or ""
+            if not last or last.startswith("autopilot") or self._norm(last) not in here \
+                    or self.is_afk(last):
+                return
+            player = last
+        if self._norm(player) not in self.manual:
             return
         self.emit({"t": "prompt", "text": f"{who.name}: {what} \u2014 roll {expr}",
                    "options": [f"\U0001f3b2 Roll {expr}"], "kind": "roll", "groups": None,

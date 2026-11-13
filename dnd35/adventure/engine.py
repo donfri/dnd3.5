@@ -547,6 +547,7 @@ class GM:
         if result == "victory":
             gs.flags.add(f"enc:{enc_id}")
             gs.rs(enc.get("room")).get("enc_left", {}).pop(enc_id, None)
+            self.autosave()        # a restart must never bring beaten foes back
             self.run(enc.get("after", []))
             self.aftercare()
         elif result == "fled":
@@ -1364,9 +1365,8 @@ class GM:
         while True:
             if not gs.able():
                 raise GameOver("defeat")
+            self.autosave()        # the save is always current while we wait for a choice
             self.turn_menu()
-            if gs.able():
-                self.autosave()
 
     def describe_brief(self) -> None:
         room = self.adv.ROOMS[self.gs.room]
