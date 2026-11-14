@@ -29,11 +29,18 @@ AREAS: Dict[str, Tuple[str, int]] = {
     "Fear": ("cone", 30), "Shout": ("cone", 30), "Waves of Fatigue": ("cone", 30),
     "Sunbeam": ("line", 60), "Lightning Bolt": ("line", 120), "Chain Lightning": ("burst", 30),
     "Meteor Swarm": ("burst", 20),
+    "Glitterdust": ("burst", 10), "Web": ("burst", 20), "Stinking Cloud": ("burst", 20),
+    "Black Tentacles": ("burst", 20), "Circle of Death": ("burst", 40),
+    "Prismatic Spray": ("cone", 60), "Crushing Despair": ("cone", 30),
+    "Faerie Fire": ("burst", 5), "Bane": ("burst", 50), "Freezing Sphere": ("burst", 10),
+    "Incendiary Cloud": ("burst", 20), "Weird": ("burst", 30), "Earthquake": ("burst", 30),
+    "Mass Inflict Light Wounds": ("burst", 30), "Deep Slumber": ("burst", 10),
 }
 
 # areas where the caster picks which creatures inside are affected (allies are spared)
 SELECTIVE = {"Chain Lightning", "Slow", "Mass Hold Monster", "Holy Word", "Holy Smite",
-             "Wail of the Banshee"}
+             "Wail of the Banshee", "Bane", "Weird", "Mass Inflict Light Wounds",
+             "Crushing Despair"}
 
 
 def dist(a: Pos, b: Pos) -> int:

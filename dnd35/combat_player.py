@@ -1329,8 +1329,9 @@ class PlayerMixin:
         else:
             p.expend(cast)
         # touch spells on enemies require being in melee
-        if spell.startswith("Inflict") or spell in ("Bestow Curse", "Poison", "Slay Living",
-                                                     "Contagion") or (
+        from .magic import MELEE_TOUCH
+        if spell.startswith("Inflict") or spell in MELEE_TOUCH or spell in (
+                "Bestow Curse", "Poison", "Slay Living", "Contagion") or (
                 spell.startswith("Cure") and targets and targets[0].ctype == "undead"):
             t = targets[0]
             fam = getattr(p, "familiar", None)

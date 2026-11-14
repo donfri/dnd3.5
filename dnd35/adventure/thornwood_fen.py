@@ -62,9 +62,9 @@ RUMORS = [
 ]
 
 # overland legs between places: (miles, terrain); used in both directions
-TRAVEL = {("marrowmere", "fen_road"): (4, "trail"), ("fen_road", "owl_hollow"): (2, "forest"),
-          ("fen_road", "causeway"): (2, "marsh"), ("causeway", "lizard_village"): (1, "marsh"),
-          ("lizard_village", "abbey_gate"): (2, "marsh")}
+TRAVEL = {("marrowmere", "fen_road"): (3, "trail"), ("fen_road", "owl_hollow"): (1, "forest"),
+          ("fen_road", "causeway"): (1, "marsh"), ("causeway", "lizard_village"): (1, "marsh"),
+          ("lizard_village", "abbey_gate"): (1, "marsh")}
 
 WANDERING = [
     {"text": "The black water bulges, and a crocodile the length of a barge surges out.",

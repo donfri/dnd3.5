@@ -134,11 +134,17 @@ class TestOverland(unittest.TestCase):
         gm = engine.GM(AutoUI(), gs)
         gm.wandering_check = lambda *a, **k: False
         t0 = gs.minutes
-        self.assertTrue(gm.overland("marrowmere", "fen_road"))      # 4 miles of trail
-        # dwarf at 20 ft: 2 mph x 0.75 = 1.5 mph -> 2 h 40 min
-        self.assertEqual(gs.minutes - t0, 160)
+        self.assertTrue(gm.overland("marrowmere", "fen_road"))      # 3 miles of trail
+        # dwarf at 20 ft: 2 mph x 0.75 = 1.5 mph -> 2 hours
+        self.assertEqual(gs.minutes - t0, 120)
         self.assertTrue(gm.overland("fen_road", "marrowmere"))      # the table works both ways
         gs.settings["march_hours"] = 9
+        gs.settings["march_day"] = gs.minutes // (24 * 60)
+        gm.ui.confirm = lambda *a, **k: False
+        room = gs.minutes
+        self.assertFalse(gm.overland("marrowmere", "fen_road"))     # chose to rest instead
+        self.assertEqual(gs.minutes, room)
+        gm.ui.confirm = lambda *a, **k: True
         old = dice.d20
         dice.d20 = lambda: 1
         try:

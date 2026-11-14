@@ -908,6 +908,10 @@ class GM:
         if not leg or not gs.able():
             return True
         miles, terrain = leg
+        day = gs.minutes // (24 * 60)
+        if gs.settings.get("march_day") != day:          # a new day: fresh legs
+            gs.settings["march_day"] = day
+            gs.settings["march_hours"] = 0
         speed = min(p.speed() for p in gs.able())
         if any(not p.conscious for p in gs.living()):
             speed = max(10, speed - 10)            # carrying the fallen
@@ -916,6 +920,13 @@ class GM:
                f"{terrain if terrain in ('road', 'trail') else 'trackless ' + terrain}: "
                f"about {self._hours(hours)} at your pace (slowest hero: {speed} ft).",
                ("dim",))
+        so_far = gs.settings.get("march_hours", 0)
+        if so_far + hours > 8:
+            if not ui.confirm(f"You've already marched {self._hours(so_far)} today. Going on "
+                              f"means a forced march (Constitution checks or you tire and "
+                              f"take nonlethal damage). Press on?", False):
+                ui.out("You decide against it. Rest first, then set out fresh.")
+                return False
         if terrain in self.TRACKLESS:
             guide = max(gs.able(), key=lambda p: self.check_bonus(p, "Survival") or -99)
             if self.roll_check(guide, "Survival", 15) < 15:

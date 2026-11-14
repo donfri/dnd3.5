@@ -337,6 +337,20 @@ Command-line options:
   sage (100 gp) works them out, rangers can **read tracks** to learn what waits
   beyond each exit, Appraise gets a better price when selling, and the
   **Leadership** feat (level 6) brings a cohort.
+- **Intelligent weapons:** Dawnreed (a lawful good +2 longsword) and Whisper (a
+  chaotic neutral +1 dagger) talk, have opinions, and grant a gift once a day
+  (healing, invisibility). Dawnreed also warns of ambushes. A wielder whose
+  alignment opposes the weapon's takes -1 on attacks and saves and must win a
+  Will save each fight or the weapon balks (-4 to hit).
+- **Overland travel:** the longer legs between places are measured in miles.
+  Time depends on your slowest hero and the terrain (roads are fastest;
+  trackless forest, hills and marsh halve your pace and need Survival DC 15 or
+  you lose your way). More than 8 hours on the march in a day means
+  Constitution checks against fatigue, and the longer the road the likelier
+  you meet something on it.
+- **Forgery and Decipher Script** have uses: forged orders can open Greyfang's
+  gate, and old inscriptions and a smuggler's cipher can be read.
+- **Content:** about 90 monsters and 220 spells.
 - **Cursed items** hide in a few treasure hoards. They look like something useful
   (even to a successful Spellcraft check under 30; a town sage sees the truth),
   and once worn they won't come off until the temple casts Remove Curse (150 gp).
@@ -482,8 +496,8 @@ python3 -m unittest discover -s tests
 - Battlefields are generated fresh for each fight. Large and bigger monsters fill
   a 10-ft (2 x 2) space; even bigger ones don't take more. Heroes in a large wild
   shape still take one square.
-- Not in the game: intelligent items, Forgery and Decipher Script uses, and
-  overland travel rules. Spell ranges are touch, close, or
+- Monster and spell numbers are entered from memory of the 3.5 rules, not copied
+  from the books, so a few will be a point or two off. Spell ranges are touch, close, or
   "anywhere on this battlefield".
 - Levels go to 20 (no epic levels), and the adventures cover levels 1 to 8.
   Higher-level heroes can still start any adventure, but it won't be a challenge.

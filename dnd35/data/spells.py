@@ -482,3 +482,161 @@ for _n, _r in enumerate(["I", "II", "III", "IV", "V"], 1):
 
 def spells_for(cls: str, level: int):
     return sorted(n for n, s in SPELLS.items() if s["levels"].get(cls) == level)
+
+
+# ---------------------------------------------------------------- expansion (round 5)
+_BARD = lambda w, b: {"wizard": w, "sorcerer": w, "bard": b}  # noqa: E731
+SPELLS.update({s["name"]: s for s in [
+    # ---- level 1
+    S("Shocking Grasp", ARC(1), "evocation", "enemy",
+      "Melee touch: 1d6 electricity per level (max 5d6).", desc_tags=["electricity"]),
+    S("Chill Touch", ARC(1), "necromancy", "enemy",
+      "Melee touch: 1d6 negative energy, and 1 Strength damage (Fortitude negates).",
+      save=("fortitude", "partial")),
+    S("Expeditious Retreat", _BARD(1, 1), "transmutation", "self",
+      "Your speed increases by 30 ft. for 1 min/level.", sr=False, utility=True),
+    S("Charm Person", _BARD(1, 1), "enchantment", "enemy",
+      "A humanoid stops fighting you and walks away from the battle (Will negates; +5 on "
+      "the save in a fight).", save=("will", "negates"),
+      desc_tags=["mind-affecting", "charm"]),
+    S("Jump", {"wizard": 1, "sorcerer": 1, "druid": 1, "ranger": 1}, "transmutation", "ally",
+      "+10 on Jump checks for 1 min/level (+20 at level 5, +30 at level 9).", utility=True),
+    S("Identify", _BARD(1, 1), "divination", "none",
+      "Uses a 100 gp pearl: identifies every unidentified magic item the party carries. "
+      "(Like Spellcraft, it does not see through a curse.)", sr=False, combat=False,
+      utility=True),
+    S("Comprehend Languages", {"wizard": 1, "sorcerer": 1, "bard": 1, "cleric": 1},
+      "divination", "self", "+10 on Decipher Script checks for 10 min/level.", sr=False,
+      combat=False, utility=True),
+    S("Obscuring Mist", {"wizard": 1, "sorcerer": 1, "cleric": 1, "druid": 1}, "conjuration",
+      "allies", "Fog hides your side: attacks against you and your allies have a 20% miss "
+      "chance for 1 min/level.", sr=False),
+    S("Bane", {"cleric": 1}, "enchantment", "enemies",
+      "Enemies take -1 on attack rolls and saves vs fear for 1 min/level (Will negates).",
+      save=("will", "negates"), desc_tags=["fear", "mind-affecting"], max_targets=8),
+    S("Command", {"cleric": 1}, "enchantment", "enemy",
+      "'Halt!' One creature loses its next turn (Will negates).", save=("will", "negates"),
+      desc_tags=["mind-affecting", "compulsion"]),
+    S("Faerie Fire", {"druid": 1}, "evocation", "enemies",
+      "5-ft. burst: outlines creatures in pale fire, cancelling invisibility, blur and "
+      "displacement for 1 min/level.", max_targets=4),
+    # ---- level 2
+    S("Glitterdust", _BARD(2, 2), "conjuration", "enemies",
+      "10-ft. burst: creatures are blinded for 1 round/level (Will negates) and can't be "
+      "invisible.", save=("will", "negates"), sr=False, max_targets=4),
+    S("Web", ARC(2), "conjuration", "enemies",
+      "20-ft. burst of sticky strands: creatures are entangled for 1 min/level (Reflex "
+      "negates).", save=("reflex", "negates"), sr=False, max_targets=6),
+    S("False Life", ARC(2), "necromancy", "self",
+      "Gain 1d10 + 1/level (max +10) temporary hit points for 1 hour/level.", sr=False,
+      utility=True),
+    S("Ghoul Touch", ARC(2), "necromancy", "enemy",
+      "Melee touch: a living humanoid is paralyzed for 1d6+2 rounds (Fortitude negates).",
+      save=("fortitude", "negates")),
+    S("Blindness/Deafness", {"wizard": 2, "sorcerer": 2, "bard": 2, "cleric": 3},
+      "necromancy", "enemy", "One creature is blinded (Fortitude negates).",
+      save=("fortitude", "negates")),
+    S("Scare", _BARD(2, 2), "necromancy", "enemies",
+      "One creature per 3 levels with fewer than 6 HD is frightened for 1 round/level "
+      "(Will: only shaken for 1 round).", save=("will", "partial"),
+      desc_tags=["fear", "mind-affecting"], max_targets=6),
+    S("Rage", {"wizard": 3, "sorcerer": 3, "bard": 2}, "enchantment", "allies",
+      "Allies gain +2 Strength, +2 Constitution and +1 on Will saves, but -2 AC, for "
+      "1 round/level.", desc_tags=["mind-affecting"]),
+    # ---- level 3
+    S("Deep Slumber", _BARD(3, 3), "enchantment", "enemies",
+      "Puts up to 10 HD of creatures to sleep for 1 min/level (Will negates).",
+      save=("will", "negates"), desc_tags=["mind-affecting", "sleep"], max_targets=6),
+    S("Vampiric Touch", ARC(3), "necromancy", "enemy",
+      "Melee touch: 1d6 damage per 2 levels (max 10d6); you gain it as temporary hit points."),
+    S("Stinking Cloud", ARC(3), "conjuration", "enemies",
+      "20-ft. burst of nauseating vapor: creatures can't act for 1d4+1 rounds (Fortitude "
+      "negates).", save=("fortitude", "negates"), sr=False, max_targets=6),
+    S("Ray of Exhaustion", ARC(3), "necromancy", "enemy",
+      "Ranged touch: the target is exhausted (Fortitude: only fatigued).",
+      save=("fortitude", "partial")),
+    S("Greater Magic Weapon", {"wizard": 3, "sorcerer": 3, "cleric": 4, "paladin": 3},
+      "transmutation", "ally", "Weapons gain +1 enhancement per 4 levels (max +5) for "
+      "1 hour/level.", utility=True),
+    S("Remove Curse", {"cleric": 3, "wizard": 4, "sorcerer": 4, "bard": 3, "paladin": 3},
+      "abjuration", "ally", "Ends curses on the subject and frees them from cursed items.",
+      combat=False, utility=True),
+    S("Remove Blindness/Deafness", {"cleric": 3, "paladin": 3}, "conjuration", "ally",
+      "Cures blindness.", utility=True),
+    S("Dominate Animal", {"druid": 3}, "enchantment", "enemy",
+      "An animal fights on your side for the rest of the battle (Will negates).",
+      save=("will", "negates"), desc_tags=["mind-affecting", "compulsion"]),
+    S("Neutralize Poison", {"cleric": 4, "druid": 3, "bard": 4, "paladin": 4, "ranger": 3},
+      "conjuration", "ally", "Ends every poison affecting the subject.", combat=False,
+      utility=True),
+    # ---- level 4
+    S("Enervation", ARC(4), "necromancy", "enemy",
+      "Ranged touch: the target gains 1d4 negative levels."),
+    S("Phantasmal Killer", ARC(4), "illusion", "enemy",
+      "The target's worst fear comes for it: Will to disbelieve, then Fortitude or die "
+      "(3d6 damage on a successful Fortitude save).", save=("will", "negates"),
+      desc_tags=["fear", "mind-affecting"]),
+    S("Black Tentacles", ARC(4), "conjuration", "enemies",
+      "20-ft. burst of rubbery tentacles: creatures that lose a grapple check are entangled "
+      "and crushed for 1d6+4 damage each round, for 1 round/level.", sr=False, max_targets=6),
+    S("Crushing Despair", _BARD(4, 3), "enchantment", "enemies",
+      "30-ft. cone: -2 on attacks, saves, checks and damage for 1 min/level (Will negates).",
+      save=("will", "negates"), desc_tags=["mind-affecting"], max_targets=6),
+    S("Charm Monster", _BARD(4, 3), "enchantment", "enemy",
+      "Any living creature stops fighting you and leaves the battle (Will negates; +5 on "
+      "the save in a fight).", save=("will", "negates"),
+      desc_tags=["mind-affecting", "charm"]),
+    # ---- level 5
+    S("Dominate Person", _BARD(5, 4), "enchantment", "enemy",
+      "A humanoid fights on your side for the rest of the battle (Will negates).",
+      save=("will", "negates"), desc_tags=["mind-affecting", "compulsion"]),
+    S("Baleful Polymorph", {"wizard": 5, "sorcerer": 5, "druid": 5}, "transmutation", "enemy",
+      "Turns a creature into a harmless toad (Fortitude negates).",
+      save=("fortitude", "negates")),
+    S("Break Enchantment", {"wizard": 5, "sorcerer": 5, "bard": 4, "cleric": 5,
+                            "paladin": 4}, "abjuration", "ally",
+      "Frees the subject from curses, petrification, confusion, fear and paralysis.",
+      utility=True),
+    S("Mass Inflict Light Wounds", {"cleric": 5}, "necromancy", "enemies",
+      "Up to one creature per level takes 1d8 + 1/level negative energy damage (Will half); "
+      "undead are healed instead.", save=("will", "half"), max_targets=8),
+    # ---- level 6
+    S("Flesh to Stone", ARC(6), "transmutation", "enemy",
+      "Turns one creature to stone (Fortitude negates).", save=("fortitude", "negates")),
+    S("Stone to Flesh", ARC(6), "transmutation", "ally",
+      "Restores a petrified creature.", combat=False, utility=True),
+    S("Circle of Death", ARC(6), "necromancy", "enemies",
+      "40-ft. burst: slays 1d4 HD of creatures per level (max 20d4), weakest first; "
+      "creatures of 9 HD or more are immune (Fortitude negates).",
+      save=("fortitude", "negates"), desc_tags=["death"], max_targets=8),
+    S("Freezing Sphere", ARC(6), "evocation", "enemies",
+      "10-ft. burst: 1d6 cold damage per level (max 15d6), Reflex half.",
+      save=("reflex", "half"), desc_tags=["cold"], max_targets=6),
+    # ---- level 7-9
+    S("Prismatic Spray", ARC(7), "evocation", "enemies",
+      "60-ft. cone of seven colors: each creature caught suffers a random ray: fire, acid, "
+      "lightning, poison, petrification, madness, or banishment.", max_targets=6),
+    S("Greater Restoration", {"cleric": 7}, "conjuration", "ally",
+      "Removes all negative levels, ability damage, fatigue, exhaustion and confusion.",
+      combat=False, utility=True),
+    S("Regenerate", {"cleric": 7, "druid": 9}, "conjuration", "ally",
+      "Heals 4d8 + 1/level (max +35) and removes fatigue and exhaustion.", utility=True),
+    S("Otto's Irresistible Dance", {"wizard": 8, "sorcerer": 8, "bard": 6}, "enchantment",
+      "enemy", "Melee touch: the target can do nothing but dance for 1d4+1 rounds, with "
+      "-4 AC. No save.", desc_tags=["mind-affecting", "compulsion"]),
+    S("Incendiary Cloud", ARC(8), "conjuration", "enemies",
+      "20-ft. burst of burning smoke: 4d6 fire damage now (Reflex half) and each round "
+      "after, for 1 round/level.", save=("reflex", "half"), sr=False, desc_tags=["fire"],
+      max_targets=6),
+    S("Earthquake", {"cleric": 8, "druid": 8}, "evocation", "enemies",
+      "The ground heaves: creatures take 3d6 damage and fall prone (Reflex: stay standing, "
+      "half damage).", save=("reflex", "half"), sr=False, max_targets=8),
+    S("Energy Drain", {"wizard": 9, "sorcerer": 9, "cleric": 9}, "necromancy", "enemy",
+      "Ranged touch: the target gains 2d4 negative levels."),
+    S("Dominate Monster", ARC(9), "enchantment", "enemy",
+      "Any creature fights on your side for the rest of the battle (Will negates).",
+      save=("will", "negates"), desc_tags=["mind-affecting", "compulsion"]),
+    S("Weird", ARC(9), "illusion", "enemies",
+      "Phantasmal Killer on every enemy within 30 ft.", save=("will", "negates"),
+      desc_tags=["fear", "mind-affecting"], max_targets=8),
+]})

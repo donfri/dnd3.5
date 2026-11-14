@@ -45,6 +45,8 @@ class TestThornwoodFen(unittest.TestCase):
 
     def go(self, ex_id):
         ex = dict(self.gm.exits())[ex_id]
+        self.gs.settings["march_hours"] = 0      # the walkthrough isn't about marching
+        self.gm.wandering_check = lambda *a, **k: False
         self.gm.try_exit(ex_id, ex)
 
     @mock.patch.object(Combat, "run", auto_win)

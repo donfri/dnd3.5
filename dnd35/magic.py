@@ -1369,6 +1369,387 @@ def _spells_high_levels_2(ctx) -> bool:
     return True
 
 
+MELEE_TOUCH = {"Shocking Grasp", "Chill Touch", "Ghoul Touch", "Vampiric Touch",
+               "Otto's Irresistible Dance"}
+
+
+def _switch_sides(ui, caster, t, combat, verb: str) -> None:
+    """Domination: the creature fights for the caster for the rest of the battle."""
+    if combat is None or t not in getattr(combat, "monsters", []):
+        ui.out(f"  {t.name} is {verb}, but there is no fight to turn it on.")
+        return
+    combat.command_undead(caster, t)
+
+
+def _walk_away(ui, t, combat) -> None:
+    """Charm: the creature loses interest in the fight and leaves it."""
+    ui.good(f"  {t.name} lowers its guard, smiles vaguely, and wanders off.")
+    if combat is not None and t.uid in combat.st:
+        combat.disengage_all(t)
+        combat.s(t).fled = True
+
+
+def _phantasm(ui, t, dc, stags, combat, sp) -> None:
+    if _mind_immune(t, sp["tags"]) or "fear" in t.immunities() or not t.is_living():
+        ui.out(f"  {t.name} is unaffected.")
+    elif saving_throw(ui, t, "will", dc, stags, "disbelief"):
+        ui.out(f"  {t.name} sees through the phantasm.")
+    elif saving_throw(ui, t, "fort", dc, stags):
+        deal_damage(ui, t, _sroll("3d6").total, "untyped", combat)
+    else:
+        ui.bad(f"  {t.name} dies of fright!")
+        t.dead = True
+        if combat is not None:
+            combat.after_damage(t)
+
+
+def _stone(ui, t, buff) -> None:
+    buff(t, "Petrified", tags=["paralyzed", "petrified"], dur=None)
+    ui.bad(f"  {t.name} stiffens, greys, and turns to STONE!")
+
+
+def _spells_expansion_1(ctx) -> bool:
+    """Round-5 spells, levels 1-3."""
+    (ui, caster, targets, cl, dc, combat, allies, enemies, sp, stags, t0, n, buff, spell_name) = ctx
+    if n == "Shocking Grasp":
+        if touch_attack(ui, caster, t0, False, combat):
+            deal_damage(ui, t0, _sroll(f"{min(5, cl)}d6").total, "electricity", combat)
+    elif n == "Chill Touch":
+        if touch_attack(ui, caster, t0, False, combat):
+            deal_damage(ui, t0, _sroll("1d6").total, "negative", combat)
+            if t0.is_living() and not t0.dead and not saving_throw(ui, t0, "fort", dc, stags):
+                buff(t0, "Chilled", [("str", "untyped", -1)], dur=10 * ROUNDS_PER_MINUTE)
+    elif n == "Expeditious Retreat":
+        buff(caster, n, [("speed", "enhancement", 30)], dur=ROUNDS_PER_MINUTE * cl)
+    elif n in ("Charm Person", "Charm Monster"):
+        ok = _is_humanoid(t0) if n == "Charm Person" else t0.is_living()
+        if not ok or _mind_immune(t0, sp["tags"]):
+            ui.out(f"  {t0.name} is unaffected.")
+        elif not saving_throw(ui, t0, "will", dc - (5 if combat is not None else 0), stags):
+            _walk_away(ui, t0, combat)
+    elif n == "Jump":
+        buff(t0, n, [("skill:Jump", "enhancement", 10 if cl < 5 else 20 if cl < 9 else 30)],
+             dur=ROUNDS_PER_MINUTE * cl)
+    elif n == "Identify":
+        from .data.items import item_data, item_name
+        owners = [a for a in ([caster] + [x for x in allies if x is not caster])
+                  if getattr(a, "is_pc", False)]
+        todo = [(a, e) for a in owners for e in a.inventory if e.get("unidentified")]
+        if not todo:
+            ui.out("  There is nothing unidentified to study.")
+        elif sum(a.cp for a in owners) < 100 * 100:
+            ui.bad("  The spell needs a 100 gp pearl, and the party can't afford one.")
+        else:
+            left = 100 * 100
+            for a in sorted(owners, key=lambda a: -a.cp):
+                take = min(a.cp, left)
+                a.cp -= take
+                left -= take
+            for a, e in todo:
+                e.pop("unidentified", None)
+                ui.good(f"  {a.name}'s item is {item_name(e)}: "
+                        f"{item_data(e).get('desc', '') if not item_data(e).get('cursed') else 'it seems useful.'}")
+    elif n == "Comprehend Languages":
+        buff(caster, n, [("skill:Decipher Script", "insight", 10)],
+             dur=10 * ROUNDS_PER_MINUTE * cl)
+    elif n == "Obscuring Mist":
+        for a in allies:
+            if not a.dead:
+                buff(a, "Obscuring Mist", [("concealment", "concealment", 20)],
+                     dur=ROUNDS_PER_MINUTE * cl)
+    elif n == "Bane":
+        for t in targets:
+            if t.dead or _mind_immune(t, sp["tags"]):
+                continue
+            if not saving_throw(ui, t, "will", dc, stags):
+                buff(t, "Bane", [("attack", "morale", -1), ("saves_vs_fear", "morale", -1)],
+                     dur=ROUNDS_PER_MINUTE * cl)
+    elif n == "Command":
+        if _mind_immune(t0, sp["tags"]):
+            ui.out(f"  {t0.name} is unaffected.")
+        elif not saving_throw(ui, t0, "will", dc, stags):
+            buff(t0, "Commanded: halt", tags=["dazed"], dur=1)
+    elif n in ("Faerie Fire", "Glitterdust"):
+        for t in targets:
+            if t.dead:
+                continue
+            for e in list(t.effects):
+                if "invisible" in e.tags or any(m[0] == "concealment" for m in e.mods):
+                    t.effects.remove(e)
+                    ui.good(f"  {t.name}'s {e.name.lower()} is spoiled by the glow.")
+            if n == "Glitterdust" and not saving_throw(ui, t, "will", dc, stags):
+                buff(t, "Blinded by glitter", tags=["blinded"], dur=cl)
+            elif n == "Faerie Fire":
+                ui.out(f"  {t.name} is outlined in pale fire.")
+    elif n == "Web":
+        for t in targets:
+            if not t.dead and not t.incorporeal and \
+                    not saving_throw(ui, t, "ref", dc, stags):
+                buff(t, "Webbed", tags=["entangled"], dur=ROUNDS_PER_MINUTE * cl)
+    elif n == "False Life":
+        hp = _sroll("1d10").total + min(10, cl)
+        caster.temp_hp += hp
+        buff(caster, n, dur=ROUNDS_PER_HOUR * cl, data={"on_end": "temp_hp", "amount": hp})
+    elif n == "Ghoul Touch":
+        if touch_attack(ui, caster, t0, False, combat):
+            if not (_is_humanoid(t0) and t0.is_living()):
+                ui.out(f"  {t0.name} is unaffected.")
+            elif not saving_throw(ui, t0, "fort", dc, stags):
+                buff(t0, "Paralyzed", tags=["paralyzed"], dur=_sroll("1d6+2").total)
+    elif n == "Blindness/Deafness":
+        if not t0.is_living():
+            ui.out(f"  {t0.name} is unaffected.")
+        elif not saving_throw(ui, t0, "fort", dc, stags):
+            buff(t0, "Blinded", tags=["blinded"], dur=None)
+    elif n == "Scare":
+        for t in targets[:max(1, cl // 3)]:
+            if t.dead or t.hit_dice() >= 6 or _mind_immune(t, sp["tags"]) \
+                    or "fear" in t.immunities():
+                ui.out(f"  {t.name} is unaffected.")
+            elif saving_throw(ui, t, "will", dc, stags):
+                buff(t, "Shaken", tags=["shaken", "fear_effect"], dur=1)
+            else:
+                buff(t, "Scared", tags=["frightened", "fear_effect"], dur=cl)
+    elif n == "Rage":
+        for a in allies:
+            if not a.dead and a.is_living():
+                buff(a, "Rage (spell)", [("str", "morale", 2), ("con", "morale", 2),
+                                         ("save_will", "morale", 1), ("ac", "untyped", -2)],
+                     dur=cl)
+    elif n == "Deep Slumber":
+        pool = 10
+        for t in sorted([t for t in targets if not t.dead], key=lambda t: t.hit_dice()):
+            if t.hit_dice() > pool or not t.is_living() or _mind_immune(t, sp["tags"]):
+                ui.out(f"  {t.name} is unaffected.")
+                continue
+            pool -= t.hit_dice()
+            if not saving_throw(ui, t, "will", dc, stags):
+                buff(t, "Asleep", tags=["asleep"], dur=ROUNDS_PER_MINUTE * cl)
+    elif n == "Vampiric Touch":
+        if touch_attack(ui, caster, t0, False, combat):
+            got = deal_damage(ui, t0, _sroll(f"{min(10, max(1, cl // 2))}d6").total,
+                              "negative", combat)
+            if got:
+                caster.temp_hp += got
+                buff(caster, n, dur=ROUNDS_PER_HOUR, data={"on_end": "temp_hp", "amount": got})
+    elif n == "Stinking Cloud":
+        for t in targets:
+            if t.dead or not t.is_living() or "poison" in t.immunities():
+                continue
+            if not saving_throw(ui, t, "fort", dc, stags):
+                buff(t, "Nauseated", tags=["dazed"], dur=_sroll("1d4+1").total)
+    elif n == "Ray of Exhaustion":
+        if touch_attack(ui, caster, t0, True, combat) and t0.is_living():
+            if saving_throw(ui, t0, "fort", dc, stags) and not t0.has_tag("fatigued"):
+                buff(t0, "Fatigued", tags=["fatigued"], dur=ROUNDS_PER_MINUTE * cl)
+            else:
+                buff(t0, "Exhausted", tags=["exhausted"], dur=ROUNDS_PER_MINUTE * cl)
+    elif n == "Greater Magic Weapon":
+        buff(t0, n, [("weapon_enh", "enhancement", max(1, min(5, cl // 4)))],
+             dur=ROUNDS_PER_HOUR * cl)
+    elif n == "Remove Curse":
+        from .data.items import item_name, stuck
+        done = t0.get_effect("Cursed") is not None
+        t0.remove_effect("Cursed")
+        for e in [e for e in getattr(t0, "inventory", []) if stuck(e)]:
+            ui.good(f"  {item_name(e)} falls from {t0.name} and crumbles to rust and ash.")
+            t0.inventory.remove(e)
+            done = True
+        ui.out(f"  {t0.name} is free of the curse." if done else
+               f"  {t0.name} carries no curse.")
+    elif n == "Remove Blindness/Deafness":
+        for e in [e for e in t0.effects if "blinded" in e.tags and e.name != "In the dark"]:
+            t0.effects.remove(e)
+        ui.good(f"  {t0.name} can see again.")
+    elif n in ("Dominate Animal", "Dominate Person", "Dominate Monster"):
+        ok = {"Dominate Animal": t0.ctype == "animal", "Dominate Person": _is_humanoid(t0),
+              "Dominate Monster": True}[n]
+        if not ok or (n != "Dominate Animal" and _mind_immune(t0, sp["tags"])):
+            ui.out(f"  {t0.name} is unaffected.")
+        elif not saving_throw(ui, t0, "will", dc, stags):
+            _switch_sides(ui, caster, t0, combat, "dominated")
+    elif n == "Neutralize Poison":
+        before = len(getattr(t0, "afflictions", []))
+        if before:
+            t0.afflictions = [a for a in t0.afflictions if not any(
+                w in str(a.get("name", "")).lower() for w in ("venom", "poison"))]
+        ui.good(f"  The poison in {t0.name}'s blood is gone." if
+                len(getattr(t0, "afflictions", [])) < before else
+                f"  {t0.name} isn't poisoned.")
+    else:
+        return False
+    return True
+
+
+def _spells_expansion_2(ctx) -> bool:
+    """Round-5 spells, levels 4-9."""
+    (ui, caster, targets, cl, dc, combat, allies, enemies, sp, stags, t0, n, buff, spell_name) = ctx
+    if n in ("Enervation", "Energy Drain"):
+        if touch_attack(ui, caster, t0, True, combat):
+            for _ in range(_sroll("1d4" if n == "Enervation" else "2d4").total):
+                if t0.dead:
+                    break
+                drain_level(ui, t0, dc)
+            if combat is not None:
+                combat.after_damage(t0)
+    elif n == "Phantasmal Killer":
+        _phantasm(ui, t0, dc, stags, combat, sp)
+    elif n == "Weird":
+        for t in targets:
+            if not t.dead:
+                _phantasm(ui, t, dc, stags, combat, sp)
+    elif n == "Black Tentacles":
+        for t in targets:
+            if t.dead or t.incorporeal:
+                continue
+            a, d = dice.d20() + cl + 8, dice.d20() + t.bab() + t.mod("str") + \
+                rules.SIZE_GRAPPLE[t.size]
+            ui.roll(f"Tentacles grapple {t.name}: {a} vs {d}")
+            if a > d:
+                buff(t, "Black Tentacles", tags=["entangled", "_dot"], dur=cl,
+                     data={"dot": "1d6+4", "dtype": "B"})
+    elif n == "Crushing Despair":
+        for t in targets:
+            if t.dead or _mind_immune(t, sp["tags"]):
+                continue
+            if not saving_throw(ui, t, "will", dc, stags):
+                buff(t, n, [("attack", "morale", -2), ("saves", "morale", -2),
+                            ("skills", "morale", -2), ("damage", "morale", -2)],
+                     dur=ROUNDS_PER_MINUTE * cl)
+    elif n == "Baleful Polymorph":
+        if not saving_throw(ui, t0, "fort", dc, stags):
+            buff(t0, "Turned into a toad", tags=["paralyzed"], dur=None)
+            ui.bad(f"  {t0.name} shrinks, warts over, and hops in a small confused circle.")
+    elif n == "Break Enchantment":
+        gone = [e for e in t0.effects if e.name in ("Cursed", "Petrified", "Confused")
+                or e.tags & {"paralyzed", "frightened", "shaken", "confused", "petrified"}]
+        for e in gone:
+            t0.effects.remove(e)
+        from .data.items import item_name, stuck
+        for e in [e for e in getattr(t0, "inventory", []) if stuck(e)]:
+            ui.good(f"  {item_name(e)} falls from {t0.name} and crumbles away.")
+            t0.inventory.remove(e)
+            gone.append(e)
+        ui.good(f"  The enchantments on {t0.name} shatter." if gone else
+                f"  There is nothing on {t0.name} to break.")
+    elif n == "Mass Inflict Light Wounds":
+        for t in targets:
+            if t.dead:
+                continue
+            amt = _sroll("1d8").total + min(25, cl)
+            if t.ctype == "undead":
+                heal(ui, t, amt)
+            else:
+                if saving_throw(ui, t, "will", dc, stags):
+                    amt //= 2
+                deal_damage(ui, t, amt, "negative", combat)
+    elif n == "Flesh to Stone":
+        if not t0.is_living():
+            ui.out(f"  {t0.name} is unaffected.")
+        elif not saving_throw(ui, t0, "fort", dc, stags):
+            _stone(ui, t0, buff)
+            if combat is not None:
+                combat.after_damage(t0)
+    elif n == "Stone to Flesh":
+        if t0.get_effect("Petrified"):
+            t0.remove_effect("Petrified")
+            ui.good(f"  Stone softens to skin. {t0.name} draws a ragged breath.")
+        else:
+            ui.out(f"  {t0.name} isn't petrified.")
+    elif n == "Circle of Death":
+        pool = _sroll(f"{min(20, cl)}d4").total
+        ui.roll(f"The circle can slay {pool} Hit Dice.")
+        for t in sorted([t for t in targets if not t.dead], key=lambda t: t.hit_dice()):
+            if t.hit_dice() >= 9 or not t.is_living() or t.hit_dice() > pool:
+                ui.out(f"  {t.name} is unaffected.")
+                continue
+            pool -= t.hit_dice()
+            if not saving_throw(ui, t, "fort", dc, stags):
+                ui.bad(f"  {t.name} drops dead.")
+                t.dead = True
+                if combat is not None:
+                    combat.after_damage(t)
+    elif n == "Freezing Sphere":
+        r = _sroll(f"{min(15, cl)}d6")
+        ui.roll(r.detail())
+        for t in targets:
+            _area_damage(ui, t, r.total, "cold", dc, stags, combat)
+    elif n == "Prismatic Spray":
+        for t in targets:
+            if t.dead:
+                continue
+            ray = dice.die(7)
+            color = ["red", "orange", "yellow", "green", "blue", "indigo", "violet"][ray - 1]
+            ui.out(f"  A {color} ray strikes {t.name}!", ("bmagenta",))
+            if ray <= 3:
+                _area_damage(ui, t, (20, 40, 80)[ray - 1], ("fire", "acid", "electricity")[
+                    ray - 1], dc, stags, combat)
+            elif ray == 4:
+                if t.is_living() and "poison" not in t.immunities():
+                    if saving_throw(ui, t, "fort", dc, stags):
+                        deal_damage(ui, t, _sroll("1d6").total, "poison", combat)
+                    else:
+                        ui.bad(f"  {t.name} dies of the poison!")
+                        t.dead = True
+                        if combat is not None:
+                            combat.after_damage(t)
+            elif ray == 5:
+                if t.is_living() and not saving_throw(ui, t, "fort", dc, stags):
+                    _stone(ui, t, buff)
+            elif ray == 6:
+                if not _mind_immune(t, {"mind-affecting"}) and \
+                        not saving_throw(ui, t, "will", dc, stags):
+                    buff(t, "Confused", tags=["confused"], dur=None)
+            elif not saving_throw(ui, t, "will", dc, stags):
+                ui.bad(f"  {t.name} is hurled out of this world!")
+                buff(t, "Banished", tags=["paralyzed"], dur=None)
+            if combat is not None:
+                combat.after_damage(t)
+    elif n == "Greater Restoration":
+        for name in ("Negative levels", "Fatigued", "Exhausted", "Confused", "Starving",
+                     "Worn out by the march"):
+            t0.remove_effect(name)
+        if hasattr(t0, "ability_damage"):
+            t0.ability_damage = {}
+        ui.good(f"  {t0.name} is restored, body and mind.")
+    elif n == "Regenerate":
+        heal(ui, t0, _sroll("4d8").total + min(35, cl))
+        for name in ("Fatigued", "Exhausted"):
+            t0.remove_effect(name)
+    elif n == "Otto's Irresistible Dance":
+        if touch_attack(ui, caster, t0, False, combat):
+            if _mind_immune(t0, sp["tags"]):
+                ui.out(f"  {t0.name} is unaffected.")
+            else:
+                buff(t0, "Dancing", [("ac", "untyped", -4)], tags=["dazed"],
+                     dur=_sroll("1d4+1").total)
+    elif n == "Incendiary Cloud":
+        r = _sroll("4d6")
+        ui.roll(r.detail())
+        for t in targets:
+            if t.dead:
+                continue
+            _area_damage(ui, t, r.total, "fire", dc, stags, combat)
+            if not t.dead:
+                buff(t, "Burning smoke", tags=["_dot"], dur=cl,
+                     data={"dot": "2d6", "dtype": "fire"})
+    elif n == "Earthquake":
+        r = _sroll("3d6")
+        ui.roll(r.detail())
+        for t in targets:
+            if t.dead or t.has_tag("flying") or (combat is not None and combat.airborne(t)):
+                continue
+            if saving_throw(ui, t, "ref", dc, stags):
+                deal_damage(ui, t, r.total // 2, "B", combat)
+            else:
+                deal_damage(ui, t, r.total, "B", combat)
+                if not t.dead:
+                    buff(t, "Prone", tags=["prone"], dur=None)
+    else:
+        return False
+    return True
+
+
 _SPELL_GROUPS = (
     _spells_cantrips,
     _spells_arcane_1,
@@ -1382,6 +1763,8 @@ _SPELL_GROUPS = (
     _spells_mid_levels_3,
     _spells_high_levels_1,
     _spells_high_levels_2,
+    _spells_expansion_1,
+    _spells_expansion_2,
 )
 
 
