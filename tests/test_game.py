@@ -77,7 +77,44 @@ class TestAutosaveAfterFights(unittest.TestCase):
         self.assertIn("enc:ambush", saved.flags)   # a restart now won't bring them back
 
 
+class TestNoRepeatRewards(unittest.TestCase):
+    def test_a_successful_check_feature_is_done(self):
+        gs = engine.GameState(ember_barrow, [build_pregen("pip")], {})
+        gs.room = "cistern"
+        gs.flags.add("enc:rats")
+        gm = engine.GM(AutoUI(), gs)
+        gm.roll_check = lambda *a, **k: 99
+        dive = next(f for f in gm.features() if f["id"] == "dive")
+        gm.do_feature(dive)
+        self.assertEqual(sum(e["qty"] for e in gs.party[0].inventory
+                             if e["id"] == "silver holy symbol"), 1)
+        self.assertNotIn("dive", [f["id"] for f in gm.features()])   # can't farm it
+
+    def test_every_rewarding_check_is_one_time(self):
+        from dnd35.adventure import ORDER
+        for adv in ORDER:
+            for rid, room in adv.ROOMS.items():
+                for f in room.get("features", []):
+                    pays = any(e.get("do") in ("item", "gold", "xp", "items_each")
+                               for e in f.get("success", []) + f.get("effects", []))
+                    if pays:
+                        self.assertTrue(f.get("once", bool(f.get("check"))),
+                                        (adv.ID, rid, f["id"]))
+
+
 class TestTrapCrossing(unittest.TestCase):
+    def test_walking_into_an_unseen_trap_still_gets_you_across(self):
+        ui = AutoUI()
+        party = [build_pregen("thorgar"), build_pregen("pip")]
+        gs = engine.GameState(ember_barrow, party, {})
+        gs.room = "entry"
+        gm = engine.GM(ui, gs)
+        went = []
+        gm.enter = went.append
+        gm.try_exit("north", ember_barrow.ROOMS["entry"]["exits"]["north"])
+        self.assertEqual(went, ["guard_room"])
+        self.assertTrue(any("far side" in t for t in ui.transcript))
+
     def test_everyone_jumps_once_and_the_party_moves_on(self):
         class UI(AutoUI):
             def choose(self, prompt, options, allow_cancel=False, default=None, groups=None):

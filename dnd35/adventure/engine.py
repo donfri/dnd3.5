@@ -458,7 +458,8 @@ class GM:
         st = self.gs.rs()
         out = []
         for f in room.get("features", []):
-            if f.get("once") and f["id"] in st["used"]:
+            # anything with a skill check is done once it succeeds, unless it says otherwise
+            if f.get("once", bool(f.get("check"))) and f["id"] in st["used"]:
                 continue
             if not self.met(f.get("requires")):
                 continue
@@ -882,9 +883,17 @@ class GM:
                 else:
                     ui.out("You edge around it carefully.")
             else:
+                # nobody saw it: the hero in front springs it, then the party carries on
                 leader = gs.able()[0]
                 self.trigger_trap(trap_id, leader)
-                return
+                if not gs.able():
+                    return
+                if leader.conscious:
+                    ui.out(f"{leader.name} picks themself up on the far side.")
+                elif not leader.dead:
+                    ui.out(f"The others get {leader.name} out and carry them across.")
+                if trap.get("bypass") and self.trap_state(trap_id) != "disabled":
+                    self.cross_trap(trap_id, trap, skip=leader)
         if ex.get("text"):
             ui.gm(ex["text"])
         self.run(ex.get("effects", []))
@@ -964,7 +973,7 @@ class GM:
             return f"{max(15, mins)} minutes"
         return f"{whole} hour{'s' if whole != 1 else ''}" + (f" {mins} minutes" if mins else "")
 
-    def cross_trap(self, trap_id: str, trap: dict) -> None:
+    def cross_trap(self, trap_id: str, trap: dict, skip=None) -> None:
         """Everyone gets past a known trap one at a time (Jump, Climb, Balance...).
         Out of danger a hero takes 10 when that's enough; otherwise they roll. A hero
         who fails springs the trap on themselves, then scrambles across anyway, so
@@ -973,6 +982,8 @@ class GM:
         chk = trap["bypass"]
         skill, dc = chk["skill"], chk["dc"]
         for h in list(gs.able()):
+            if h is skip:
+                continue
             if self.trap_state(trap_id) == "disabled":   # a one-shot trap already went off
                 break
             bonus = self.check_bonus(h, skill)
