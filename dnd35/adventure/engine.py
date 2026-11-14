@@ -1297,7 +1297,8 @@ class GM:
             return False
         if dice.percent() > chance * 100:
             return False
-        options = [w for w in self.adv.WANDERING if self.met(w.get("requires"))]
+        options = [w for w in self.adv.WANDERING if self.met(w.get("requires"))
+                   and w.get("min_level", 0) <= gs.party_level()]
         if not options:
             return False
         w = dice.choice(options)

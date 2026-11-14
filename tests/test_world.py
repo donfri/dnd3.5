@@ -113,6 +113,35 @@ class TestCrafting(unittest.TestCase):
         w.xp = 36000   # exactly the 9th-level minimum
         self.assertFalse(craft(Yes(), w, "scroll of fireball"))
 
+class TestWanderingLevels(unittest.TestCase):
+    def test_tough_wanderers_wait_for_stronger_parties(self):
+        from dnd35.adventure import ORDER, engine, greyfang_pass
+        from dnd35.creation import build_pregen
+        from dnd35.ui import AutoUI
+        for adv in ORDER:
+            lo = int(adv.LEVELS.split("-")[0])
+            # something can always turn up for a party of the adventure's starting level
+            self.assertTrue([w for w in adv.WANDERING if w.get("min_level", 0) <= lo], adv.ID)
+        seen = []
+        gs = engine.GameState(greyfang_pass, [build_pregen("thorgar", level=3)], {})
+        gs.room = "pass_road"
+        gm = engine.GM(AutoUI(), gs)
+        real = engine.dice.choice
+        real_pct = engine.dice.percent
+        engine.dice.choice = lambda opts: (seen.extend(opts), opts[0])[1]
+        engine.dice.percent = lambda: 1
+        old = engine.Combat.run
+        engine.Combat.run = lambda self: "victory"
+        try:
+            gm.wandering_check(1.0)
+        finally:
+            engine.Combat.run = old
+            engine.dice.choice = real
+            engine.dice.percent = real_pct
+        self.assertTrue(seen)
+        self.assertFalse([w for w in seen if w.get("min_level", 0) > 3])
+
+
 class TestOverland(unittest.TestCase):
     def test_travel_tables_match_real_exits(self):
         from dnd35.adventure import ORDER

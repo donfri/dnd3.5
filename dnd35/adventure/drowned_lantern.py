@@ -61,7 +61,8 @@ RUMORS = [
 TRAVEL = {("saltmere", "cliff_path"): (1, "trail"), ("cliff_path", "lighthouse_yard"): (1, "trail")}
 
 WANDERING = [
-    {"text": "A drifting log opens one yellow eye.", "monsters": ["crocodile"]},
+    {"text": "A drifting log opens one yellow eye.", "monsters": ["crocodile"],
+     "min_level": 3},
     {"text": "Wreckers with hooded lanterns, hoping you were a ship: 'Well. You'll do.'",
      "monsters": ["human bandit", "human bandit"]},
     {"text": "Scrabbling claws and wet whiskers: dire rats from the cliff burrows!",
@@ -69,7 +70,7 @@ WANDERING = [
     {"text": "A kobold patrol with a hooded lantern stumbles onto you!",
      "monsters": ["kobold", "kobold", "kobold"], "requires": {"not_flag": "enc:yard"}},
     {"text": "The floor ahead ripples: a squealing tide of rats pours out of the cracks!",
-     "monsters": ["rat swarm"]},
+     "monsters": ["rat swarm"], "min_level": 2},
     {"text": "Something big skitters down the wall toward you...",
      "monsters": ["monstrous spider"]},
 ]

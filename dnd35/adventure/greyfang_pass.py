@@ -64,15 +64,16 @@ TRAVEL = {("highcairn", "pass_road"): (6, "road"), ("pass_road", "gnoll_camp"): 
 
 WANDERING = [
     {"text": "A shadow crosses the sun. A griffon stoops out of the glare, screaming!",
-     "monsters": ["griffon"]},
+     "monsters": ["griffon"], "min_level": 6},
     {"text": "A hobgoblin in a scorched coat and two spear-carriers block the path. The "
              "coated one cracks its knuckles; sparks jump.",
      "monsters": ["hobgoblin warcaster", "hobgoblin", "hobgoblin"]},
     {"text": "Among the boulders stand a stone goat, a stone hawk, and a small, scruffy bird "
-             "that hisses at you.", "monsters": ["cockatrice"]},
-    {"text": "A bellow rolls down the pass. Hooves on rock. Horns.", "monsters": ["minotaur"]},
-    {"text": "Chanting drifts from a hollow in the rocks: a robed figure and two things that "
-             "used to be men.", "monsters": ["dark acolyte", "ghast", "ghast"]},
+             "that hisses at you.", "monsters": ["cockatrice"], "min_level": 4},
+    {"text": "A bellow rolls down the pass. Hooves on rock. Horns.", "monsters": ["minotaur"],
+     "min_level": 5},
+    {"text": "Chanting drifts from a hollow in the rocks: a robed figure and a thing that "
+             "used to be a man.", "monsters": ["dark acolyte", "ghast"], "min_level": 4},
     {"text": "A sunning rock-snake as thick as your thigh takes exception to your boots.",
      "monsters": ["constrictor snake"]},
     {"text": "A pair of gnoll scouts comes loping down the trail!",
